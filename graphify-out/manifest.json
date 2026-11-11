@@ -1578,9 +1578,9 @@
     "semantic_hash": ""
   },
   "routes/web.php": {
-    "mtime": 1794369177.198085,
-    "seen": 1794369713.8986344,
-    "ast_hash": "80df6debabfa9bfa4d52fb292ad98db0",
+    "mtime": 1794380571.2747555,
+    "seen": 1794380644.2296205,
+    "ast_hash": "78ab6c6186892f854ca31ee1e616a452",
     "semantic_hash": ""
   },
   "tests/Feature/Auth/AuthenticationTest.php": {

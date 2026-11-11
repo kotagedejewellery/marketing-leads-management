@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -75,7 +76,7 @@ class DashboardController extends Controller
         return Inertia::render('Accounts/Index', ['accounts' => DB::table('users as u')->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')->orderByDesc('u.active')->orderBy('u.name')->get(['u.id', 'u.name', 'u.email', 'u.role', 'u.branch_id', 'u.active', 'b.name as branch_name']), 'branches' => DB::table('branches')->orderBy('name')->get(['id', 'name'])]);
     }
 
-    public function storeBranch(Request $request)
+    public function storeBranch(Request $request): RedirectResponse
     {
         $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:branches,name']]);
         DB::table('branches')->insert(['name' => $data['name'], 'created_at' => now()]);
@@ -85,9 +86,12 @@ class DashboardController extends Controller
         return back();
     }
 
-    public function storeAccount(Request $request)
+    public function storeAccount(Request $request): RedirectResponse
     {
         $data = $this->accountData($request, null, true);
+        if ($data['password'] === null) {
+            throw ValidationException::withMessages(['password' => 'Kata sandi wajib diisi.']);
+        }
         DB::table('users')->insert(['name' => $data['name'], 'email' => $data['email'], 'password_hash' => bcrypt($data['password']), 'role' => $data['role'], 'branch_id' => $data['role'] === 'cs' ? $data['branch_id'] : null, 'created_at' => now()]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Akun ditambahkan.']);
@@ -95,7 +99,7 @@ class DashboardController extends Controller
         return back();
     }
 
-    public function updateBranch(Request $request, int $branch)
+    public function updateBranch(Request $request, int $branch): RedirectResponse
     {
         $record = DB::table('branches')->where('id', $branch)->first() ?? abort(404);
         $data = $request->validate(['name' => ['required', 'string', 'max:100', Rule::unique('branches', 'name')->ignore($record->id)]]);
@@ -106,7 +110,7 @@ class DashboardController extends Controller
         return back();
     }
 
-    public function destroyBranch(int $branch)
+    public function destroyBranch(int $branch): RedirectResponse
     {
         $record = DB::table('branches')->where('id', $branch)->first() ?? abort(404);
         if (DB::table('users')->where('branch_id', $record->id)->exists()) {
@@ -119,7 +123,7 @@ class DashboardController extends Controller
         return back();
     }
 
-    public function updateAccount(Request $request, int $account)
+    public function updateAccount(Request $request, int $account): RedirectResponse
     {
         $record = DB::table('users')->where('id', $account)->first() ?? abort(404);
         $active = $request->boolean('active', (bool) $record->active);
@@ -147,6 +151,9 @@ class DashboardController extends Controller
         return back();
     }
 
+    /**
+     * @return array{name: string, email: string, password: string|null, role: 'admin'|'cs', branch_id: int|null}
+     */
     private function accountData(Request $request, ?int $accountId = null, bool $passwordRequired = false, bool $willBeActive = true): array
     {
         $data = $request->validate([
@@ -169,9 +176,16 @@ class DashboardController extends Controller
             }
         }
 
-        return $data;
+        return [
+            'name' => (string) $data['name'],
+            'email' => (string) $data['email'],
+            'password' => isset($data['password']) ? (string) $data['password'] : null,
+            'role' => $data['role'] === 'admin' ? 'admin' : 'cs',
+            'branch_id' => isset($data['branch_id']) ? (int) $data['branch_id'] : null,
+        ];
     }
 
+    /** @return array<string, int> */
     private function stats(Request $request): array
     {
         $query = DB::table('leads as l')->whereNull('l.archived_at');

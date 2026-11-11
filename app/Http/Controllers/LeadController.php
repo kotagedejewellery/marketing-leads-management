@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateLeadRequest;
 use DateTimeInterface;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -27,7 +28,7 @@ class LeadController extends Controller
         'repeat_order' => 'Repeat Order',
     ];
 
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         abort_unless($request->user()->role === 'admin', 403);
         $data = $request->validate([
@@ -99,7 +100,7 @@ class LeadController extends Controller
         return to_route('leads.show', $id);
     }
 
-    public function import(Request $request)
+    public function import(Request $request): RedirectResponse
     {
         abort_unless($request->user()->role === 'admin', 403);
         $request->validate(
@@ -126,6 +127,9 @@ class LeadController extends Controller
             }
             $values = array_pad($values, count($headers), null);
             $row = array_combine($headers, $values);
+            if ($row === false) {
+                throw ValidationException::withMessages(['csv_file' => "Header CSV tidak valid pada baris {$line}."]);
+            }
             $normalized = $this->normalizeImportRow($row, $headerMap);
             if (trim((string) $normalized['contact_raw']) !== '') {
                 $rows[] = $normalized;
@@ -160,7 +164,7 @@ class LeadController extends Controller
                 $initialMilestones = $this->initialMilestones($row);
                 $id = DB::table('leads')->insertGetId([
                     'assigned_user_id' => $owner,
-                    'import_fingerprint' => hash('sha256', json_encode($row)),
+                    'import_fingerprint' => hash('sha256', json_encode($row, JSON_THROW_ON_ERROR)),
                     'contact_key' => $key,
                     'source_row_no' => $row['source_row_no'],
                     'source_date_raw' => $row['source_date_raw'],
@@ -225,7 +229,7 @@ class LeadController extends Controller
         return Inertia::render('Leads/Show', ['lead' => $record, 'milestones' => $milestones, 'history' => $history, 'csAccounts' => $csAccounts]);
     }
 
-    public function assign(Request $request)
+    public function assign(Request $request): RedirectResponse
     {
         abort_unless($request->user()->role === 'admin', 403);
         $data = $request->validate([
@@ -260,7 +264,7 @@ class LeadController extends Controller
         return to_route('leads.index');
     }
 
-    public function update(UpdateLeadRequest $request, int $lead)
+    public function update(UpdateLeadRequest $request, int $lead): RedirectResponse
     {
         $record = $this->visibleLead($request, $lead);
         abort_if($record->archived_at, 404);
@@ -320,7 +324,7 @@ class LeadController extends Controller
         return to_route('leads.show', $lead);
     }
 
-    public function archive(Request $request, int $lead)
+    public function archive(Request $request, int $lead): RedirectResponse
     {
         abort_unless($request->user()->role === 'admin', 403);
         $record = DB::table('leads')->where('id', $lead)->whereNull('archived_at')->first() ?? abort(404);
@@ -333,7 +337,7 @@ class LeadController extends Controller
         return to_route('leads.index');
     }
 
-    public function restore(Request $request, int $lead)
+    public function restore(Request $request, int $lead): RedirectResponse
     {
         abort_unless($request->user()->role === 'admin', 403);
         $record = DB::table('leads')->where('id', $lead)->whereNotNull('archived_at')->first() ?? abort(404);
@@ -346,6 +350,7 @@ class LeadController extends Controller
         return to_route('leads.show', $lead);
     }
 
+    /** @return object{id: int, assigned_user_id: int|null, archived_at: string|null, current_stage: string|null} */
     private function visibleLead(Request $request, int $lead): object
     {
         $query = DB::table('leads')->where('id', $lead);
@@ -359,11 +364,15 @@ class LeadController extends Controller
     private function contactKey(string $contact): string
     {
         $contact = trim($contact);
-        $digits = preg_replace('/\D/', '', $contact);
+        $digits = preg_replace('/\D/', '', $contact) ?? '';
 
         return strlen($digits) >= 8 ? "phone:{$digits}" : 'contact:'.mb_strtolower($contact);
     }
 
+    /**
+     * @param  array<string, mixed>  $row
+     * @return list<string>
+     */
     private function initialMilestones(array $row): array
     {
         $text = mb_strtolower(trim(($row['imported_keterangan'] ?? '').' '.($row['imported_definition'] ?? '')));
@@ -381,6 +390,10 @@ class LeadController extends Controller
         };
     }
 
+    /**
+     * @param  list<string>  $headers
+     * @return array<string, string>
+     */
     private function importHeaderMap(array $headers): array
     {
         $fields = [
@@ -401,6 +414,11 @@ class LeadController extends Controller
         return collect($headers)->mapWithKeys(fn ($header) => [(string) $header => $fields[$this->normalizedHeader($header)] ?? null])->filter()->all();
     }
 
+    /**
+     * @param  array<string, mixed>  $row
+     * @param  array<string, string>  $headerMap
+     * @return array<string, string|null>
+     */
     private function normalizeImportRow(array $row, array $headerMap): array
     {
         $normalized = array_fill_keys([
@@ -418,9 +436,13 @@ class LeadController extends Controller
         return mb_strtolower(trim(str_replace('*', '', $header)));
     }
 
+    /** @return array{0: list<string>, 1: list<list<string|null>>} */
     private function readCsv(string $path): array
     {
         $handle = fopen($path, 'r');
+        if ($handle === false) {
+            throw ValidationException::withMessages(['csv_file' => 'File CSV tidak dapat dibaca.']);
+        }
         $headers = fgetcsv($handle) ?: [];
         $rows = [];
         while (($values = fgetcsv($handle)) !== false) {
@@ -435,6 +457,7 @@ class LeadController extends Controller
         return [$this->cleanHeaders($headers), $rows];
     }
 
+    /** @return array{0: list<string>, 1: list<list<string|null>>} */
     private function readXlsx(string $path): array
     {
         $reader = new XlsxReader;
@@ -473,6 +496,10 @@ class LeadController extends Controller
         return [$headers, $rows];
     }
 
+    /**
+     * @param  list<mixed>  $headers
+     * @return list<string>
+     */
     private function cleanHeaders(array $headers): array
     {
         return array_map(fn ($value) => trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $value)), $headers);
@@ -493,6 +520,7 @@ class LeadController extends Controller
         };
     }
 
+    /** @param array<string, mixed> $row */
     private function importClassification(array $row): ?string
     {
         $definition = mb_strtolower(trim((string) ($row['imported_definition'] ?? '')));
@@ -513,6 +541,7 @@ class LeadController extends Controller
         };
     }
 
+    /** @param list<string> $milestones */
     private function currentStage(array $milestones): ?string
     {
         foreach (array_reverse(array_keys(self::MILESTONES)) as $milestone) {

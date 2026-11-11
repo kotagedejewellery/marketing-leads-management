@@ -30,15 +30,15 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/DashboardController.php": {
-    "mtime": 1794382066.528046,
-    "seen": 1794382182.5588927,
-    "ast_hash": "a2e04bbc91852ddcb16463a2b6766ec3",
+    "mtime": 1794383407.963261,
+    "seen": 1794383457.1342447,
+    "ast_hash": "c10185067a598dc3b41c40a559172aa0",
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1794382067.1498482,
-    "seen": 1794382182.558898,
-    "ast_hash": "314eddd351c40476c1043a323eb4f59c",
+    "mtime": 1794383494.342632,
+    "seen": 1794383528.5070188,
+    "ast_hash": "e00305f837add7fc681db929571cf74b",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "app/Http/Requests/UpdateLeadRequest.php": {
-    "mtime": 1794382067.8290963,
-    "seen": 1794382182.5589323,
-    "ast_hash": "c2b967c56a30ef39f9f8b128e1f362c1",
+    "mtime": 1794382600.576008,
+    "seen": 1794383457.1342654,
+    "ast_hash": "1e27cd3f10a22a54e073ac3e99b5c657",
     "semantic_hash": ""
   },
   "app/Http/Responses/LoginResponse.php": {
@@ -114,9 +114,9 @@
     "semantic_hash": ""
   },
   "app/Models/User.php": {
-    "mtime": 1794302998.1623814,
-    "seen": 1794367943.5926528,
-    "ast_hash": "f191159085ecd270bb02491582b23e46",
+    "mtime": 1794383236.5076883,
+    "seen": 1794383457.1342704,
+    "ast_hash": "38a471e4094e200199720c1c342c2c45",
     "semantic_hash": ""
   },
   "app/Providers/AppServiceProvider.php": {

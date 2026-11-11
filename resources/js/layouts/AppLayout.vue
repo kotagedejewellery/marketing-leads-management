@@ -66,9 +66,7 @@ const logout = () =>
         <header
             class="border-b border-black/10 bg-kgj-ink px-5 py-3 text-[#fffdf8] lg:px-10 xl:px-12 2xl:px-16"
         >
-            <div
-                class="flex w-full items-center justify-between gap-3"
-            >
+            <div class="flex w-full items-center justify-between gap-3">
                 <Link href="/dashboard" class="group flex items-center gap-3"
                     ><img
                         src="/brand/kotagede-jewellery.png"
@@ -178,7 +176,9 @@ const logout = () =>
                     page.url.startsWith(item.href) ? 'page' : undefined
                 "
                 :class="{
-                    'bg-white/10 text-[#f3d38f]': page.url.startsWith(item.href),
+                    'bg-white/10 text-[#f3d38f]': page.url.startsWith(
+                        item.href,
+                    ),
                 }"
             >
                 <component :is="item.icon" class="size-4 shrink-0" />

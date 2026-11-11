@@ -234,7 +234,14 @@
         @apply border border-kgj-line bg-kgj-paper;
     }
     .kgj-input {
-        @apply min-h-11 rounded-lg border border-kgj-line bg-white px-3 text-sm text-kgj-ink transition placeholder:text-kgj-muted/70 hover:border-[#beb29d] focus:border-kgj-gold focus:ring-2 focus:ring-[#dbc79e];
+        @apply min-h-11 rounded-lg border border-kgj-line bg-white px-3 text-sm text-kgj-ink transition placeholder:text-kgj-muted/70 hover:border-[#beb29d] focus:border-kgj-gold focus:ring-2 focus:ring-[#dbc79e] focus:outline-none;
+    }
+    .kgj-input:-webkit-autofill,
+    .kgj-input:-webkit-autofill:hover,
+    .kgj-input:-webkit-autofill:focus {
+        -webkit-text-fill-color: var(--kgj-ink);
+        -webkit-box-shadow: 0 0 0 1000px var(--kgj-paper) inset;
+        caret-color: var(--kgj-ink);
     }
     .kgj-button-primary {
         @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-kgj-ink px-4 text-sm font-semibold text-white transition hover:bg-[#3a3831] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55;

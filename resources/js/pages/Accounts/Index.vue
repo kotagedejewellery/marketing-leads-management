@@ -181,12 +181,55 @@ const setActive = (account: Account, active: boolean) => {
             </div>
         </form>
         <div class="mt-6 grid gap-3 md:hidden">
-            <article v-for="account in accounts" :key="account.id" class="kgj-surface p-4" :class="{ 'opacity-60': !account.active }">
-                <div class="flex items-start justify-between gap-3"><div><h2 class="font-semibold">{{ account.name }}</h2><p class="mt-1 break-all text-sm text-kgj-muted">{{ account.email }}</p></div><span class="kgj-status" :class="account.active ? 'text-kgj-sage' : 'text-kgj-muted'">{{ account.active ? 'Aktif' : 'Nonaktif' }}</span></div>
-                <p class="mt-4 text-sm">{{ account.role.toUpperCase() }} · {{ account.branch_name || 'Tanpa cabang' }}</p>
-                <div class="mt-4 flex gap-2"><button class="kgj-button-secondary flex-1" type="button" @click="edit(account)">Ubah</button><button class="kgj-button-secondary flex-1" type="button" @click="accountToToggle = { account, active: !account.active }">{{ account.active ? 'Nonaktifkan' : 'Aktifkan' }}</button></div>
+            <article
+                v-for="account in accounts"
+                :key="account.id"
+                class="kgj-surface p-4"
+                :class="{ 'opacity-60': !account.active }"
+            >
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h2 class="font-semibold">{{ account.name }}</h2>
+                        <p class="mt-1 text-sm break-all text-kgj-muted">
+                            {{ account.email }}
+                        </p>
+                    </div>
+                    <span
+                        class="kgj-status"
+                        :class="
+                            account.active ? 'text-kgj-sage' : 'text-kgj-muted'
+                        "
+                        >{{ account.active ? 'Aktif' : 'Nonaktif' }}</span
+                    >
+                </div>
+                <p class="mt-4 text-sm">
+                    {{ account.role.toUpperCase() }} ·
+                    {{ account.branch_name || 'Tanpa cabang' }}
+                </p>
+                <div class="mt-4 flex gap-2">
+                    <button
+                        class="kgj-button-secondary flex-1"
+                        type="button"
+                        @click="edit(account)"
+                    >
+                        Ubah</button
+                    ><button
+                        class="kgj-button-secondary flex-1"
+                        type="button"
+                        @click="
+                            accountToToggle = {
+                                account,
+                                active: !account.active,
+                            }
+                        "
+                    >
+                        {{ account.active ? 'Nonaktifkan' : 'Aktifkan' }}
+                    </button>
+                </div>
             </article>
-            <p v-if="!accounts.length" class="py-10 text-center text-kgj-muted">Belum ada akun.</p>
+            <p v-if="!accounts.length" class="py-10 text-center text-kgj-muted">
+                Belum ada akun.
+            </p>
         </div>
         <div class="kgj-table mt-6 hidden overflow-x-auto md:block">
             <table class="w-full min-w-[720px] text-sm">

@@ -48,4 +48,3 @@ The initial data source is the existing KGJ monitoring spreadsheet. The working 
 - CS should update a lead in seconds, without navigating a spreadsheet grid.
 - Status must communicate the next action, not merely record an outcome.
 - Admin monitoring should be readable without asking CS for a manual recap.
-

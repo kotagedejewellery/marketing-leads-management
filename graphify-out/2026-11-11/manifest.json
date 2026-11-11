@@ -1356,9 +1356,9 @@
     "semantic_hash": ""
   },
   "resources/js/layouts/AppLayout.vue": {
-    "mtime": 1794369359.884434,
-    "seen": 1794369713.8985782,
-    "ast_hash": "8436b3adedea2fd4ca7c175bd384bb7e",
+    "mtime": 1794378552.3583171,
+    "seen": 1794378595.504643,
+    "ast_hash": "6cb0227cd6ed8fc56a5b4f4fc16a7cc1",
     "semantic_hash": ""
   },
   "resources/js/layouts/AuthLayout.vue": {
@@ -1422,39 +1422,39 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Accounts/Index.vue": {
-    "mtime": 1794369423.3928213,
-    "seen": 1794369713.898595,
-    "ast_hash": "378840c0c603d72a67eec566fb92f212",
+    "mtime": 1794378552.7699742,
+    "seen": 1794378595.5046904,
+    "ast_hash": "a77067eb3d840e59a2bbd008adab41ec",
     "semantic_hash": ""
   },
   "resources/js/pages/Branches/Index.vue": {
-    "mtime": 1794369359.2819967,
-    "seen": 1794369713.8985963,
-    "ast_hash": "fa7b8f457b47ec8c5ac43929a15a71be",
+    "mtime": 1794378552.3583171,
+    "seen": 1794378595.5046926,
+    "ast_hash": "68456861d573c7d1563aa10490637e3c",
     "semantic_hash": ""
   },
   "resources/js/pages/Dashboard.vue": {
-    "mtime": 1794369357.429988,
-    "seen": 1794369713.8985977,
-    "ast_hash": "c1640affdc423e787d98afb23bc42a54",
+    "mtime": 1794378552.4283895,
+    "seen": 1794378595.5046942,
+    "ast_hash": "7801f2dafd3830df012e77a8a7e18788",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1794369745.5907834,
-    "seen": 1794369884.4919028,
-    "ast_hash": "4d55a673a3d7f8e0f99709a1bc20075c",
+    "mtime": 1794378552.9185047,
+    "seen": 1794378595.5046964,
+    "ast_hash": "feb9675417d349543022134d427b4b09",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
-    "mtime": 1794369322.226852,
-    "seen": 1794369713.8986008,
-    "ast_hash": "37f1d61ee5ecb887ed3a5d5339fbd73c",
+    "mtime": 1794378552.83446,
+    "seen": 1794378595.5046983,
+    "ast_hash": "b51d79d5872d3d7661e452a21e502322",
     "semantic_hash": ""
   },
   "resources/js/pages/Statistics.vue": {
-    "mtime": 1794369358.0169673,
-    "seen": 1794369713.898602,
-    "ast_hash": "2f998d205253fbfc77b95aee271ba38b",
+    "mtime": 1794378552.240863,
+    "seen": 1794378595.5047,
+    "ast_hash": "584b2d2d78a1a47386fdde24a60c1b4a",
     "semantic_hash": ""
   },
   "resources/js/pages/Welcome.vue": {
@@ -1476,9 +1476,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/auth/Login.vue": {
-    "mtime": 1794368267.141126,
-    "seen": 1794368350.3054442,
-    "ast_hash": "d260b1f8e9725b792f01f328e4655e30",
+    "mtime": 1794378552.2985742,
+    "seen": 1794378595.5047085,
+    "ast_hash": "e4024dd09ff715eeae15ae9a584a4009",
     "semantic_hash": ""
   },
   "resources/js/pages/auth/Register.vue": {
@@ -1680,9 +1680,9 @@
     "semantic_hash": ""
   },
   "vite.config.ts": {
-    "mtime": 1794359616.292957,
-    "seen": 1794367943.592971,
-    "ast_hash": "5a10fdee9c5017a1a1f41ef6b0eb92de",
+    "mtime": 1794378543.182081,
+    "seen": 1794378595.5047843,
+    "ast_hash": "517e554c5d2bdf787760c504243f2f7e",
     "semantic_hash": ""
   },
   ".github/dependabot.yml": {
@@ -1710,21 +1710,21 @@
     "semantic_hash": ""
   },
   "PRODUCT.md": {
-    "mtime": 1794367783.0301213,
-    "seen": 1794367943.5929768,
-    "ast_hash": "37231aca8b96dd7318a8d0fe453d0e29",
+    "mtime": 1794378550.632998,
+    "seen": 1794378595.5047965,
+    "ast_hash": "866dc700836faa6d236acab32ead4561",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1794369426.500535,
-    "seen": 1794369713.8986723,
-    "ast_hash": "37cead5d4587e397954ffa8232318e64",
+    "mtime": 1794378550.632998,
+    "seen": 1794378595.5047984,
+    "ast_hash": "7bceae500fa18f8981f0787db2197753",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
-    "mtime": 1794369423.9463928,
-    "seen": 1794369713.8986738,
-    "ast_hash": "18f7b14fa315e107f1d3768df69c1ad2",
+    "mtime": 1794378550.632998,
+    "seen": 1794378595.504809,
+    "ast_hash": "16514a5696dbfb37df11e52d4d28bd0a",
     "semantic_hash": ""
   },
   "pnpm-workspace.yaml": {
@@ -1773,6 +1773,36 @@
     "mtime": 1794369425.9627626,
     "seen": 1794369713.898636,
     "ast_hash": "cf8f38b761140c6b81bee631bf2b487c",
+    "semantic_hash": ""
+  },
+  "scripts/deploy-production.sh": {
+    "mtime": 1794371383.4484031,
+    "seen": 1794371420.6989844,
+    "ast_hash": "07c4dd61a68d49dc3263d3af712f3161",
+    "semantic_hash": ""
+  },
+  "scripts/migrate-postgres.sh": {
+    "mtime": 1794371336.3657255,
+    "seen": 1794371420.698987,
+    "ast_hash": "10d34a73d11222bfee039e68940b4676",
+    "semantic_hash": ""
+  },
+  ".github/workflows/deploy.yml": {
+    "mtime": 1794371212.9865189,
+    "seen": 1794371420.699019,
+    "ast_hash": "dc0b134cf4e3f82cc9505c31f15301da",
+    "semantic_hash": ""
+  },
+  "compose.production.yml": {
+    "mtime": 1794378550.6309268,
+    "seen": 1794378595.5048006,
+    "ast_hash": "52acf19162dc44a2d49c8ab75f6bbc11",
+    "semantic_hash": ""
+  },
+  "docs/DEPLOYMENT.md": {
+    "mtime": 1794377926.7696466,
+    "seen": 1794378595.504811,
+    "ast_hash": "5841c257faf84fb12c1441644f149402",
     "semantic_hash": ""
   }
 }

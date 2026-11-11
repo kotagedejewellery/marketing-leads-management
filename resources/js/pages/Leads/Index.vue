@@ -25,7 +25,13 @@ type Page = {
 };
 const props = defineProps<{
     leads: Page;
-    filters: { q?: string; branch?: string; stage?: string; queue?: string; archived?: string };
+    filters: {
+        q?: string;
+        branch?: string;
+        stage?: string;
+        queue?: string;
+        archived?: string;
+    };
     branches: { id: number; name: string }[];
     csAccounts: { id: number; name: string; branch_name: string }[];
     archiveMode: boolean;
@@ -62,7 +68,9 @@ const newLead = useForm({
     milestone: '',
 });
 const showingNewLead = ref(false);
-const hasFilters = computed(() => Boolean(q.value || branch.value || stage.value || queue.value));
+const hasFilters = computed(() =>
+    Boolean(q.value || branch.value || stage.value || queue.value),
+);
 const selectedFile = computed(() => {
     if (!importForm.csv_file) return '';
 
@@ -124,16 +132,17 @@ const createLead = () =>
             showingNewLead.value = false;
         },
     });
-const stageLabel = (value: string | null) => ({
-    clicked: 'Klik saja',
-    asked: 'Tanya-tanya saja',
-    price_list: 'Sampai Pricelist',
-    offline: 'Datang Offline',
-    online: 'Diskusi Online',
-    closing_pending_transfer: 'Closing belum transfer',
-    closing: 'Closing',
-    repeat_order: 'Repeat Order',
-}[value || '']);
+const stageLabel = (value: string | null) =>
+    ({
+        clicked: 'Klik saja',
+        asked: 'Tanya-tanya saja',
+        price_list: 'Sampai Pricelist',
+        offline: 'Datang Offline',
+        online: 'Diskusi Online',
+        closing_pending_transfer: 'Closing belum transfer',
+        closing: 'Closing',
+        repeat_order: 'Repeat Order',
+    })[value || ''];
 const assignSelected = () => {
     bulkForm.lead_ids = selectedLeadIds.value;
     bulkForm.post('/leads/assign', {
@@ -214,28 +223,162 @@ const assignSelected = () => {
             >
                 {{ newLead.errors.contact_raw }}
             </p>
-            <details class="col-span-full rounded-xl border border-kgj-line bg-[#fffdf8] p-4">
-                <summary class="cursor-pointer text-sm font-semibold text-kgj-gold-deep">Tambahkan data sumber dan kualifikasi</summary>
-                <p class="mt-2 text-sm text-[#62665b]">Opsional untuk lead baru; gunakan saat data berasal dari chat, spreadsheet, atau kampanye.</p>
+            <details
+                class="col-span-full rounded-xl border border-kgj-line bg-[#fffdf8] p-4"
+            >
+                <summary
+                    class="cursor-pointer text-sm font-semibold text-kgj-gold-deep"
+                >
+                    Tambahkan data sumber dan kualifikasi
+                </summary>
+                <p class="mt-2 text-sm text-[#62665b]">
+                    Opsional untuk lead baru; gunakan saat data berasal dari
+                    chat, spreadsheet, atau kampanye.
+                </p>
                 <div class="mt-5 grid gap-4 lg:grid-cols-2">
-                    <label class="grid gap-2 text-sm font-semibold">Nama<input v-model="newLead.name" class="kgj-input" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">Nomor WhatsApp<input v-model="newLead.phone" class="kgj-input" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">CS penanggung jawab<select v-model="newLead.assigned_user_id" class="kgj-input"><option value="">Belum ditugaskan</option><option v-for="account in csAccounts" :key="account.id" :value="String(account.id)">{{ account.branch_name }} — {{ account.name }}</option></select></label>
-                    <label class="grid gap-2 text-sm font-semibold">Tanggal sumber<input v-model="newLead.source_date_raw" class="kgj-input" placeholder="Contoh: 31" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">Respond time<input v-model="newLead.respond_time" class="kgj-input" placeholder="Contoh: +-1 jam" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">Nama CS di sumber<input v-model="newLead.imported_cs_name" class="kgj-input" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">Waktu chat<input v-model="newLead.chat_time" class="kgj-input" placeholder="Contoh: 10.38" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">Sumber<select v-model="newLead.source_description" class="kgj-input"><option value="">Pilih sumber</option><option>Iklan</option><option>Instagram</option><option>Google</option><option>Website</option><option>Organik</option><option>Teman</option><option>Lainnya</option></select></label>
-                    <label class="grid gap-2 text-sm font-semibold">Campaign<input v-model="newLead.campaign_description" class="kgj-input" placeholder="Contoh: Bio atau DM" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">Keterangan awal<input v-model="newLead.imported_keterangan" class="kgj-input" placeholder="Contoh: tanya-tanya" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">Kebutuhan awal<input v-model="newLead.raw_kebutuhan" class="kgj-input" placeholder="Contoh: cincin lamaran" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">Tahap awal<select v-model="newLead.milestone" class="kgj-input"><option value="">Belum dikualifikasi</option><option value="clicked">Klik saja</option><option value="asked">Tanya-tanya saja</option><option value="price_list">Sampai Pricelist</option><option value="offline">Datang Offline</option><option value="online">Diskusi Online</option><option value="closing_pending_transfer">Closing tapi belum Transfer</option><option value="closing">Closing</option><option value="repeat_order">Repeat Order</option></select></label>
-                    <label class="grid gap-2 text-sm font-semibold">Intent Buying<select v-model="newLead.intent_buying" class="kgj-input"><option value="">Pilih kebutuhan</option><option>Tunangan</option><option>Lamaran</option><option>Nikahan</option><option>Anniversary</option><option>Lainnya</option></select></label>
-                    <label class="grid gap-2 text-sm font-semibold">Waktu pemakaian<input v-model="newLead.usage_date" type="date" class="kgj-input" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">Budget<input v-model="newLead.budget" class="kgj-input" /></label>
-                    <label class="grid gap-2 text-sm font-semibold">Tindak lanjut berikutnya<input v-model="newLead.next_follow_up_at" type="datetime-local" class="kgj-input" /></label>
-                    <label class="grid gap-2 text-sm font-semibold lg:col-span-2">Greeting<textarea v-model="newLead.greeting" rows="3" class="kgj-input" /></label>
-                    <label class="grid gap-2 text-sm font-semibold lg:col-span-2">Catatan internal<textarea v-model="newLead.keterangan" rows="3" class="kgj-input" /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Nama<input v-model="newLead.name" class="kgj-input"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Nomor WhatsApp<input
+                            v-model="newLead.phone"
+                            class="kgj-input"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >CS penanggung jawab<select
+                            v-model="newLead.assigned_user_id"
+                            class="kgj-input"
+                        >
+                            <option value="">Belum ditugaskan</option>
+                            <option
+                                v-for="account in csAccounts"
+                                :key="account.id"
+                                :value="String(account.id)"
+                            >
+                                {{ account.branch_name }} — {{ account.name }}
+                            </option>
+                        </select></label
+                    >
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Tanggal sumber<input
+                            v-model="newLead.source_date_raw"
+                            class="kgj-input"
+                            placeholder="Contoh: 31"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Respond time<input
+                            v-model="newLead.respond_time"
+                            class="kgj-input"
+                            placeholder="Contoh: +-1 jam"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Nama CS di sumber<input
+                            v-model="newLead.imported_cs_name"
+                            class="kgj-input"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Waktu chat<input
+                            v-model="newLead.chat_time"
+                            class="kgj-input"
+                            placeholder="Contoh: 10.38"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Sumber<select
+                            v-model="newLead.source_description"
+                            class="kgj-input"
+                        >
+                            <option value="">Pilih sumber</option>
+                            <option>Iklan</option>
+                            <option>Instagram</option>
+                            <option>Google</option>
+                            <option>Website</option>
+                            <option>Organik</option>
+                            <option>Teman</option>
+                            <option>Lainnya</option>
+                        </select></label
+                    >
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Campaign<input
+                            v-model="newLead.campaign_description"
+                            class="kgj-input"
+                            placeholder="Contoh: Bio atau DM"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Keterangan awal<input
+                            v-model="newLead.imported_keterangan"
+                            class="kgj-input"
+                            placeholder="Contoh: tanya-tanya"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Kebutuhan awal<input
+                            v-model="newLead.raw_kebutuhan"
+                            class="kgj-input"
+                            placeholder="Contoh: cincin lamaran"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Tahap awal<select
+                            v-model="newLead.milestone"
+                            class="kgj-input"
+                        >
+                            <option value="">Belum dikualifikasi</option>
+                            <option value="clicked">Klik saja</option>
+                            <option value="asked">Tanya-tanya saja</option>
+                            <option value="price_list">Sampai Pricelist</option>
+                            <option value="offline">Datang Offline</option>
+                            <option value="online">Diskusi Online</option>
+                            <option value="closing_pending_transfer">
+                                Closing tapi belum Transfer
+                            </option>
+                            <option value="closing">Closing</option>
+                            <option value="repeat_order">Repeat Order</option>
+                        </select></label
+                    >
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Intent Buying<select
+                            v-model="newLead.intent_buying"
+                            class="kgj-input"
+                        >
+                            <option value="">Pilih kebutuhan</option>
+                            <option>Tunangan</option>
+                            <option>Lamaran</option>
+                            <option>Nikahan</option>
+                            <option>Anniversary</option>
+                            <option>Lainnya</option>
+                        </select></label
+                    >
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Waktu pemakaian<input
+                            v-model="newLead.usage_date"
+                            type="date"
+                            class="kgj-input"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Budget<input
+                            v-model="newLead.budget"
+                            class="kgj-input"
+                    /></label>
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Tindak lanjut berikutnya<input
+                            v-model="newLead.next_follow_up_at"
+                            type="datetime-local"
+                            class="kgj-input"
+                    /></label>
+                    <label
+                        class="grid gap-2 text-sm font-semibold lg:col-span-2"
+                        >Greeting<textarea
+                            v-model="newLead.greeting"
+                            rows="3"
+                            class="kgj-input"
+                        />
+                    </label>
+                    <label
+                        class="grid gap-2 text-sm font-semibold lg:col-span-2"
+                        >Catatan internal<textarea
+                            v-model="newLead.keterangan"
+                            rows="3"
+                            class="kgj-input"
+                        />
+                    </label>
                 </div>
             </details>
         </form>
@@ -278,24 +421,38 @@ const assignSelected = () => {
             >
             <label class="text-sm font-medium"
                 ><span class="sr-only">Filter tahap lead</span
-                ><select v-model="stage" class="kgj-input w-full" :disabled="isFiltering" @change="applyFilters">
+                ><select
+                    v-model="stage"
+                    class="kgj-input w-full"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                >
                     <option value="">Semua tahap</option>
                     <option value="clicked">Klik saja</option>
                     <option value="asked">Tanya-tanya</option>
                     <option value="price_list">Sampai Pricelist</option>
                     <option value="offline">Datang Offline</option>
                     <option value="online">Diskusi Online</option>
-                    <option value="closing_pending_transfer">Belum transfer</option>
+                    <option value="closing_pending_transfer">
+                        Belum transfer
+                    </option>
                     <option value="closing">Closing</option>
                     <option value="repeat_order">Repeat Order</option>
                 </select></label
             >
             <label v-if="isAdmin" class="text-sm font-medium"
                 ><span class="sr-only">Queue kerja admin</span
-                ><select v-model="queue" class="kgj-input w-full" :disabled="isFiltering" @change="applyFilters">
+                ><select
+                    v-model="queue"
+                    class="kgj-input w-full"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                >
                     <option value="">Semua queue</option>
                     <option value="unassigned">Belum ditugaskan</option>
-                    <option value="needs_qualification">Perlu kualifikasi</option>
+                    <option value="needs_qualification">
+                        Perlu kualifikasi
+                    </option>
                     <option value="follow_up_due">Follow-up jatuh tempo</option>
                 </select></label
             >
@@ -334,7 +491,9 @@ const assignSelected = () => {
                 Hapus filter
             </button>
             <span v-if="selectedFile">Siap diimpor: {{ selectedFile }}</span>
-            <span v-if="isAdmin && !selectedFile">Gunakan export CSV atau XLSX dari tab All Leads.</span>
+            <span v-if="isAdmin && !selectedFile"
+                >Gunakan export CSV atau XLSX dari tab All Leads.</span
+            >
         </div>
         <p
             v-if="importForm.errors.csv_file"
@@ -348,16 +507,40 @@ const assignSelected = () => {
             class="kgj-surface mt-4 flex flex-col gap-3 border border-[#dccd9f] p-4 sm:flex-row sm:items-center"
             @submit.prevent="assignSelected"
         >
-            <p class="text-sm font-semibold">{{ selectedLeadIds.length }} lead dipilih</p>
-            <label class="sr-only" for="bulk-assignee">CS penanggung jawab</label>
-            <select id="bulk-assignee" v-model="bulkForm.assigned_user_id" class="kgj-input sm:ml-auto sm:max-w-xs" required>
+            <p class="text-sm font-semibold">
+                {{ selectedLeadIds.length }} lead dipilih
+            </p>
+            <label class="sr-only" for="bulk-assignee"
+                >CS penanggung jawab</label
+            >
+            <select
+                id="bulk-assignee"
+                v-model="bulkForm.assigned_user_id"
+                class="kgj-input sm:ml-auto sm:max-w-xs"
+                required
+            >
                 <option value="">Pilih CS penanggung jawab</option>
-                <option v-for="account in csAccounts" :key="account.id" :value="String(account.id)">{{ account.branch_name }} — {{ account.name }}</option>
+                <option
+                    v-for="account in csAccounts"
+                    :key="account.id"
+                    :value="String(account.id)"
+                >
+                    {{ account.branch_name }} — {{ account.name }}
+                </option>
             </select>
-            <button class="kgj-button-gold" :disabled="bulkForm.processing || !bulkForm.assigned_user_id">
+            <button
+                class="kgj-button-gold"
+                :disabled="bulkForm.processing || !bulkForm.assigned_user_id"
+            >
                 {{ bulkForm.processing ? 'Menugaskan…' : 'Tugaskan' }}
             </button>
-            <button class="kgj-button-secondary" type="button" @click="selectedLeadIds = []">Batal</button>
+            <button
+                class="kgj-button-secondary"
+                type="button"
+                @click="selectedLeadIds = []"
+            >
+                Batal
+            </button>
         </form>
 
         <div class="mt-6 grid gap-3 md:hidden">
@@ -365,25 +548,52 @@ const assignSelected = () => {
                 v-for="lead in leads.data"
                 :key="lead.id"
                 class="rounded-2xl border border-kgj-line bg-kgj-paper p-4 shadow-[0_8px_22px_rgba(58,48,31,0.06)] transition hover:-translate-y-0.5 hover:border-[#c3a463]"
-                ><label v-if="isAdmin" class="mb-3 flex min-h-11 items-center gap-2 text-sm font-semibold"><input v-model="selectedLeadIds" class="size-4 accent-kgj-gold" type="checkbox" :disabled="!selectedLeadIds.includes(lead.id) && selectedLeadIds.length >= 100" :value="lead.id" />Pilih lead</label>
-                ><Link :href="`/leads/${lead.id}`" class="block"><strong class="block">{{
-                    lead.name || lead.contact_raw
-                }}</strong
-                ><span class="mt-1 block text-sm text-[#62665b]">{{
-                    lead.phone || lead.contact_raw
-                }}</span
-                ><span class="mt-3 block text-sm"
-                    >{{ lead.branch_name || 'Belum ditugaskan' }} ·
-                    {{ lead.owner_name || '—' }}</span
-                ><span
-                    class="mt-1 block text-xs tracking-wide text-[#8a6b2d] uppercase"
-                    >{{
-                        stageLabel(lead.current_stage) || lead.intent_buying ||
-                        lead.imported_definition ||
-                        'Belum dikualifikasi'
-                    }}</span><span v-if="lead.next_follow_up_at" class="mt-2 block text-xs text-kgj-muted">Follow-up: {{ new Date(lead.next_follow_up_at).toLocaleString('id-ID') }}</span>
-                ></Link></article
             >
+                <label
+                    v-if="isAdmin"
+                    class="mb-3 flex min-h-11 items-center gap-2 text-sm font-semibold"
+                    ><input
+                        v-model="selectedLeadIds"
+                        class="size-4 accent-kgj-gold"
+                        type="checkbox"
+                        :disabled="
+                            !selectedLeadIds.includes(lead.id) &&
+                            selectedLeadIds.length >= 100
+                        "
+                        :value="lead.id"
+                    />Pilih lead</label
+                >
+                ><Link :href="`/leads/${lead.id}`" class="block"
+                    ><strong class="block">{{
+                        lead.name || lead.contact_raw
+                    }}</strong
+                    ><span class="mt-1 block text-sm text-[#62665b]">{{
+                        lead.phone || lead.contact_raw
+                    }}</span
+                    ><span class="mt-3 block text-sm"
+                        >{{ lead.branch_name || 'Belum ditugaskan' }} ·
+                        {{ lead.owner_name || '—' }}</span
+                    ><span
+                        class="mt-1 block text-xs tracking-wide text-[#8a6b2d] uppercase"
+                        >{{
+                            stageLabel(lead.current_stage) ||
+                            lead.intent_buying ||
+                            lead.imported_definition ||
+                            'Belum dikualifikasi'
+                        }}</span
+                    ><span
+                        v-if="lead.next_follow_up_at"
+                        class="mt-2 block text-xs text-kgj-muted"
+                        >Follow-up:
+                        {{
+                            new Date(lead.next_follow_up_at).toLocaleString(
+                                'id-ID',
+                            )
+                        }}</span
+                    >
+                    ></Link
+                >
+            </article>
             <p
                 v-if="!leads.data.length"
                 class="py-12 text-center text-[#62665b]"
@@ -410,7 +620,9 @@ const assignSelected = () => {
                     class="text-left text-xs tracking-wider text-[#62665b] uppercase"
                 >
                     <tr>
-                        <th v-if="isAdmin" class="p-4"><span class="sr-only">Pilih lead</span></th>
+                        <th v-if="isAdmin" class="p-4">
+                            <span class="sr-only">Pilih lead</span>
+                        </th>
                         <th class="p-4">Lead</th>
                         <th class="p-4">Cabang / CS</th>
                         <th class="p-4">Status</th>
@@ -423,7 +635,19 @@ const assignSelected = () => {
                         :key="lead.id"
                         class="border-t border-[#e7eae5]"
                     >
-                        <td v-if="isAdmin" class="p-4"><input v-model="selectedLeadIds" class="size-4 accent-kgj-gold" type="checkbox" :disabled="!selectedLeadIds.includes(lead.id) && selectedLeadIds.length >= 100" :aria-label="`Pilih ${lead.name || lead.contact_raw}`" :value="lead.id" /></td>
+                        <td v-if="isAdmin" class="p-4">
+                            <input
+                                v-model="selectedLeadIds"
+                                class="size-4 accent-kgj-gold"
+                                type="checkbox"
+                                :disabled="
+                                    !selectedLeadIds.includes(lead.id) &&
+                                    selectedLeadIds.length >= 100
+                                "
+                                :aria-label="`Pilih ${lead.name || lead.contact_raw}`"
+                                :value="lead.id"
+                            />
+                        </td>
                         <td class="p-4 font-semibold">
                             <Link
                                 :href="`/leads/${lead.id}`"
@@ -442,10 +666,20 @@ const assignSelected = () => {
                         </td>
                         <td class="p-4">
                             {{
-                                stageLabel(lead.current_stage) || lead.intent_buying ||
+                                stageLabel(lead.current_stage) ||
+                                lead.intent_buying ||
                                 lead.imported_definition ||
                                 'Belum dikualifikasi'
-                            }}<small v-if="lead.next_follow_up_at" class="mt-1 block text-[#62665b]">Follow-up: {{ new Date(lead.next_follow_up_at).toLocaleString('id-ID') }}</small>
+                            }}<small
+                                v-if="lead.next_follow_up_at"
+                                class="mt-1 block text-[#62665b]"
+                                >Follow-up:
+                                {{
+                                    new Date(
+                                        lead.next_follow_up_at,
+                                    ).toLocaleString('id-ID')
+                                }}</small
+                            >
                         </td>
                         <td class="p-4">
                             {{
@@ -456,7 +690,10 @@ const assignSelected = () => {
                         </td>
                     </tr>
                     <tr v-if="!leads.data.length">
-                        <td :colspan="isAdmin ? 5 : 4" class="p-12 text-center text-[#62665b]">
+                        <td
+                            :colspan="isAdmin ? 5 : 4"
+                            class="p-12 text-center text-[#62665b]"
+                        >
                             {{
                                 hasFilters
                                     ? 'Tidak ada lead yang cocok dengan filter ini.'

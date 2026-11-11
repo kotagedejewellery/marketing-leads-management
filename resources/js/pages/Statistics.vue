@@ -80,7 +80,10 @@ const width = (value: number) =>
                                   },
                               ]
                             : []),
-                        { label: 'Follow-up jatuh tempo', value: stats.follow_up_due },
+                        {
+                            label: 'Follow-up jatuh tempo',
+                            value: stats.follow_up_due,
+                        },
                     ]"
                     :key="item.label"
                     class="border-b border-kgj-line px-5 py-5 last:border-b-0 sm:border-r sm:border-b-0 lg:last:border-r-0"

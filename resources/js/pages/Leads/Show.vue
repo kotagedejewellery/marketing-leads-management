@@ -70,16 +70,17 @@ const formFields = [
     'assigned_user_id',
     'milestones',
 ] as const;
-const stageLabel = (value: string | null) => ({
-    clicked: 'Klik saja',
-    asked: 'Tanya-tanya saja',
-    price_list: 'Sampai Pricelist',
-    offline: 'Datang Offline',
-    online: 'Diskusi Online',
-    closing_pending_transfer: 'Closing belum transfer',
-    closing: 'Closing',
-    repeat_order: 'Repeat Order',
-}[value || '']);
+const stageLabel = (value: string | null) =>
+    ({
+        clicked: 'Klik saja',
+        asked: 'Tanya-tanya saja',
+        price_list: 'Sampai Pricelist',
+        offline: 'Datang Offline',
+        online: 'Diskusi Online',
+        closing_pending_transfer: 'Closing belum transfer',
+        closing: 'Closing',
+        repeat_order: 'Repeat Order',
+    })[value || ''];
 const focusFirstError = () => {
     const field = formFields.find((key) => form.errors[key]);
 
@@ -151,7 +152,9 @@ function restoreLead() {
                     >{{
                         lead.archived_at
                             ? 'Diarsipkan'
-                            : stageLabel(String(lead.current_stage || '')) || lead.imported_definition || 'Belum dikualifikasi'
+                            : stageLabel(String(lead.current_stage || '')) ||
+                              lead.imported_definition ||
+                              'Belum dikualifikasi'
                     }}</span
                 >
             </div>
@@ -319,7 +322,10 @@ function restoreLead() {
             <dl class="mt-4 grid gap-x-8 gap-y-4 text-sm md:grid-cols-2">
                 <div
                     v-for="item in [
-                        { label: 'Tanggal sumber', value: lead.source_date_raw },
+                        {
+                            label: 'Tanggal sumber',
+                            value: lead.source_date_raw,
+                        },
                         {
                             label: 'Keterangan awal',
                             value: lead.imported_keterangan,

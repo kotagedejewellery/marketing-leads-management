@@ -97,13 +97,37 @@ const remove = () => {
             </p>
         </form>
         <div class="mt-6 grid gap-3 md:hidden">
-            <article v-for="branch in branches" :key="branch.id" class="kgj-surface p-4">
+            <article
+                v-for="branch in branches"
+                :key="branch.id"
+                class="kgj-surface p-4"
+            >
                 <h2 class="font-semibold">{{ branch.name }}</h2>
-                <p class="mt-2 text-sm text-kgj-muted">{{ branch.cs_name || 'Belum ditetapkan' }}</p>
-                <p class="mt-1 break-all text-sm text-kgj-muted">{{ branch.cs_email || 'Tambahkan akun CS dari menu Akun.' }}</p>
-                <div class="mt-4 flex gap-2"><button class="kgj-button-secondary flex-1" type="button" @click="edit(branch)">Ubah</button><button class="kgj-button-secondary flex-1 text-kgj-rose" type="button" @click="branchToDelete = branch">Hapus</button></div>
+                <p class="mt-2 text-sm text-kgj-muted">
+                    {{ branch.cs_name || 'Belum ditetapkan' }}
+                </p>
+                <p class="mt-1 text-sm break-all text-kgj-muted">
+                    {{ branch.cs_email || 'Tambahkan akun CS dari menu Akun.' }}
+                </p>
+                <div class="mt-4 flex gap-2">
+                    <button
+                        class="kgj-button-secondary flex-1"
+                        type="button"
+                        @click="edit(branch)"
+                    >
+                        Ubah</button
+                    ><button
+                        class="kgj-button-secondary flex-1 text-kgj-rose"
+                        type="button"
+                        @click="branchToDelete = branch"
+                    >
+                        Hapus
+                    </button>
+                </div>
             </article>
-            <p v-if="!branches.length" class="py-10 text-center text-kgj-muted">Belum ada cabang.</p>
+            <p v-if="!branches.length" class="py-10 text-center text-kgj-muted">
+                Belum ada cabang.
+            </p>
         </div>
         <div class="kgj-table mt-6 hidden overflow-x-auto md:block">
             <table class="w-full min-w-[620px] text-sm">

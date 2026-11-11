@@ -7939,7 +7939,7 @@
       "label": "isAdmin",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L34",
+      "source_location": "L40",
       "_origin": "ast"
     },
     {
@@ -7947,7 +7947,7 @@
       "label": "q",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L35",
+      "source_location": "L41",
       "_origin": "ast"
     },
     {
@@ -7955,7 +7955,7 @@
       "label": "branch",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L36",
+      "source_location": "L42",
       "_origin": "ast"
     },
     {
@@ -7963,7 +7963,7 @@
       "label": "stage",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L37",
+      "source_location": "L43",
       "_origin": "ast"
     },
     {
@@ -7971,7 +7971,7 @@
       "label": "queue",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L38",
+      "source_location": "L44",
       "_origin": "ast"
     },
     {
@@ -7979,7 +7979,7 @@
       "label": "isFiltering",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L39",
+      "source_location": "L45",
       "_origin": "ast"
     },
     {
@@ -7987,7 +7987,7 @@
       "label": "selectedLeadIds",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L40",
+      "source_location": "L46",
       "_origin": "ast"
     },
     {
@@ -7995,7 +7995,7 @@
       "label": "bulkForm",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L41",
+      "source_location": "L47",
       "_origin": "ast"
     },
     {
@@ -8003,7 +8003,7 @@
       "label": "importForm",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L42",
+      "source_location": "L48",
       "_origin": "ast"
     },
     {
@@ -8011,7 +8011,7 @@
       "label": "newLead",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L43",
+      "source_location": "L49",
       "_origin": "ast"
     },
     {
@@ -8019,7 +8019,7 @@
       "label": "showingNewLead",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L64",
+      "source_location": "L70",
       "_origin": "ast"
     },
     {
@@ -8027,7 +8027,7 @@
       "label": "hasFilters",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L65",
+      "source_location": "L71",
       "_origin": "ast"
     },
     {
@@ -8035,7 +8035,7 @@
       "label": "selectedFile",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L66",
+      "source_location": "L74",
       "_origin": "ast"
     },
     {
@@ -8043,7 +8043,7 @@
       "label": "activeFilterText",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L71",
+      "source_location": "L79",
       "_origin": "ast"
     },
     {
@@ -8051,7 +8051,7 @@
       "label": "applyFilters()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L82",
+      "source_location": "L90",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8060,7 +8060,7 @@
       "label": "clearFilters()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L103",
+      "source_location": "L111",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8069,7 +8069,7 @@
       "label": "importCsv()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L110",
+      "source_location": "L118",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8078,7 +8078,7 @@
       "label": "selectCsv()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L115",
+      "source_location": "L123",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8087,7 +8087,7 @@
       "label": "toggleArchive()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L118",
+      "source_location": "L126",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8096,7 +8096,7 @@
       "label": "createLead()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L120",
+      "source_location": "L128",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8105,7 +8105,7 @@
       "label": "stageLabel()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L127",
+      "source_location": "L135",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8114,7 +8114,7 @@
       "label": "assignSelected()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L137",
+      "source_location": "L146",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8214,7 +8214,7 @@
       "label": "focusFirstError()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Show.vue",
-      "source_location": "L83",
+      "source_location": "L84",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8223,7 +8223,7 @@
       "label": "save()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Show.vue",
-      "source_location": "L88",
+      "source_location": "L89",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8232,7 +8232,7 @@
       "label": "archiveLead()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Show.vue",
-      "source_location": "L101",
+      "source_location": "L102",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8241,7 +8241,7 @@
       "label": "restoreLead()",
       "file_type": "code",
       "source_file": "resources/js/pages/Leads/Show.vue",
-      "source_location": "L105",
+      "source_location": "L106",
       "_callable": true,
       "_origin": "ast"
     },
@@ -8315,7 +8315,7 @@
       "label": "form",
       "file_type": "code",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L7",
+      "source_location": "L8",
       "_origin": "ast"
     },
     {
@@ -8323,7 +8323,7 @@
       "label": "emailInput",
       "file_type": "code",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L8",
+      "source_location": "L9",
       "_origin": "ast"
     },
     {
@@ -8331,7 +8331,7 @@
       "label": "submit()",
       "file_type": "code",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L9",
+      "source_location": "L10",
       "_callable": true,
       "_origin": "ast"
     },
@@ -10138,8 +10138,8 @@
       "_origin": "ast"
     },
     {
-      "id": "readme_kgj_leads_dashboard",
-      "label": "KGJ Leads Dashboard",
+      "id": "readme_kgj_leads",
+      "label": "KGJ Leads",
       "file_type": "document",
       "node_kind": "heading",
       "source_file": "README.md",
@@ -10147,12 +10147,138 @@
       "_origin": "ast"
     },
     {
-      "id": "readme_production_vps_1",
-      "label": "Production VPS 1",
+      "id": "readme_tujuan",
+      "label": "Tujuan",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "README.md",
+      "source_location": "L7",
+      "_origin": "ast"
+    },
+    {
+      "id": "readme_siapa_yang_menggunakan",
+      "label": "Siapa yang menggunakan?",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "README.md",
+      "source_location": "L14",
+      "_origin": "ast"
+    },
+    {
+      "id": "readme_admin",
+      "label": "Admin",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "README.md",
+      "source_location": "L16",
+      "_origin": "ast"
+    },
+    {
+      "id": "readme_customer_service",
+      "label": "Customer Service",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "README.md",
+      "source_location": "L20",
+      "_origin": "ast"
+    },
+    {
+      "id": "readme_alur_kerja_harian",
+      "label": "Alur kerja harian",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "README.md",
+      "source_location": "L24",
+      "_origin": "ast"
+    },
+    {
+      "id": "readme_status_perkembangan_lead",
+      "label": "Status perkembangan lead",
       "file_type": "document",
       "node_kind": "heading",
       "source_file": "README.md",
       "source_location": "L31",
+      "_origin": "ast"
+    },
+    {
+      "id": "readme_informasi_yang_dicatat",
+      "label": "Informasi yang dicatat",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "README.md",
+      "source_location": "L41",
+      "_origin": "ast"
+    },
+    {
+      "id": "readme_import_data_lead",
+      "label": "Import data lead",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "README.md",
+      "source_location": "L51",
+      "_origin": "ast"
+    },
+    {
+      "id": "readme_bantuan",
+      "label": "Bantuan",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "README.md",
+      "source_location": "L55",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_deployment",
+      "label": "DEPLOYMENT.md",
+      "file_type": "document",
+      "node_kind": "page",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_deployment_panduan_deployment_kgj_leads",
+      "label": "Panduan Deployment KGJ Leads",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_deployment_production_vps_1",
+      "label": "Production VPS 1",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L5",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_deployment_auto_deploy",
+      "label": "Auto deploy",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L14",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_deployment_migrasi_dan_backup",
+      "label": "Migrasi dan backup",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L25",
+      "_origin": "ast"
+    },
+    {
+      "id": "docs_deployment_deploy_manual",
+      "label": "Deploy manual",
+      "file_type": "document",
+      "node_kind": "heading",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L33",
       "_origin": "ast"
     },
     {
@@ -34149,7 +34275,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L34",
+      "source_location": "L40",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34159,7 +34285,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L35",
+      "source_location": "L41",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34169,7 +34295,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L36",
+      "source_location": "L42",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34179,7 +34305,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L37",
+      "source_location": "L43",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34189,7 +34315,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L38",
+      "source_location": "L44",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34199,7 +34325,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L39",
+      "source_location": "L45",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34209,7 +34335,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L40",
+      "source_location": "L46",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34219,7 +34345,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L41",
+      "source_location": "L47",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34229,7 +34355,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L42",
+      "source_location": "L48",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34239,7 +34365,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L43",
+      "source_location": "L49",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34249,7 +34375,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L64",
+      "source_location": "L70",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34259,7 +34385,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L65",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34269,7 +34395,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L66",
+      "source_location": "L74",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34279,7 +34405,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L71",
+      "source_location": "L79",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34289,7 +34415,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L82",
+      "source_location": "L90",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34299,7 +34425,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L103",
+      "source_location": "L111",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34309,7 +34435,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L110",
+      "source_location": "L118",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34319,7 +34445,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L115",
+      "source_location": "L123",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34329,7 +34455,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L118",
+      "source_location": "L126",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34339,7 +34465,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L120",
+      "source_location": "L128",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34349,7 +34475,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L127",
+      "source_location": "L135",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34359,7 +34485,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L137",
+      "source_location": "L146",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34370,7 +34496,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L108",
+      "source_location": "L116",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34612,7 +34738,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Show.vue",
-      "source_location": "L83",
+      "source_location": "L84",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34622,7 +34748,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Show.vue",
-      "source_location": "L88",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34632,7 +34758,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Show.vue",
-      "source_location": "L101",
+      "source_location": "L102",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34642,7 +34768,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/Leads/Show.vue",
-      "source_location": "L105",
+      "source_location": "L106",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -34654,7 +34780,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.85,
       "source_file": "resources/js/pages/Leads/Show.vue",
-      "source_location": "L98",
+      "source_location": "L99",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -35141,7 +35267,7 @@
     },
     {
       "source": "resources_js_pages_auth_login",
-      "target": "resources_js_components_ui_sonner_index",
+      "target": "resources_js_components_passwordinput",
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -35152,12 +35278,23 @@
     },
     {
       "source": "resources_js_pages_auth_login",
+      "target": "resources_js_components_ui_sonner_index",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "resources/js/pages/auth/Login.vue",
+      "source_location": "L6",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "resources_js_pages_auth_login",
       "target": "resources_js_components_ui_sonner_index_toaster",
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L5",
+      "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -35167,7 +35304,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L7",
+      "source_location": "L8",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -35177,7 +35314,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L8",
+      "source_location": "L9",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -35187,7 +35324,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L9",
+      "source_location": "L10",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -39313,7 +39450,7 @@
     },
     {
       "source": "readme",
-      "target": "readme_kgj_leads_dashboard",
+      "target": "readme_kgj_leads",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
@@ -39322,12 +39459,162 @@
       "_origin": "ast"
     },
     {
-      "source": "readme_kgj_leads_dashboard",
-      "target": "readme_production_vps_1",
+      "source": "readme_kgj_leads",
+      "target": "readme_tujuan",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L7",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "readme_kgj_leads",
+      "target": "readme_siapa_yang_menggunakan",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L14",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "readme_siapa_yang_menggunakan",
+      "target": "readme_admin",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L16",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "readme_siapa_yang_menggunakan",
+      "target": "readme_customer_service",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L20",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "readme_kgj_leads",
+      "target": "readme_alur_kerja_harian",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L24",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "readme_kgj_leads",
+      "target": "readme_status_perkembangan_lead",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
       "source_location": "L31",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "readme_kgj_leads",
+      "target": "readme_informasi_yang_dicatat",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L41",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "readme_kgj_leads",
+      "target": "readme_import_data_lead",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L51",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "readme_kgj_leads",
+      "target": "readme_bantuan",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L55",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "readme",
+      "target": "docs_deployment",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L59",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "docs_deployment",
+      "target": "docs_deployment_panduan_deployment_kgj_leads",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "docs_deployment",
+      "target": "readme",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L3",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "docs_deployment_panduan_deployment_kgj_leads",
+      "target": "docs_deployment_production_vps_1",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "docs_deployment_panduan_deployment_kgj_leads",
+      "target": "docs_deployment_auto_deploy",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L14",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "docs_deployment_panduan_deployment_kgj_leads",
+      "target": "docs_deployment_migrasi_dan_backup",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L25",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "docs_deployment_panduan_deployment_kgj_leads",
+      "target": "docs_deployment_deploy_manual",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/DEPLOYMENT.md",
+      "source_location": "L33",
       "weight": 1.0,
       "_origin": "ast"
     },

@@ -1,42 +1,59 @@
-# KGJ Leads Dashboard
+# KGJ Leads
 
-Dashboard internal untuk Admin dan CS, dengan Laravel, PostgreSQL, dan Docker Compose.
+KGJ Leads adalah ruang kerja internal untuk membantu tim Customer Service (CS) dan Admin Kotagede Jewellery mengelola lead dengan rapi, cepat, dan mudah dipantau.
 
-Struktur utama: kode Laravel berada langsung di root; skrip PostgreSQL berada di `database/postgres/`.
+Sistem ini menggantikan proses pemantauan lead yang sebelumnya tersebar di spreadsheet harian. Setiap calon pelanggan memiliki satu data utama, status yang jelas, serta riwayat pembaruan yang dapat ditelusuri.
 
-```powershell
-docker compose up --build
-```
+## Tujuan
 
-Salin `.env.example` menjadi `.env` dan isi `APP_KEY` serta `DB_PASSWORD` yang kuat sebelum menjalankan. Untuk server, set `APP_ENV=production`, `APP_URL=https://domain-anda`, dan `SESSION_SECURE_COOKIE=true`.
+- Memudahkan CS melihat dan memperbarui lead yang menjadi tanggung jawabnya.
+- Memudahkan Admin memantau seluruh cabang, pembagian lead, dan perkembangan follow-up.
+- Menyimpan informasi kebutuhan calon pelanggan secara lebih terstruktur.
+- Mengurangi risiko data ganda, lead terlewat, atau status yang tidak terbarui.
 
-Buka `http://localhost:8082/login`.
+## Siapa yang menggunakan?
 
-Instalasi baru tidak membuat akun dengan kata sandi bawaan. Setelah database siap, buat admin pertama secara interaktif:
+### Admin
 
-```powershell
-docker compose exec laravel php artisan kgj:bootstrap-admin
-```
+Admin dapat melihat seluruh data lead, mengimpor data awal, mengelola cabang dan akun CS, membagikan lead, serta memantau statistik dan antrean follow-up.
 
-Admin dapat memantau seluruh cabang, membuat cabang dan akun CS, menetapkan lead ke akun CS, dan mengimpor CSV atau XLSX. Import XLSX otomatis memakai tab `All Leads` bila tersedia. Header sumber harus memuat `Tanggal` atau `No`, `Nama/Nomor`, `Respond Time`, `Nama CS`, `Keterangan`, `Kebutuhan`, `Greeting*`, `Waktu Chat`, `Keterangan Sumber*`, dan `Keterangan Campaign*`. Akun CS hanya melihat serta mengubah lead yang ditugaskan kepadanya.
+### Customer Service
 
-Database menggunakan volume Docker persisten dan tidak ada perintah reset atau seed destruktif. Sistem legacy tidak lagi terdaftar sebagai service Docker. PostgreSQL dibatasi ke `127.0.0.1:5434`; akseskan aplikasi produksi melalui reverse proxy HTTPS, bukan dengan membuka port database.
+CS melihat lead yang ditugaskan kepadanya. CS dapat memperbarui perkembangan konsultasi, kebutuhan pelanggan, jadwal follow-up, catatan, dan riwayat komunikasi.
 
-Buat backup database sebelum pembaruan besar dan jadwalkan perintah berikut melalui Task Scheduler/server scheduler:
+## Alur kerja harian
 
-```powershell
-.\scripts\backup-postgres.ps1
-```
+1. Admin mengimpor data lead dari spreadsheet atau file CSV/XLSX.
+2. Admin mengecek lead yang belum ditugaskan lalu membagikannya kepada CS yang sesuai.
+3. CS membuka daftar leadnya, lalu memperbarui status dan catatan setelah berkomunikasi dengan pelanggan.
+4. Admin memantau statistik, lead yang perlu ditindaklanjuti, serta kualitas pembagian lead antar cabang.
 
-## Production VPS 1
+## Status perkembangan lead
 
-Deployment production berada di `/opt/apps/sistem-management-leads` dengan domain `https://leadcontrol.kotagedejewellery.tech`. Gunakan `compose.production.yml`; file `docker-compose.yml` tetap khusus development lokal.
+| Kelompok | Status yang tersedia |
+| --- | --- |
+| Cold | Klik saja |
+| Warm | Tanya-tanya saja, Sampai Pricelist |
+| Hot | Datang Offline, Diskusi Online, Closing tapi belum Transfer, Closing, Repeat Order |
 
-1. Pastikan DNS domain mengarah ke VPS 1 dan network Docker eksternal `proxy` sudah tersedia dari Traefik existing.
-2. Clone repository ke folder tersebut, lalu salin `.env.production.example` menjadi `.env.production`. Isi `APP_KEY` dan `DB_PASSWORD` yang unik; file ini tidak boleh masuk Git.
-3. Jalankan `bash scripts/deploy-production.sh`. Skrip memvalidasi compose, membuat backup database, menjalankan migrasi SQL forward-only, menjalankan app, dan memeriksa `/up`.
-4. Buat GitHub Actions secrets: `VPS_HOST`, `VPS_USER` (nilai: `Kotagede-Jewellery`), `VPS_SSH_KEY`, dan `VPS_SSH_KNOWN_HOSTS`.
+Setiap lead memiliki satu status perkembangan terbaru. Seluruh perubahan tetap tersimpan dalam riwayat sehingga alur komunikasi dapat ditinjau kembali.
 
-Setiap push ke `main` menjalankan CI lalu deploy otomatis. Deploy hanya menyentuh compose project `leadcontrol`, membuat backup `backups/pre-migrate-*.dump`, dan memeriksa `https://leadcontrol.kotagedejewellery.tech/up`.
+## Informasi yang dicatat
 
-Migrasi production aplikasi ini adalah file SQL bernomor di `database/postgres/`, misalnya `007_add_field.sql`. File baru dijalankan otomatis sekali dan dicatat bersama checksum-nya. Jangan mengubah file yang sudah pernah dipakai, dan jangan gunakan `DROP DATABASE`, `DROP SCHEMA`, `DROP TABLE`, `DROP COLUMN`, atau `TRUNCATE`; runner akan menolaknya.
+Selain nama dan nomor pelanggan, sistem membantu mencatat:
+
+- kebutuhan pelanggan, seperti tunangan, lamaran, nikahan, anniversary, atau lainnya;
+- waktu pemakaian dan kisaran budget;
+- catatan konsultasi dan jadwal follow-up;
+- sumber dan campaign asal lead;
+- status perkembangan serta riwayat pembaruan.
+
+## Import data lead
+
+Admin dapat mengimpor file CSV atau XLSX dari data monitoring lead. Jika file XLSX memiliki tab **All Leads**, sistem akan menggunakannya sebagai sumber data utama. Sistem membantu melewati data duplikat dan menandai lead yang masih perlu ditugaskan atau ditinjau.
+
+## Bantuan
+
+Jika data tidak muncul, status tidak dapat diperbarui, atau akses akun bermasalah, hubungi Admin sistem terlebih dahulu. Admin dapat membantu mengecek cabang, akun CS, dan penugasan lead.
+
+Dokumen khusus untuk pengelola teknis tersedia di [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

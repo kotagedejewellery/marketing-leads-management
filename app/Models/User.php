@@ -36,7 +36,7 @@ class User extends Authenticatable implements PasskeyUser
 
     public $timestamps = false;
 
-    protected $fillable = ['name', 'email', 'password_hash', 'role', 'branch_id'];
+    protected $fillable = ['name', 'email', 'password', 'password_hash', 'role', 'branch_id'];
 
     protected $hidden = ['password_hash'];
 
@@ -47,7 +47,7 @@ class User extends Authenticatable implements PasskeyUser
      */
     protected function casts(): array
     {
-        return ['created_at' => 'datetime'];
+        return ['created_at' => 'datetime', 'password' => 'hashed'];
     }
 
     public function getAuthPassword(): string

@@ -20,6 +20,7 @@ class DashboardTest extends TestCase
             $table->id();
             $table->unsignedBigInteger('assigned_user_id')->nullable();
             $table->timestamp('archived_at')->nullable();
+            $table->timestamp('next_follow_up_at')->nullable();
         });
 
         Schema::create('lead_milestones', function (Blueprint $table) {

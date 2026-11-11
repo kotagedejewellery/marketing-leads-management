@@ -504,7 +504,7 @@ class LeadController extends Controller
      */
     private function cleanHeaders(array $headers): array
     {
-        return array_map(fn ($value) => trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $value)), $headers);
+        return array_values(array_map(fn ($value) => trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $value)), $headers));
     }
 
     private function spreadsheetValue(mixed $value): string

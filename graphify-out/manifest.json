@@ -36,9 +36,9 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1794384617.6987126,
-    "seen": 1794384669.2119691,
-    "ast_hash": "a32c31a1db09461c09c6e2db72c4d286",
+    "mtime": 1794385167.7071457,
+    "seen": 1794385531.5784533,
+    "ast_hash": "466433989159872d9c798d10cea33b9c",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -114,9 +114,9 @@
     "semantic_hash": ""
   },
   "app/Models/User.php": {
-    "mtime": 1794383236.5076883,
-    "seen": 1794383457.1342704,
-    "ast_hash": "38a471e4094e200199720c1c342c2c45",
+    "mtime": 1794385375.553444,
+    "seen": 1794385531.5784845,
+    "ast_hash": "09782463bd24c84a36cb1ccc25bdc9d1",
     "semantic_hash": ""
   },
   "app/Providers/AppServiceProvider.php": {
@@ -156,9 +156,9 @@
     "semantic_hash": ""
   },
   "composer.json": {
-    "mtime": 1794380055.5064552,
-    "seen": 1794380204.224081,
-    "ast_hash": "33ac00376e3f7e82fb7640a3ba022ddb",
+    "mtime": 1794385469.541421,
+    "seen": 1794385531.5785027,
+    "ast_hash": "e684a464fee1e82400c41d02318ff787",
     "semantic_hash": ""
   },
   "config/app.php": {
@@ -1626,15 +1626,15 @@
     "semantic_hash": ""
   },
   "tests/Feature/DashboardTest.php": {
-    "mtime": 1794382072.9441264,
-    "seen": 1794382182.559939,
-    "ast_hash": "be69134638c9abcc6fb472bfdab98e61",
+    "mtime": 1794385326.2749927,
+    "seen": 1794385531.5790677,
+    "ast_hash": "ee71dde7b61fb39197eb3387608dd3c9",
     "semantic_hash": ""
   },
   "tests/Feature/ExampleTest.php": {
-    "mtime": 1794297474.9414368,
-    "seen": 1794367943.592961,
-    "ast_hash": "1c64692feae8975c6b27413e5acb8cba",
+    "mtime": 1794385326.8769217,
+    "seen": 1794385531.5790694,
+    "ast_hash": "661641e5781276c83889cd09eb763f2c",
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {

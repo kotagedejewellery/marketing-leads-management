@@ -27,3 +27,16 @@ Buat backup database sebelum pembaruan besar dan jadwalkan perintah berikut mela
 ```powershell
 .\scripts\backup-postgres.ps1
 ```
+
+## Production VPS 1
+
+Deployment production berada di `/opt/apps/sistem-management-leads` dengan domain `https://leadcontrol.kotagedejewellery.tech`. Gunakan `compose.production.yml`; file `docker-compose.yml` tetap khusus development lokal.
+
+1. Pastikan DNS domain mengarah ke VPS 1 dan network Docker eksternal `proxy` sudah tersedia dari Traefik existing.
+2. Clone repository ke folder tersebut, lalu salin `.env.production.example` menjadi `.env.production`. Isi `APP_KEY` dan `DB_PASSWORD` yang unik; file ini tidak boleh masuk Git.
+3. Jalankan `bash scripts/deploy-production.sh`. Skrip memvalidasi compose, membuat backup database, menjalankan migrasi SQL forward-only, menjalankan app, dan memeriksa `/up`.
+4. Buat GitHub Actions secrets: `VPS_HOST`, `VPS_USER` (nilai: `Kotagede-Jewellery`), `VPS_SSH_KEY`, dan `VPS_SSH_KNOWN_HOSTS`.
+
+Setiap push ke `main` menjalankan CI lalu deploy otomatis. Deploy hanya menyentuh compose project `leadcontrol`, membuat backup `backups/pre-migrate-*.dump`, dan memeriksa `https://leadcontrol.kotagedejewellery.tech/up`.
+
+Migrasi production aplikasi ini adalah file SQL bernomor di `database/postgres/`, misalnya `007_add_field.sql`. File baru dijalankan otomatis sekali dan dicatat bersama checksum-nya. Jangan mengubah file yang sudah pernah dipakai, dan jangan gunakan `DROP DATABASE`, `DROP SCHEMA`, `DROP TABLE`, `DROP COLUMN`, atau `TRUNCATE`; runner akan menolaknya.

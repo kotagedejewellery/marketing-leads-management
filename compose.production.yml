@@ -1,0 +1,101 @@
+name: leadcontrol
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      APP_NAME: KGJ Leads
+      APP_URL: ${APP_URL}
+      APP_LOCALE: id
+      APP_FALLBACK_LOCALE: id
+      APP_TIMEZONE: Asia/Jakarta
+      APP_KEY: ${APP_KEY}
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: marketing_leads
+      DB_USERNAME: marketing_leads
+      DB_PASSWORD: ${DB_PASSWORD}
+      SESSION_DRIVER: file
+      SESSION_SECURE_COOKIE: "true"
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      LOG_CHANNEL: stderr
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - leadcontrol_app_storage:/var/www/html/storage
+    networks:
+      - proxy
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.leadcontrol-http.rule=Host(`leadcontrol.kotagedejewellery.tech`)"
+      - "traefik.http.routers.leadcontrol-http.entrypoints=web"
+      - "traefik.http.routers.leadcontrol-http.middlewares=leadcontrol-https"
+      - "traefik.http.middlewares.leadcontrol-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.leadcontrol.rule=Host(`leadcontrol.kotagedejewellery.tech`)"
+      - "traefik.http.routers.leadcontrol.entrypoints=websecure"
+      - "traefik.http.routers.leadcontrol.tls=true"
+      - "traefik.http.routers.leadcontrol.tls.certresolver=letsencrypt"
+      - "traefik.http.services.leadcontrol.loadbalancer.server.port=80"
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1/up\") === false ? 1 : 0);'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: marketing_leads
+      POSTGRES_USER: marketing_leads
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - leadcontrol_postgres_data:/var/lib/postgresql/data
+      - ./database/postgres/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marketing_leads -d marketing_leads"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  migrate:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: marketing_leads
+      PGUSER: marketing_leads
+      PGPASSWORD: ${DB_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./database/postgres:/migrations:ro
+      - ./scripts/migrate-postgres.sh:/scripts/migrate-postgres.sh:ro
+    command: ["sh", "/scripts/migrate-postgres.sh"]
+    networks:
+      - internal
+
+networks:
+  proxy:
+    external: true
+  internal:
+
+volumes:
+  leadcontrol_app_storage:
+  leadcontrol_postgres_data:

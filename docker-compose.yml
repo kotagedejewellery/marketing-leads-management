@@ -1,0 +1,72 @@
+services:
+  laravel:
+    build: .
+    ports:
+      - "8082:80"
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_NAME: KGJ Leads
+      APP_DEBUG: ${APP_DEBUG:-false}
+      APP_URL: ${APP_URL:-http://localhost:8082}
+      APP_LOCALE: id
+      APP_FALLBACK_LOCALE: id
+      APP_TIMEZONE: Asia/Jakarta
+      APP_KEY: ${APP_KEY}
+      DB_CONNECTION: pgsql
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_DATABASE: marketing_leads
+      DB_USERNAME: marketing_leads
+      DB_PASSWORD: ${DB_PASSWORD}
+      SESSION_DRIVER: file
+      SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-false}
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - app_storage:/var/www/html/storage
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: marketing_leads
+      POSTGRES_USER: marketing_leads
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/postgres/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+      - ./database/postgres/002_lead_contact_key.sql:/docker-entrypoint-initdb.d/002_lead_contact_key.sql:ro
+      - ./database/postgres/003_backfill_contact_key.sql:/docker-entrypoint-initdb.d/003_backfill_contact_key.sql:ro
+      - ./database/postgres/004_crud_lifecycle.sql:/docker-entrypoint-initdb.d/004_crud_lifecycle.sql:ro
+      - ./database/postgres/005_lead_source_date.sql:/docker-entrypoint-initdb.d/005_lead_source_date.sql:ro
+      - ./database/postgres/006_operational_hardening.sql:/docker-entrypoint-initdb.d/006_operational_hardening.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marketing_leads -d marketing_leads"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${DB_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./database/postgres/002_lead_contact_key.sql:/migrations/002_lead_contact_key.sql:ro
+      - ./database/postgres/003_backfill_contact_key.sql:/migrations/003_backfill_contact_key.sql:ro
+      - ./database/postgres/004_crud_lifecycle.sql:/migrations/004_crud_lifecycle.sql:ro
+      - ./database/postgres/005_lead_source_date.sql:/migrations/005_lead_source_date.sql:ro
+      - ./database/postgres/006_operational_hardening.sql:/migrations/006_operational_hardening.sql:ro
+    command: ["sh", "-c", "psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/002_lead_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/003_backfill_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/004_crud_lifecycle.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/005_lead_source_date.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/006_operational_hardening.sql"]
+
+volumes:
+  postgres_data:
+  app_storage:

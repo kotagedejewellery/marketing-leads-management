@@ -36,9 +36,9 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1794383408.5248675,
-    "seen": 1794383457.1342475,
-    "ast_hash": "5b6e5dcb8a74e589fe31f20a013ee2b8",
+    "mtime": 1794383494.342632,
+    "seen": 1794383528.5070188,
+    "ast_hash": "e00305f837add7fc681db929571cf74b",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {

@@ -127,9 +127,6 @@ class LeadController extends Controller
             }
             $values = array_pad($values, count($headers), null);
             $row = array_combine($headers, $values);
-            if ($row === false) {
-                throw ValidationException::withMessages(['csv_file' => "Header CSV tidak valid pada baris {$line}."]);
-            }
             $normalized = $this->normalizeImportRow($row, $headerMap);
             if (trim((string) $normalized['contact_raw']) !== '') {
                 $rows[] = $normalized;
@@ -267,7 +264,7 @@ class LeadController extends Controller
     public function update(UpdateLeadRequest $request, int $lead): RedirectResponse
     {
         $record = $this->visibleLead($request, $lead);
-        abort_if($record->archived_at, 404);
+        abort_if($record->archived_at !== null, 404);
         $data = $request->validated();
         $selected = array_key_exists('milestones', $data)
             ? $data['milestones']
@@ -350,7 +347,9 @@ class LeadController extends Controller
         return to_route('leads.show', $lead);
     }
 
-    /** @return object{id: int, assigned_user_id: int|null, archived_at: string|null, current_stage: string|null} */
+    /**
+     * @return object{id: int, assigned_user_id: int|null, archived_at: string|null, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null}
+     */
     private function visibleLead(Request $request, int $lead): object
     {
         $query = DB::table('leads')->where('id', $lead);
@@ -358,7 +357,10 @@ class LeadController extends Controller
             $query->where('assigned_user_id', $request->user()->id)->whereNull('archived_at');
         }
 
-        return $query->first() ?? abort(404);
+        $record = $query->first() ?? abort(404);
+
+        /** @var object{id: int, assigned_user_id: int|null, archived_at: string|null, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null} $record */
+        return $record;
     }
 
     private function contactKey(string $contact): string
@@ -436,7 +438,7 @@ class LeadController extends Controller
         return mb_strtolower(trim(str_replace('*', '', $header)));
     }
 
-    /** @return array{0: list<string>, 1: list<list<string|null>>} */
+    /** @return array{0: list<string>, 1: list<array<int, string|null>>} */
     private function readCsv(string $path): array
     {
         $handle = fopen($path, 'r');
@@ -457,7 +459,7 @@ class LeadController extends Controller
         return [$this->cleanHeaders($headers), $rows];
     }
 
-    /** @return array{0: list<string>, 1: list<list<string|null>>} */
+    /** @return array{0: list<string>, 1: list<array<int, string|null>>} */
     private function readXlsx(string $path): array
     {
         $reader = new XlsxReader;
@@ -497,7 +499,7 @@ class LeadController extends Controller
     }
 
     /**
-     * @param  list<mixed>  $headers
+     * @param  array<int, mixed>  $headers
      * @return list<string>
      */
     private function cleanHeaders(array $headers): array

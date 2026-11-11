@@ -150,6 +150,7 @@ class LeadController extends Controller
                 $key = $this->contactKey($contact);
                 if (isset($known[$key])) {
                     $skipped++;
+
                     continue;
                 }
 
@@ -299,7 +300,7 @@ class LeadController extends Controller
                     ['lead_id' => $lead, 'milestone' => $milestone],
                     ['is_active' => $enabled, 'marked_at' => now(), 'marked_by' => $request->user()->id],
                 );
-                $changes[] = "{$label} " . ($enabled ? 'diaktifkan' : 'dihapus');
+                $changes[] = "{$label} ".($enabled ? 'diaktifkan' : 'dihapus');
             }
 
             $currentStage = $this->currentStage($selected);
@@ -436,7 +437,7 @@ class LeadController extends Controller
 
     private function readXlsx(string $path): array
     {
-        $reader = new XlsxReader();
+        $reader = new XlsxReader;
         $reader->open($path);
         $headers = [];
         $rows = [];
@@ -450,6 +451,7 @@ class LeadController extends Controller
                 );
                 if ($candidateHeaders === []) {
                     $candidateHeaders = $this->cleanHeaders($values);
+
                     continue;
                 }
                 if (count($candidateRows) >= self::IMPORT_ROW_LIMIT) {

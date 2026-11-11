@@ -144,7 +144,7 @@ class LeadManagementTest extends TestCase
     {
         $admin = $this->user('admin');
         $path = tempnam(sys_get_temp_dir(), 'all-leads-').'.xlsx';
-        $writer = new Writer();
+        $writer = new Writer;
         $writer->openToFile($path);
         $writer->addRow(Row::fromValues(['Tanggal', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting*', 'Waktu Chat', 'Keterangan Sumber*', 'Keterangan Campaign*']));
         $writer->addRow(Row::fromValues(['31', '+62 851-7777-3333', '0', 'Dila', 'klik saja', '', 'halo', '10.38', 'Iklan', 'Bio']));

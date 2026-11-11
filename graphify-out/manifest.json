@@ -30,15 +30,15 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/DashboardController.php": {
-    "mtime": 1794369422.8590157,
-    "seen": 1794369713.898223,
-    "ast_hash": "e2e1f3b208421e29c7ba72fd354ff4e6",
+    "mtime": 1794382066.528046,
+    "seen": 1794382182.5588927,
+    "ast_hash": "a2e04bbc91852ddcb16463a2b6766ec3",
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1794369617.305016,
-    "seen": 1794369713.8982244,
-    "ast_hash": "3a77a31f7211825aebe446aeffb13acd",
+    "mtime": 1794382067.1498482,
+    "seen": 1794382182.558898,
+    "ast_hash": "314eddd351c40476c1043a323eb4f59c",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "app/Http/Requests/UpdateLeadRequest.php": {
-    "mtime": 1794369177.884871,
-    "seen": 1794369713.898242,
-    "ast_hash": "8337886a10d1f4d837ef4099273f9bb8",
+    "mtime": 1794382067.8290963,
+    "seen": 1794382182.5589323,
+    "ast_hash": "c2b967c56a30ef39f9f8b128e1f362c1",
     "semantic_hash": ""
   },
   "app/Http/Responses/LoginResponse.php": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "app/Providers/FortifyServiceProvider.php": {
-    "mtime": 1794304828.8287926,
-    "seen": 1794367943.5926552,
-    "ast_hash": "de3f01bdd305c1c5143afbdc3d46eac4",
+    "mtime": 1794382068.2141204,
+    "seen": 1794382182.5589492,
+    "ast_hash": "cc20ec48146e7b18c9e7e14628ac1e27",
     "semantic_hash": ""
   },
   "artisan": {
@@ -1578,9 +1578,9 @@
     "semantic_hash": ""
   },
   "routes/web.php": {
-    "mtime": 1794380571.2747555,
-    "seen": 1794380644.2296205,
-    "ast_hash": "78ab6c6186892f854ca31ee1e616a452",
+    "mtime": 1794382072.103119,
+    "seen": 1794382182.5598962,
+    "ast_hash": "591de4fce83666d7e78456f7b1c3282c",
     "semantic_hash": ""
   },
   "tests/Feature/Auth/AuthenticationTest.php": {
@@ -1626,9 +1626,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/DashboardTest.php": {
-    "mtime": 1794304660.055543,
-    "seen": 1794367943.5929596,
-    "ast_hash": "3a2fd86103228c3ea96dbcf4b82291b6",
+    "mtime": 1794382072.9441264,
+    "seen": 1794382182.559939,
+    "ast_hash": "be69134638c9abcc6fb472bfdab98e61",
     "semantic_hash": ""
   },
   "tests/Feature/ExampleTest.php": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {
-    "mtime": 1794369566.9140677,
-    "seen": 1794369713.8986523,
-    "ast_hash": "fe6865558a72a22d77c4a9b3df330b2b",
+    "mtime": 1794382073.2363513,
+    "seen": 1794382182.559946,
+    "ast_hash": "42ed23dc6817b7dcd709a694a24b642b",
     "semantic_hash": ""
   },
   "tests/Feature/Settings/ProfileUpdateTest.php": {

@@ -138,9 +138,9 @@
     "semantic_hash": ""
   },
   "bootstrap/app.php": {
-    "mtime": 1793738234.0,
-    "seen": 1794367943.5926578,
-    "ast_hash": "5680ff3fd8588fc28f2a9f993c483541",
+    "mtime": 1794387141.7425807,
+    "seen": 1794387235.8065972,
+    "ast_hash": "65e36d199fb795ab6225250934e8ecea",
     "semantic_hash": ""
   },
   "bootstrap/providers.php": {
@@ -1803,6 +1803,12 @@
     "mtime": 1794377926.7696466,
     "seen": 1794378595.504811,
     "ast_hash": "5841c257faf84fb12c1441644f149402",
+    "semantic_hash": ""
+  },
+  "tests/Feature/TrustedProxyTest.php": {
+    "mtime": 1794387142.2922852,
+    "seen": 1794387235.807025,
+    "ast_hash": "1812d5ad1ca75b5e9c7e1670d182140b",
     "semantic_hash": ""
   }
 }

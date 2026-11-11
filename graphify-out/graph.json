@@ -1347,7 +1347,7 @@
       "label": "{closure#2}()",
       "file_type": "code",
       "source_file": "bootstrap/app.php",
-      "source_location": "L26",
+      "source_location": "L28",
       "_callable": true,
       "_origin": "ast"
     },
@@ -1356,7 +1356,7 @@
       "label": "{closure#3}()",
       "file_type": "code",
       "source_file": "bootstrap/app.php",
-      "source_location": "L28",
+      "source_location": "L30",
       "_callable": true,
       "_origin": "ast"
     },
@@ -9711,6 +9711,33 @@
       "_origin": "ast"
     },
     {
+      "id": "tests_feature_trustedproxytest",
+      "label": "TrustedProxyTest.php",
+      "file_type": "code",
+      "source_file": "tests/Feature/TrustedProxyTest.php",
+      "source_location": "L1",
+      "_origin": "ast"
+    },
+    {
+      "id": "tests_feature_trustedproxytest_trustedproxytest",
+      "label": "TrustedProxyTest",
+      "file_type": "code",
+      "source_file": "tests/Feature/TrustedProxyTest.php",
+      "source_location": "L7",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast"
+    },
+    {
+      "id": "tests_feature_trustedproxytest_trustedproxytest_test_login_assets_use_https_behind_the_proxy",
+      "label": ".test_login_assets_use_https_behind_the_proxy()",
+      "file_type": "code",
+      "source_file": "tests/Feature/TrustedProxyTest.php",
+      "source_location": "L9",
+      "_callable": true,
+      "_origin": "ast"
+    },
+    {
       "id": "tests_pest",
       "label": "Pest.php",
       "file_type": "code",
@@ -16384,7 +16411,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "bootstrap/app.php",
-      "source_location": "L26",
+      "source_location": "L28",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -16394,7 +16421,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "bootstrap/app.php",
-      "source_location": "L26",
+      "source_location": "L28",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast"
@@ -16405,7 +16432,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "bootstrap/app.php",
-      "source_location": "L28",
+      "source_location": "L30",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -16415,7 +16442,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "bootstrap/app.php",
-      "source_location": "L28",
+      "source_location": "L30",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast"
@@ -39052,6 +39079,47 @@
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/Settings/SecurityTest.php",
       "source_location": "L101",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "tests_feature_trustedproxytest",
+      "target": "tests_testcase_testcase",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/Feature/TrustedProxyTest.php",
+      "source_location": "L5",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "tests_feature_trustedproxytest",
+      "target": "tests_feature_trustedproxytest_trustedproxytest",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/Feature/TrustedProxyTest.php",
+      "source_location": "L7",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "tests_feature_trustedproxytest_trustedproxytest",
+      "target": "tests_testcase_testcase",
+      "relation": "inherits",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/Feature/TrustedProxyTest.php",
+      "source_location": "L7",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "tests_feature_trustedproxytest_trustedproxytest",
+      "target": "tests_feature_trustedproxytest_trustedproxytest_test_login_assets_use_https_behind_the_proxy",
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "tests/Feature/TrustedProxyTest.php",
+      "source_location": "L9",
       "weight": 1.0,
       "_origin": "ast"
     },

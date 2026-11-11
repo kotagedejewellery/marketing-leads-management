@@ -8315,7 +8315,7 @@
       "label": "form",
       "file_type": "code",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L7",
+      "source_location": "L8",
       "_origin": "ast"
     },
     {
@@ -8323,7 +8323,7 @@
       "label": "emailInput",
       "file_type": "code",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L8",
+      "source_location": "L9",
       "_origin": "ast"
     },
     {
@@ -8331,7 +8331,7 @@
       "label": "submit()",
       "file_type": "code",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L9",
+      "source_location": "L10",
       "_callable": true,
       "_origin": "ast"
     },
@@ -35267,7 +35267,7 @@
     },
     {
       "source": "resources_js_pages_auth_login",
-      "target": "resources_js_components_ui_sonner_index",
+      "target": "resources_js_components_passwordinput",
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -35278,12 +35278,23 @@
     },
     {
       "source": "resources_js_pages_auth_login",
+      "target": "resources_js_components_ui_sonner_index",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "resources/js/pages/auth/Login.vue",
+      "source_location": "L6",
+      "weight": 1.0,
+      "_origin": "ast"
+    },
+    {
+      "source": "resources_js_pages_auth_login",
       "target": "resources_js_components_ui_sonner_index_toaster",
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L5",
+      "source_location": "L6",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -35293,7 +35304,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L7",
+      "source_location": "L8",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -35303,7 +35314,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L8",
+      "source_location": "L9",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -35313,7 +35324,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/Login.vue",
-      "source_location": "L9",
+      "source_location": "L10",
       "weight": 1.0,
       "_origin": "ast"
     },

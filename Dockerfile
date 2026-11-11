@@ -1,14 +1,18 @@
+FROM composer:2 AS dependencies
+WORKDIR /app
+COPY . .
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader \
+    && php artisan wayfinder:generate
+
 FROM node:22-alpine AS frontend
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+COPY --from=dependencies /app/resources/js/actions ./resources/js/actions
+COPY --from=dependencies /app/resources/js/routes ./resources/js/routes
+COPY --from=dependencies /app/resources/js/wayfinder ./resources/js/wayfinder
 RUN npm run build
-
-FROM composer:2 AS dependencies
-WORKDIR /app
-COPY . .
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
 FROM php:8.5-apache
 RUN apt-get update \

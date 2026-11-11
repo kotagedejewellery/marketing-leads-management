@@ -33,7 +33,7 @@ jobs:
           node-version: '22'
 
       - name: Setup application
-        run: composer setup
+        run: composer setup:ci
 
       - name: Run CI checks
         run: composer ci:check

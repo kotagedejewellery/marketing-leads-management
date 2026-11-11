@@ -9320,7 +9320,7 @@
       "label": "{closure#2}()",
       "file_type": "code",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L25",
+      "source_location": "L26",
       "_callable": true,
       "_origin": "ast"
     },
@@ -9329,7 +9329,7 @@
       "label": "{closure#3}()",
       "file_type": "code",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L32",
+      "source_location": "L33",
       "_callable": true,
       "_origin": "ast"
     },
@@ -9338,7 +9338,7 @@
       "label": "{closure#4}()",
       "file_type": "code",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L38",
+      "source_location": "L39",
       "_callable": true,
       "_origin": "ast"
     },
@@ -9347,7 +9347,7 @@
       "label": ".test_guests_are_redirected_to_the_login_page()",
       "file_type": "code",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L45",
+      "source_location": "L46",
       "_callable": true,
       "_origin": "ast"
     },
@@ -9356,7 +9356,7 @@
       "label": ".test_authenticated_users_can_visit_the_dashboard()",
       "file_type": "code",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L51",
+      "source_location": "L52",
       "_callable": true,
       "_origin": "ast"
     },
@@ -9365,7 +9365,7 @@
       "label": ".test_admin_receives_feedback_after_creating_a_branch()",
       "file_type": "code",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L60",
+      "source_location": "L61",
       "_callable": true,
       "_origin": "ast"
     },
@@ -9374,7 +9374,7 @@
       "label": ".test_admin_cannot_delete_a_branch_that_still_has_an_account()",
       "file_type": "code",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L73",
+      "source_location": "L74",
       "_callable": true,
       "_origin": "ast"
     },
@@ -9397,8 +9397,8 @@
       "_origin": "ast"
     },
     {
-      "id": "tests_feature_exampletest_exampletest_test_returns_a_successful_response",
-      "label": ".test_returns_a_successful_response()",
+      "id": "tests_feature_exampletest_exampletest_test_home_redirects_to_dashboard",
+      "label": ".test_home_redirects_to_dashboard()",
       "file_type": "code",
       "source_file": "tests/Feature/ExampleTest.php",
       "source_location": "L12",
@@ -12320,6 +12320,54 @@
       "norm_label": "argvinput",
       "source_file": "",
       "type": "external"
+    },
+    {
+      "id": "ref_actions_laravel_passkeys_http_controllers_passkeyregistrationcontroller",
+      "label": "ref_actions_laravel_passkeys_http_controllers_passkeyregistrationcontroller",
+      "file_type": "concept",
+      "type": "external",
+      "external": true,
+      "source_file": ""
+    },
+    {
+      "id": "ref_routes_two_factor",
+      "label": "ref_routes_two_factor",
+      "file_type": "concept",
+      "type": "external",
+      "external": true,
+      "source_file": ""
+    },
+    {
+      "id": "ref_actions_laravel_passkeys_http_controllers_passkeyconfirmationcontroller",
+      "label": "ref_actions_laravel_passkeys_http_controllers_passkeyconfirmationcontroller",
+      "file_type": "concept",
+      "type": "external",
+      "external": true,
+      "source_file": ""
+    },
+    {
+      "id": "ref_routes_register",
+      "label": "ref_routes_register",
+      "file_type": "concept",
+      "type": "external",
+      "external": true,
+      "source_file": ""
+    },
+    {
+      "id": "ref_routes_two_factor_login",
+      "label": "ref_routes_two_factor_login",
+      "file_type": "concept",
+      "type": "external",
+      "external": true,
+      "source_file": ""
+    },
+    {
+      "id": "ref_routes_verification",
+      "label": "ref_routes_verification",
+      "file_type": "concept",
+      "type": "external",
+      "external": true,
+      "source_file": ""
     }
   ],
   "links": [
@@ -20828,19 +20876,8 @@
     },
     {
       "source": "resources_js_components_managepasskeys",
-      "target": "resources_js_actions_laravel_passkeys_http_controllers_passkeyregistrationcontroller",
+      "target": "ref_actions_laravel_passkeys_http_controllers_passkeyregistrationcontroller",
       "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/components/ManagePasskeys.vue",
-      "source_location": "L8",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_components_managepasskeys",
-      "target": "resources_js_actions_laravel_passkeys_http_controllers_passkeyregistrationcontroller_destroy",
-      "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/components/ManagePasskeys.vue",
@@ -20990,30 +21027,8 @@
     },
     {
       "source": "resources_js_components_managetwofactor",
-      "target": "resources_js_routes_two_factor_index",
+      "target": "ref_routes_two_factor",
       "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/components/ManageTwoFactor.vue",
-      "source_location": "L10",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_components_managetwofactor",
-      "target": "resources_js_routes_two_factor_index_disable",
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/components/ManageTwoFactor.vue",
-      "source_location": "L10",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_components_managetwofactor",
-      "target": "resources_js_routes_two_factor_index_enable",
-      "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/components/ManageTwoFactor.vue",
@@ -22312,19 +22327,8 @@
     },
     {
       "source": "resources_js_components_twofactorrecoverycodes",
-      "target": "resources_js_routes_two_factor_index",
+      "target": "ref_routes_two_factor",
       "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/components/TwoFactorRecoveryCodes.vue",
-      "source_location": "L15",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_components_twofactorrecoverycodes",
-      "target": "resources_js_routes_two_factor_index_regeneraterecoverycodes",
-      "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/components/TwoFactorRecoveryCodes.vue",
@@ -22638,19 +22642,8 @@
     },
     {
       "source": "resources_js_components_twofactorsetupmodal",
-      "target": "resources_js_routes_two_factor_index",
+      "target": "ref_routes_two_factor",
       "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/components/TwoFactorSetupModal.vue",
-      "source_location": "L24",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_components_twofactorsetupmodal",
-      "target": "resources_js_routes_two_factor_index_confirm",
-      "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/components/TwoFactorSetupModal.vue",
@@ -32900,41 +32893,8 @@
     },
     {
       "source": "resources_js_composables_usetwofactorauth",
-      "target": "resources_js_routes_two_factor_index",
+      "target": "ref_routes_two_factor",
       "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/composables/useTwoFactorAuth.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_composables_usetwofactorauth",
-      "target": "resources_js_routes_two_factor_index_qrcode",
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/composables/useTwoFactorAuth.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_composables_usetwofactorauth",
-      "target": "resources_js_routes_two_factor_index_recoverycodes",
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/composables/useTwoFactorAuth.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_composables_usetwofactorauth",
-      "target": "resources_js_routes_two_factor_index_secretkey",
-      "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/composables/useTwoFactorAuth.ts",
@@ -35274,30 +35234,8 @@
     },
     {
       "source": "resources_js_pages_auth_confirmpassword",
-      "target": "resources_js_actions_laravel_passkeys_http_controllers_passkeyconfirmationcontroller",
+      "target": "ref_actions_laravel_passkeys_http_controllers_passkeyconfirmationcontroller",
       "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/pages/auth/ConfirmPassword.vue",
-      "source_location": "L9",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_pages_auth_confirmpassword",
-      "target": "resources_js_actions_laravel_passkeys_http_controllers_passkeyconfirmationcontroller_index",
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/pages/auth/ConfirmPassword.vue",
-      "source_location": "L9",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_pages_auth_confirmpassword",
-      "target": "resources_js_actions_laravel_passkeys_http_controllers_passkeyconfirmationcontroller_store",
-      "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/ConfirmPassword.vue",
@@ -35733,19 +35671,8 @@
     },
     {
       "source": "resources_js_pages_auth_register",
-      "target": "resources_js_routes_register",
+      "target": "ref_routes_register",
       "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/pages/auth/Register.vue",
-      "source_location": "L11",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_pages_auth_register",
-      "target": "resources_js_routes_register_store",
-      "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/Register.vue",
@@ -36050,19 +35977,8 @@
     },
     {
       "source": "resources_js_pages_auth_twofactorchallenge",
-      "target": "resources_js_routes_two_factor_login",
+      "target": "ref_routes_two_factor_login",
       "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/pages/auth/TwoFactorChallenge.vue",
-      "source_location": "L12",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_pages_auth_twofactorchallenge",
-      "target": "resources_js_routes_two_factor_login_store",
-      "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/TwoFactorChallenge.vue",
@@ -36223,19 +36139,8 @@
     },
     {
       "source": "resources_js_pages_auth_verifyemail",
-      "target": "resources_js_routes_verification",
+      "target": "ref_routes_verification",
       "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/pages/auth/VerifyEmail.vue",
-      "source_location": "L7",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_pages_auth_verifyemail",
-      "target": "resources_js_routes_verification_send",
-      "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/auth/VerifyEmail.vue",
@@ -36454,19 +36359,8 @@
     },
     {
       "source": "resources_js_pages_settings_profile",
-      "target": "resources_js_routes_verification",
+      "target": "ref_routes_verification",
       "relation": "imports_from",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "resources/js/pages/settings/Profile.vue",
-      "source_location": "L13",
-      "weight": 1.0,
-      "_origin": "ast"
-    },
-    {
-      "source": "resources_js_pages_settings_profile",
-      "target": "resources_js_routes_verification_send",
-      "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "resources/js/pages/settings/Profile.vue",
@@ -38255,7 +38149,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -38265,7 +38159,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L25",
+      "source_location": "L26",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast"
@@ -38276,7 +38170,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L32",
+      "source_location": "L33",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -38286,7 +38180,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L32",
+      "source_location": "L33",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast"
@@ -38297,7 +38191,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -38307,7 +38201,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast"
@@ -38318,7 +38212,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L45",
+      "source_location": "L46",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -38328,7 +38222,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L51",
+      "source_location": "L52",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -38338,7 +38232,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L60",
+      "source_location": "L61",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -38348,7 +38242,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L73",
+      "source_location": "L74",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -38406,7 +38300,7 @@
     },
     {
       "source": "tests_feature_exampletest_exampletest",
-      "target": "tests_feature_exampletest_exampletest_test_returns_a_successful_response",
+      "target": "tests_feature_exampletest_exampletest_test_home_redirects_to_dashboard",
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "tests/Feature/ExampleTest.php",
@@ -41702,7 +41596,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L53",
+      "source_location": "L54",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -41714,7 +41608,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L62",
+      "source_location": "L63",
       "weight": 1.0,
       "_origin": "ast"
     },
@@ -41726,7 +41620,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tests/Feature/DashboardTest.php",
-      "source_location": "L75",
+      "source_location": "L76",
       "weight": 1.0,
       "_origin": "ast"
     },

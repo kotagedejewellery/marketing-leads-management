@@ -24,11 +24,17 @@ const props = defineProps<{
     lead: Lead;
     milestones: string[];
     history: {
-        action: string;
-        detail: string | null;
-        created_at: string;
-        actor_name: string | null;
-    }[];
+        data: {
+            action: string;
+            detail: string | null;
+            created_at: string;
+            actor_name: string | null;
+        }[];
+        current_page: number;
+        last_page: number;
+        prev_page_url: string | null;
+        next_page_url: string | null;
+    };
     csAccounts: { id: number; name: string; branch_name: string }[];
 }>();
 const page = usePage();
@@ -46,6 +52,8 @@ const form = useForm({
 });
 const clientError = ref('');
 const archiveDialogOpen = ref(false);
+const deleteDialogOpen = ref(false);
+const lifecycleProcessing = ref(false);
 const groups = {
     Cold: [['clicked', 'Klik saja']],
     Warm: [
@@ -101,10 +109,23 @@ function save() {
 }
 function archiveLead() {
     archiveDialogOpen.value = false;
-    router.patch(`/leads/${props.lead.id}/archive`);
+    lifecycleProcessing.value = true;
+    router.patch(`/leads/${props.lead.id}/archive`, {
+        onFinish: () => (lifecycleProcessing.value = false),
+    });
 }
 function restoreLead() {
-    router.patch(`/leads/${props.lead.id}/restore`);
+    lifecycleProcessing.value = true;
+    router.patch(`/leads/${props.lead.id}/restore`, {
+        onFinish: () => (lifecycleProcessing.value = false),
+    });
+}
+function destroyLead() {
+    deleteDialogOpen.value = false;
+    lifecycleProcessing.value = true;
+    router.delete(`/leads/${props.lead.id}`, {
+        onFinish: () => (lifecycleProcessing.value = false),
+    });
 }
 </script>
 
@@ -132,20 +153,31 @@ function restoreLead() {
             </div>
             <div class="flex items-center gap-2">
                 <button
-                    v-if="isAdmin && !lead.archived_at"
+                    v-if="!lead.archived_at"
                     class="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#d8aaa2] px-3 text-sm font-semibold text-kgj-rose transition hover:bg-[#fff3f1]"
                     type="button"
+                    :disabled="lifecycleProcessing"
                     @click="archiveDialogOpen = true"
                 >
                     Arsipkan
                 </button>
                 <button
-                    v-if="isAdmin && lead.archived_at"
+                    v-if="lead.archived_at"
                     class="kgj-button-primary"
                     type="button"
+                    :disabled="lifecycleProcessing"
                     @click="restoreLead"
                 >
                     Pulihkan
+                </button>
+                <button
+                    v-if="lead.archived_at"
+                    class="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#d8aaa2] px-3 text-sm font-semibold text-kgj-rose transition hover:bg-[#fff3f1]"
+                    type="button"
+                    :disabled="lifecycleProcessing"
+                    @click="deleteDialogOpen = true"
+                >
+                    Hapus permanen
                 </button>
                 <span
                     class="kgj-status w-fit border-[#d8c891] bg-[#fbf4e2] text-kgj-gold-deep"
@@ -358,7 +390,7 @@ function restoreLead() {
         <section class="mt-10 border-t border-kgj-line pt-6">
             <h2 class="text-lg font-semibold">Riwayat</h2>
             <article
-                v-for="item in history"
+                v-for="item in history.data"
                 :key="`${item.created_at}-${item.action}`"
                 class="mt-4 border-l border-[#d7dcd5] pl-4"
             >
@@ -371,9 +403,33 @@ function restoreLead() {
                     }}</small
                 >
             </article>
-            <p v-if="!history.length" class="mt-4 text-sm text-[#62665b]">
+            <p v-if="!history.data.length" class="mt-4 text-sm text-[#62665b]">
                 Belum ada riwayat.
             </p>
+            <nav
+                v-if="history.last_page > 1"
+                class="mt-5 flex items-center justify-between text-sm"
+                aria-label="Halaman riwayat"
+            >
+                <span class="text-[#62665b]"
+                    >Halaman {{ history.current_page }} dari
+                    {{ history.last_page }}</span
+                >
+                <div class="flex gap-2">
+                    <Link
+                        v-if="history.prev_page_url"
+                        :href="history.prev_page_url"
+                        class="min-h-11 border border-[#cfc6b5] px-3 py-3"
+                        >Lebih baru</Link
+                    >
+                    <Link
+                        v-if="history.next_page_url"
+                        :href="history.next_page_url"
+                        class="min-h-11 border border-[#cfc6b5] px-3 py-3"
+                        >Lebih lama</Link
+                    >
+                </div>
+            </nav>
         </section>
         <Dialog v-model:open="archiveDialogOpen">
             <DialogContent>
@@ -392,9 +448,35 @@ function restoreLead() {
                     ><button
                         class="inline-flex min-h-11 items-center justify-center rounded-lg bg-kgj-rose px-4 text-sm font-semibold text-white transition hover:bg-[#84362e]"
                         type="button"
+                        :disabled="lifecycleProcessing"
                         @click="archiveLead"
                     >
                         Arsipkan lead
+                    </button></DialogFooter
+                >
+            </DialogContent>
+        </Dialog>
+        <Dialog v-model:open="deleteDialogOpen">
+            <DialogContent>
+                <DialogHeader
+                    ><DialogTitle>Hapus lead permanen?</DialogTitle
+                    ><DialogDescription
+                        >Lead, milestone, dan seluruh riwayatnya akan dihapus
+                        tanpa dapat dipulihkan.</DialogDescription
+                    ></DialogHeader
+                >
+                <DialogFooter
+                    ><DialogClose as-child
+                        ><button class="kgj-button-secondary" type="button">
+                            Batalkan
+                        </button></DialogClose
+                    ><button
+                        class="inline-flex min-h-11 items-center justify-center rounded-lg bg-kgj-rose px-4 text-sm font-semibold text-white transition hover:bg-[#84362e]"
+                        type="button"
+                        :disabled="lifecycleProcessing"
+                        @click="destroyLead"
+                    >
+                        Hapus permanen
                     </button></DialogFooter
                 >
             </DialogContent>

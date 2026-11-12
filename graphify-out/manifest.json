@@ -30,15 +30,15 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/DashboardController.php": {
-    "mtime": 1794383407.963261,
-    "seen": 1794383457.1342447,
-    "ast_hash": "c10185067a598dc3b41c40a559172aa0",
+    "mtime": 1794390864.6661239,
+    "seen": 1794391877.0041373,
+    "ast_hash": "0a0cb29e65214388fb14537a506d5f08",
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1794385167.7071457,
-    "seen": 1794385531.5784533,
-    "ast_hash": "466433989159872d9c798d10cea33b9c",
+    "mtime": 1794445729.4665196,
+    "seen": 1794445789.1585486,
+    "ast_hash": "9e3578e01f4352f10627ce7cfbe4a596",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -1440,15 +1440,15 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1794378552.9185047,
-    "seen": 1794378595.5046964,
-    "ast_hash": "feb9675417d349543022134d427b4b09",
+    "mtime": 1794445258.493102,
+    "seen": 1794445543.5400274,
+    "ast_hash": "d2f8818524e807fedacf6a7aa387805a",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
-    "mtime": 1794378552.83446,
-    "seen": 1794378595.5046983,
-    "ast_hash": "b51d79d5872d3d7661e452a21e502322",
+    "mtime": 1794445331.0844219,
+    "seen": 1794445543.5400317,
+    "ast_hash": "a4772c864ed642fc6399dc338ff268cb",
     "semantic_hash": ""
   },
   "resources/js/pages/Statistics.vue": {
@@ -1578,9 +1578,9 @@
     "semantic_hash": ""
   },
   "routes/web.php": {
-    "mtime": 1794382072.103119,
-    "seen": 1794382182.5598962,
-    "ast_hash": "591de4fce83666d7e78456f7b1c3282c",
+    "mtime": 1794390818.3384504,
+    "seen": 1794391877.006403,
+    "ast_hash": "69b3b7e3576d761373d2bbfb128a3dbb",
     "semantic_hash": ""
   },
   "tests/Feature/Auth/AuthenticationTest.php": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {
-    "mtime": 1794382073.2363513,
-    "seen": 1794382182.559946,
-    "ast_hash": "42ed23dc6817b7dcd709a694a24b642b",
+    "mtime": 1794445049.8055022,
+    "seen": 1794445543.5401657,
+    "ast_hash": "23feaf556316ef4727ba606e380a9e8c",
     "semantic_hash": ""
   },
   "tests/Feature/Settings/ProfileUpdateTest.php": {
@@ -1704,9 +1704,9 @@
     "semantic_hash": ""
   },
   "GLOSSARY.md": {
-    "mtime": 1794364006.2571726,
-    "seen": 1794367943.5929756,
-    "ast_hash": "1e7648361ddd5135e926c4cd8c1bc343",
+    "mtime": 1794391856.4778578,
+    "seen": 1794391877.0067148,
+    "ast_hash": "4cc1693e4b8198173aad13e68aed45d4",
     "semantic_hash": ""
   },
   "PRODUCT.md": {
@@ -1716,9 +1716,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1794378550.632998,
-    "seen": 1794378595.5047984,
-    "ast_hash": "7bceae500fa18f8981f0787db2197753",
+    "mtime": 1794445312.3789573,
+    "seen": 1794445543.540223,
+    "ast_hash": "99fb615bdaa1123e25f8c92014ae7a6d",
     "semantic_hash": ""
   },
   "docker-compose.yml": {

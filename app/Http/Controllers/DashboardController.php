@@ -25,7 +25,7 @@ class DashboardController extends Controller
             ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.intent_buying', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.updated_at', 'u.name as owner_name', 'b.name as branch_name')
             ->orderByDesc('l.updated_at');
 
-        $showArchived = $request->user()->role === 'admin' && $request->boolean('archived');
+        $showArchived = $request->boolean('archived');
         $query->{$showArchived ? 'whereNotNull' : 'whereNull'}('l.archived_at');
 
         if ($request->filled('q')) {

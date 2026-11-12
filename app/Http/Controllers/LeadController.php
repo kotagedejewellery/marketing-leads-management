@@ -30,7 +30,6 @@ class LeadController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->role === 'admin', 403);
         $data = $request->validate([
             'contact_raw' => ['required', 'string', 'max:255'],
             'name' => ['nullable', 'string', 'max:160'],
@@ -52,22 +51,25 @@ class LeadController extends Controller
             'next_follow_up_at' => ['nullable', 'date'],
             'milestone' => ['nullable', 'in:clicked,asked,price_list,offline,online,closing_pending_transfer,closing,repeat_order'],
         ]);
-        $key = $this->contactKey(($data['phone'] ?? null) ?: $data['contact_raw']);
-        if (DB::table('leads')->where('contact_key', $key)->exists()) {
+        $isAdmin = $request->user()->role === 'admin';
+        $assignedUserId = $isAdmin ? ($data['assigned_user_id'] ?? null) : $request->user()->id;
+        $contact = ($data['phone'] ?? null) ?: $data['contact_raw'];
+        $key = $this->contactKey($contact);
+        if (DB::table('leads')->whereIn('contact_key', $this->contactKeys($contact))->exists()) {
             throw ValidationException::withMessages(['contact_raw' => 'Lead dengan kontak ini sudah ada.']);
         }
-        if (($data['assigned_user_id'] ?? null) && ! DB::table('users')->where('id', $data['assigned_user_id'])->where('role', 'cs')->where('active', true)->exists()) {
+        if ($assignedUserId && ! DB::table('users')->where('id', $assignedUserId)->where('role', 'cs')->where('active', true)->exists()) {
             throw ValidationException::withMessages(['assigned_user_id' => 'CS aktif tidak valid.']);
         }
 
-        $id = DB::transaction(function () use ($data, $key, $request): int {
+        $id = DB::transaction(function () use ($data, $key, $request, $assignedUserId, $isAdmin): int {
             $milestone = $data['milestone'] ?? null;
             $id = DB::table('leads')->insertGetId([
                 'contact_key' => $key,
                 'contact_raw' => $data['contact_raw'],
                 'name' => $data['name'] ?? null,
                 'phone' => $data['phone'] ?? null,
-                'assigned_user_id' => $data['assigned_user_id'] ?? null,
+                'assigned_user_id' => $assignedUserId,
                 'source_date_raw' => $data['source_date_raw'] ?? null,
                 'respond_time' => $data['respond_time'] ?? null,
                 'imported_cs_name' => $data['imported_cs_name'] ?? null,
@@ -90,7 +92,7 @@ class LeadController extends Controller
             if ($milestone) {
                 DB::table('lead_milestones')->insert(['lead_id' => $id, 'milestone' => $milestone, 'is_active' => true, 'marked_at' => now(), 'marked_by' => $request->user()->id]);
             }
-            DB::table('lead_activity')->insert(['lead_id' => $id, 'actor_id' => $request->user()->id, 'action' => 'Lead dibuat manual', 'detail' => ($data['assigned_user_id'] ?? null) ? 'Lead langsung ditugaskan ke CS.' : 'Lead belum ditugaskan ke CS.', 'created_at' => now()]);
+            DB::table('lead_activity')->insert(['lead_id' => $id, 'actor_id' => $request->user()->id, 'action' => 'Lead dibuat manual', 'detail' => $isAdmin ? ($assignedUserId ? 'Lead langsung ditugaskan ke CS.' : 'Lead belum ditugaskan ke CS.') : 'Lead dibuat oleh CS dan ditugaskan ke diri sendiri.', 'created_at' => now()]);
 
             return $id;
         });
@@ -103,18 +105,26 @@ class LeadController extends Controller
     public function import(Request $request): RedirectResponse
     {
         abort_unless($request->user()->role === 'admin', 403);
-        $request->validate(
-            ['csv_file' => ['required', 'file', 'mimes:csv,txt,xlsx', 'max:10240']],
+        $data = $request->validate(
+            [
+                'csv_file' => ['required', 'file', 'mimes:csv,txt,xlsx', 'max:10240'],
+                'import_mode' => ['nullable', 'in:all_leads,daily_tabs'],
+            ],
             ['csv_file.uploaded' => 'File gagal diunggah. Gunakan CSV/XLSX maksimal 10 MB.'],
         );
 
         $extension = strtolower($request->file('csv_file')->getClientOriginalExtension());
-        [$headers, $valueRows] = $extension === 'xlsx'
-            ? $this->readXlsx($request->file('csv_file')->getRealPath())
-            : $this->readCsv($request->file('csv_file')->getRealPath());
+        $importMode = $data['import_mode'] ?? 'all_leads';
+        if ($importMode === 'daily_tabs' && $extension !== 'xlsx') {
+            throw ValidationException::withMessages(['csv_file' => 'Tab harian hanya dapat diimpor dari file XLSX.']);
+        }
+        [$headers, $valueRows] = match (true) {
+            $importMode === 'daily_tabs' => $this->readDailyTabsXlsx($request->file('csv_file')->getRealPath()),
+            $extension === 'xlsx' => $this->readXlsx($request->file('csv_file')->getRealPath()),
+            default => $this->readCsv($request->file('csv_file')->getRealPath()),
+        };
         $headerMap = $this->importHeaderMap($headers);
-        $required = ['contact_raw', 'respond_time', 'imported_cs_name', 'imported_keterangan', 'raw_kebutuhan', 'greeting', 'chat_time', 'source_description', 'campaign_description'];
-        if (array_diff($required, array_values($headerMap)) || (! in_array('source_date_raw', $headerMap, true) && ! in_array('source_row_no', $headerMap, true))) {
+        if (! $this->hasRequiredImportHeaders($headerMap)) {
             throw ValidationException::withMessages(['csv_file' => 'Header CSV belum sesuai template.']);
         }
 
@@ -132,7 +142,13 @@ class LeadController extends Controller
                 $rows[] = $normalized;
             }
         }
-        $keys = array_values(array_unique(array_map(fn ($row) => $this->contactKey($row['contact_raw']), $rows)));
+        $keys = [];
+        foreach ($rows as $row) {
+            foreach ($this->contactKeys($row['contact_raw']) as $key) {
+                $keys[$key] = true;
+            }
+        }
+        $keys = array_keys($keys);
         $existing = collect($keys)->chunk(500)->flatMap(fn ($chunk) => DB::table('leads')->whereIn('contact_key', $chunk)->pluck('contact_key'))->flip()->all();
         $csByName = DB::table('users')->where('role', 'cs')->where('active', true)->get(['id', 'name'])
             ->groupBy(fn ($user) => $this->csKey($user->name))
@@ -149,7 +165,15 @@ class LeadController extends Controller
             foreach ($rows as $row) {
                 $contact = trim((string) $row['contact_raw']);
                 $key = $this->contactKey($contact);
-                if (isset($known[$key])) {
+                $duplicate = false;
+                foreach ($this->contactKeys($contact) as $candidate) {
+                    if (isset($known[$candidate])) {
+                        $duplicate = true;
+
+                        break;
+                    }
+                }
+                if ($duplicate) {
                     $skipped++;
 
                     continue;
@@ -195,8 +219,10 @@ class LeadController extends Controller
                 DB::table('lead_activity')->insert([
                     'lead_id' => $id,
                     'actor_id' => $request->user()->id,
-                    'action' => 'Diimpor dari CSV',
-                    'detail' => $owner ? 'CS terhubung dari nama pada CSV.' : 'Belum ditugaskan ke CS.',
+                    'action' => $row['source_tab'] ? 'Diimpor dari tab harian' : 'Diimpor dari CSV/XLSX',
+                    'detail' => $row['source_tab']
+                        ? "Sumber: tab {$row['source_tab']} ({$row['source_date_raw']}). ".($owner ? 'CS terhubung dari nama pada XLSX.' : 'Belum ditugaskan ke CS.')
+                        : ($owner ? 'CS terhubung dari nama pada CSV/XLSX.' : 'Belum ditugaskan ke CS.'),
                     'created_at' => now(),
                 ]);
                 $known[$key] = true;
@@ -216,9 +242,15 @@ class LeadController extends Controller
 
     public function show(Request $request, int $lead): Response
     {
-        $record = $this->visibleLead($request, $lead);
+        $record = $this->visibleLead($request, $lead, null);
         $milestones = DB::table('lead_milestones')->where('lead_id', $lead)->where('is_active', true)->pluck('milestone')->all();
-        $history = DB::table('lead_activity as a')->leftJoin('users as u', 'u.id', '=', 'a.actor_id')->where('a.lead_id', $lead)->orderByDesc('a.created_at')->limit(30)->get(['a.action', 'a.detail', 'a.created_at', 'u.name as actor_name']);
+        $history = DB::table('lead_activity as a')
+            ->leftJoin('users as u', 'u.id', '=', 'a.actor_id')
+            ->where('a.lead_id', $lead)
+            ->orderByDesc('a.created_at')
+            ->orderByDesc('a.id')
+            ->paginate(30, ['a.action', 'a.detail', 'a.created_at', 'u.name as actor_name'], 'history_page')
+            ->withQueryString();
         $csAccounts = $request->user()->role === 'admin'
             ? DB::table('users as u')->join('branches as b', 'b.id', '=', 'u.branch_id')->where('u.role', 'cs')->where('u.active', true)->orderBy('b.name')->get(['u.id', 'u.name', 'b.name as branch_name'])
             : [];
@@ -323,8 +355,7 @@ class LeadController extends Controller
 
     public function archive(Request $request, int $lead): RedirectResponse
     {
-        abort_unless($request->user()->role === 'admin', 403);
-        $record = DB::table('leads')->where('id', $lead)->whereNull('archived_at')->first() ?? abort(404);
+        $record = $this->visibleLead($request, $lead, false);
         DB::transaction(function () use ($record, $request): void {
             DB::table('leads')->where('id', $record->id)->update(['archived_at' => now(), 'updated_at' => now()]);
             DB::table('lead_activity')->insert(['lead_id' => $record->id, 'actor_id' => $request->user()->id, 'action' => 'Lead diarsipkan', 'detail' => 'Lead disembunyikan dari daftar kerja aktif.', 'created_at' => now()]);
@@ -336,8 +367,7 @@ class LeadController extends Controller
 
     public function restore(Request $request, int $lead): RedirectResponse
     {
-        abort_unless($request->user()->role === 'admin', 403);
-        $record = DB::table('leads')->where('id', $lead)->whereNotNull('archived_at')->first() ?? abort(404);
+        $record = $this->visibleLead($request, $lead, true);
         DB::transaction(function () use ($record, $request): void {
             DB::table('leads')->where('id', $record->id)->update(['archived_at' => null, 'updated_at' => now()]);
             DB::table('lead_activity')->insert(['lead_id' => $record->id, 'actor_id' => $request->user()->id, 'action' => 'Lead dipulihkan', 'detail' => 'Lead kembali ke daftar kerja aktif.', 'created_at' => now()]);
@@ -347,14 +377,75 @@ class LeadController extends Controller
         return to_route('leads.show', $lead);
     }
 
+    public function archiveSelected(Request $request): RedirectResponse
+    {
+        $ids = $this->selectedLeadIds($request, false);
+        DB::transaction(function () use ($ids, $request): void {
+            DB::table('leads')->whereIn('id', $ids)->update(['archived_at' => now(), 'updated_at' => now()]);
+            DB::table('lead_activity')->insert(array_map(fn ($id) => [
+                'lead_id' => $id,
+                'actor_id' => $request->user()->id,
+                'action' => 'Lead diarsipkan massal',
+                'detail' => 'Lead dipindahkan dari daftar kerja aktif.',
+                'created_at' => now(),
+            ], $ids));
+        });
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => count($ids).' lead diarsipkan.']);
+
+        return to_route('leads.index');
+    }
+
+    public function restoreSelected(Request $request): RedirectResponse
+    {
+        $ids = $this->selectedLeadIds($request, true);
+        DB::transaction(function () use ($ids, $request): void {
+            DB::table('leads')->whereIn('id', $ids)->update(['archived_at' => null, 'updated_at' => now()]);
+            DB::table('lead_activity')->insert(array_map(fn ($id) => [
+                'lead_id' => $id,
+                'actor_id' => $request->user()->id,
+                'action' => 'Lead dipulihkan massal',
+                'detail' => 'Lead kembali ke daftar kerja aktif.',
+                'created_at' => now(),
+            ], $ids));
+        });
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => count($ids).' lead dipulihkan.']);
+
+        return to_route('leads.index', ['archived' => 1]);
+    }
+
+    public function destroy(Request $request, int $lead): RedirectResponse
+    {
+        $record = $this->visibleLead($request, $lead, true);
+        $this->deleteLeadRecords([$record->id]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead dihapus permanen.']);
+
+        return to_route('leads.index', ['archived' => 1]);
+    }
+
+    public function destroySelected(Request $request): RedirectResponse
+    {
+        $ids = $this->selectedLeadIds($request, true);
+        $this->deleteLeadRecords($ids);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => count($ids).' lead dihapus permanen.']);
+
+        return to_route('leads.index', ['archived' => 1]);
+    }
+
     /**
      * @return object{id: int, assigned_user_id: int|null, archived_at: string|null, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null}
      */
-    private function visibleLead(Request $request, int $lead): object
+    private function visibleLead(Request $request, int $lead, ?bool $archived = false): object
     {
         $query = DB::table('leads')->where('id', $lead);
         if ($request->user()->role !== 'admin') {
-            $query->where('assigned_user_id', $request->user()->id)->whereNull('archived_at');
+            $query->where('assigned_user_id', $request->user()->id);
+        }
+        if ($archived !== null) {
+            $query->{$archived ? 'whereNotNull' : 'whereNull'}('archived_at');
         }
 
         $record = $query->first() ?? abort(404);
@@ -363,7 +454,48 @@ class LeadController extends Controller
         return $record;
     }
 
+    /** @return list<int> */
+    private function selectedLeadIds(Request $request, bool $archived): array
+    {
+        $data = $request->validate([
+            'lead_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'lead_ids.*' => ['integer', 'distinct', 'exists:leads,id'],
+        ]);
+        $query = DB::table('leads')->whereIn('id', $data['lead_ids']);
+        $query->{$archived ? 'whereNotNull' : 'whereNull'}('archived_at');
+        if ($request->user()->role !== 'admin') {
+            $query->where('assigned_user_id', $request->user()->id);
+        }
+        $ids = array_values($query->pluck('id')->map(fn ($id) => (int) $id)->all());
+        abort_unless(count($ids) === count($data['lead_ids']), 404);
+
+        return $ids;
+    }
+
+    /** @param list<int> $ids */
+    private function deleteLeadRecords(array $ids): void
+    {
+        DB::transaction(function () use ($ids): void {
+            DB::table('lead_activity')->whereIn('lead_id', $ids)->delete();
+            DB::table('lead_milestones')->whereIn('lead_id', $ids)->delete();
+            DB::table('leads')->whereIn('id', $ids)->delete();
+        });
+    }
+
     private function contactKey(string $contact): string
+    {
+        $key = $this->legacyContactKey($contact);
+
+        return str_starts_with($key, 'phone:0') ? 'phone:62'.substr($key, 7) : $key;
+    }
+
+    /** @return list<string> */
+    private function contactKeys(string $contact): array
+    {
+        return array_values(array_unique([$this->contactKey($contact), $this->legacyContactKey($contact)]));
+    }
+
+    private function legacyContactKey(string $contact): string
     {
         $contact = trim($contact);
         $digits = preg_replace('/\D/', '', $contact) ?? '';
@@ -411,6 +543,8 @@ class LeadController extends Controller
             'keterangan sumber' => 'source_description',
             'keterangan campaign' => 'campaign_description',
             'definisi leads' => 'imported_definition',
+            'tanggal sumber' => 'source_date_raw',
+            'tab sumber' => 'source_tab',
         ];
 
         return collect($headers)->mapWithKeys(fn ($header) => [(string) $header => $fields[$this->normalizedHeader($header)] ?? null])->filter()->all();
@@ -424,7 +558,7 @@ class LeadController extends Controller
     private function normalizeImportRow(array $row, array $headerMap): array
     {
         $normalized = array_fill_keys([
-            'source_row_no', 'source_date_raw', 'contact_raw', 'respond_time', 'imported_cs_name', 'imported_keterangan', 'raw_kebutuhan', 'greeting', 'chat_time', 'source_description', 'campaign_description', 'imported_definition',
+            'source_row_no', 'source_date_raw', 'source_tab', 'contact_raw', 'respond_time', 'imported_cs_name', 'imported_keterangan', 'raw_kebutuhan', 'greeting', 'chat_time', 'source_description', 'campaign_description', 'imported_definition',
         ], null);
         foreach ($headerMap as $header => $field) {
             $normalized[$field] = trim((string) ($row[$header] ?? '')) ?: null;
@@ -496,6 +630,84 @@ class LeadController extends Controller
         $reader->close();
 
         return [$headers, $rows];
+    }
+
+    /** @return array{0: list<string>, 1: list<array<int, string|null>>} */
+    private function readDailyTabsXlsx(string $path): array
+    {
+        $reader = new XlsxReader;
+        $reader->open($path);
+        $headers = [];
+        $rows = [];
+        $foundDailyTab = false;
+
+        foreach ($reader->getSheetIterator() as $sheet) {
+            if (! preg_match('/^\d{1,2}$/', $sheet->getName())) {
+                continue;
+            }
+            $foundDailyTab = true;
+            $sourceDate = '';
+            $dailyHeaders = [];
+            $rowNumber = 0;
+
+            foreach ($sheet->getRowIterator() as $row) {
+                $rowNumber++;
+                $values = array_map(
+                    fn ($cell) => $this->spreadsheetValue($cell instanceof FormulaCell ? $cell->getComputedValue() : $cell->getValue()),
+                    $row->cells,
+                );
+                if ($rowNumber === 2) {
+                    $sourceDate = $values[1] ?? '';
+                }
+                if ($rowNumber === 4) {
+                    $dailyHeaders = $this->cleanHeaders(array_slice($values, 15, 10));
+
+                    continue;
+                }
+                if ($rowNumber <= 4) {
+                    continue;
+                }
+
+                $dailyValues = array_slice($values, 15, 10);
+                if (trim((string) ($dailyValues[1] ?? '')) === '') {
+                    continue;
+                }
+                if (count($rows) >= self::IMPORT_ROW_LIMIT) {
+                    $reader->close();
+                    throw ValidationException::withMessages(['csv_file' => 'Maksimal 5.000 lead total dari seluruh tab harian. Pecah file lalu coba kembali.']);
+                }
+                $rows[] = [...$dailyValues, $sourceDate, $sheet->getName()];
+            }
+
+            if (! $this->hasRequiredImportHeaders($this->importHeaderMap($dailyHeaders))) {
+                $reader->close();
+                throw ValidationException::withMessages(['csv_file' => "Struktur lead utama pada tab {$sheet->getName()} belum sesuai."]);
+            }
+
+            $dailyHeaders = [...$dailyHeaders, 'Tanggal sumber', 'Tab sumber'];
+            if ($headers === []) {
+                $headers = $dailyHeaders;
+            } elseif ($headers !== $dailyHeaders) {
+                $reader->close();
+                throw ValidationException::withMessages(['csv_file' => "Header tab {$sheet->getName()} berbeda dari tab harian lainnya."]);
+            }
+        }
+        $reader->close();
+
+        if (! $foundDailyTab) {
+            throw ValidationException::withMessages(['csv_file' => 'Tidak menemukan tab harian bernama angka, misalnya 1 sampai 31.']);
+        }
+
+        return [$headers, $rows];
+    }
+
+    /** @param array<string, string> $headerMap */
+    private function hasRequiredImportHeaders(array $headerMap): bool
+    {
+        $required = ['contact_raw', 'respond_time', 'imported_cs_name', 'imported_keterangan', 'raw_kebutuhan', 'greeting', 'chat_time', 'source_description', 'campaign_description'];
+
+        return array_diff($required, array_values($headerMap)) === []
+            && (in_array('source_date_raw', $headerMap, true) || in_array('source_row_no', $headerMap, true));
     }
 
     /**

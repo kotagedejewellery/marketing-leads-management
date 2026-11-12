@@ -36,9 +36,9 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1794385167.7071457,
-    "seen": 1794385531.5784533,
-    "ast_hash": "466433989159872d9c798d10cea33b9c",
+    "mtime": 1794388421.8914075,
+    "seen": 1794389075.4705353,
+    "ast_hash": "2fc31cbc4c53403708c48ae5d81e9031",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -138,9 +138,9 @@
     "semantic_hash": ""
   },
   "bootstrap/app.php": {
-    "mtime": 1793738234.0,
-    "seen": 1794367943.5926578,
-    "ast_hash": "5680ff3fd8588fc28f2a9f993c483541",
+    "mtime": 1794387141.7425807,
+    "seen": 1794387235.8065972,
+    "ast_hash": "65e36d199fb795ab6225250934e8ecea",
     "semantic_hash": ""
   },
   "bootstrap/providers.php": {
@@ -1440,9 +1440,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1794378552.9185047,
-    "seen": 1794378595.5046964,
-    "ast_hash": "feb9675417d349543022134d427b4b09",
+    "mtime": 1794388516.2706282,
+    "seen": 1794389075.4709284,
+    "ast_hash": "0657746285654a9ed83be77b19b51d90",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {
-    "mtime": 1794382073.2363513,
-    "seen": 1794382182.559946,
-    "ast_hash": "42ed23dc6817b7dcd709a694a24b642b",
+    "mtime": 1794389225.8921628,
+    "seen": 1794389287.8342116,
+    "ast_hash": "7a0caf28f9af40ef6c45d8e4854b3a3b",
     "semantic_hash": ""
   },
   "tests/Feature/Settings/ProfileUpdateTest.php": {
@@ -1716,9 +1716,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1794378550.632998,
-    "seen": 1794378595.5047984,
-    "ast_hash": "7bceae500fa18f8981f0787db2197753",
+    "mtime": 1794389097.0955117,
+    "seen": 1794389114.732662,
+    "ast_hash": "1b3a38299391813cfb4a693590f3ac23",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -1803,6 +1803,12 @@
     "mtime": 1794377926.7696466,
     "seen": 1794378595.504811,
     "ast_hash": "5841c257faf84fb12c1441644f149402",
+    "semantic_hash": ""
+  },
+  "tests/Feature/TrustedProxyTest.php": {
+    "mtime": 1794387142.2922852,
+    "seen": 1794387235.807025,
+    "ast_hash": "1812d5ad1ca75b5e9c7e1670d182140b",
     "semantic_hash": ""
   }
 }

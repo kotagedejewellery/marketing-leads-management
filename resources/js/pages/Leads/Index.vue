@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 
 type Lead = {
     id: number;
@@ -44,8 +53,28 @@ const stage = ref(props.filters.stage || '');
 const queue = ref(props.filters.queue || '');
 const isFiltering = ref(false);
 const selectedLeadIds = ref<number[]>([]);
+const visibleLeadIds = computed(() => props.leads.data.map((lead) => lead.id));
+const allVisibleSelected = computed(
+    () =>
+        visibleLeadIds.value.length > 0 &&
+        visibleLeadIds.value.every((id) => selectedLeadIds.value.includes(id)),
+);
+const someVisibleSelected = computed(
+    () =>
+        !allVisibleSelected.value &&
+        visibleLeadIds.value.some((id) => selectedLeadIds.value.includes(id)),
+);
 const bulkForm = useForm({ assigned_user_id: '', lead_ids: [] as number[] });
-const importForm = useForm<{ csv_file: File | null }>({ csv_file: null });
+const selectionForm = useForm({ lead_ids: [] as number[] });
+const archiveDialogOpen = ref(false);
+const deleteDialogOpen = ref(false);
+const importForm = useForm<{
+    csv_file: File | null;
+    import_mode: 'all_leads' | 'daily_tabs';
+}>({
+    csv_file: null,
+    import_mode: 'all_leads',
+});
 const newLead = useForm({
     contact_raw: '',
     name: '',
@@ -76,6 +105,11 @@ const selectedFile = computed(() => {
 
     return `${importForm.csv_file.name} · ${Math.ceil(importForm.csv_file.size / 1024)} KB`;
 });
+const importHint = computed(() =>
+    importForm.import_mode === 'daily_tabs'
+        ? 'Unggah XLSX penuh dari spreadsheet monitoring untuk membaca tab 1–31.'
+        : 'Gunakan export CSV atau XLSX dari tab All Leads.',
+);
 const activeFilterText = computed(() =>
     [
         q.value ? `Pencarian: “${q.value}”` : '',
@@ -152,6 +186,36 @@ const assignSelected = () => {
         },
     });
 };
+const clearSelection = () => {
+    selectedLeadIds.value = [];
+    selectionForm.reset();
+};
+const toggleVisibleSelection = () => {
+    if (allVisibleSelected.value) {
+        selectedLeadIds.value = selectedLeadIds.value.filter(
+            (id) => !visibleLeadIds.value.includes(id),
+        );
+
+        return;
+    }
+    selectedLeadIds.value = Array.from(
+        new Set([...selectedLeadIds.value, ...visibleLeadIds.value]),
+    ).slice(0, 100);
+};
+const archiveSelected = () => {
+    archiveDialogOpen.value = false;
+    selectionForm.lead_ids = selectedLeadIds.value;
+    selectionForm.post('/leads/archive', { onSuccess: clearSelection });
+};
+const restoreSelected = () => {
+    selectionForm.lead_ids = selectedLeadIds.value;
+    selectionForm.post('/leads/restore', { onSuccess: clearSelection });
+};
+const destroySelected = () => {
+    deleteDialogOpen.value = false;
+    selectionForm.lead_ids = selectedLeadIds.value;
+    selectionForm.delete('/leads', { onSuccess: clearSelection });
+};
 </script>
 
 <template>
@@ -172,7 +236,6 @@ const assignSelected = () => {
             </div>
             <div class="flex items-center gap-3 text-sm">
                 <button
-                    v-if="isAdmin"
                     class="text-sm font-semibold text-kgj-gold-deep underline decoration-[#c4a45d] underline-offset-4"
                     type="button"
                     @click="toggleArchive"
@@ -180,7 +243,7 @@ const assignSelected = () => {
                     {{ archiveMode ? 'Kembali ke aktif' : 'Lihat arsip' }}
                 </button>
                 <button
-                    v-if="isAdmin && !archiveMode"
+                    v-if="!archiveMode"
                     class="kgj-button-primary"
                     type="button"
                     @click="showingNewLead = !showingNewLead"
@@ -236,7 +299,9 @@ const assignSelected = () => {
                     chat, spreadsheet, atau kampanye.
                 </p>
                 <div class="mt-5 grid gap-4 lg:grid-cols-2">
-                    <label class="grid gap-2 text-sm font-semibold"
+                    <label
+                        v-if="isAdmin"
+                        class="grid gap-2 text-sm font-semibold"
                         >Nama<input v-model="newLead.name" class="kgj-input"
                     /></label>
                     <label class="grid gap-2 text-sm font-semibold"
@@ -458,9 +523,19 @@ const assignSelected = () => {
             >
             <form
                 v-if="isAdmin"
-                class="flex items-center gap-2"
+                class="flex flex-wrap items-center gap-2"
                 @submit.prevent="importCsv"
             >
+                <label class="sr-only" for="import-mode">Sumber import</label
+                ><select
+                    id="import-mode"
+                    v-model="importForm.import_mode"
+                    class="kgj-input min-h-11 max-w-44 text-sm"
+                    :disabled="importForm.processing"
+                >
+                    <option value="all_leads">All Leads</option>
+                    <option value="daily_tabs">Tab harian</option>
+                </select>
                 <label
                     class="inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-[#c9aa6a] bg-white px-3 py-3 text-sm font-semibold text-kgj-gold-deep transition hover:bg-[#fbf6e8]"
                     >{{ importForm.csv_file?.name || 'Pilih CSV / XLSX'
@@ -491,9 +566,7 @@ const assignSelected = () => {
                 Hapus filter
             </button>
             <span v-if="selectedFile">Siap diimpor: {{ selectedFile }}</span>
-            <span v-if="isAdmin && !selectedFile"
-                >Gunakan export CSV atau XLSX dari tab All Leads.</span
-            >
+            <span v-if="isAdmin && !selectedFile">{{ importHint }}</span>
         </div>
         <p
             v-if="importForm.errors.csv_file"
@@ -502,42 +575,88 @@ const assignSelected = () => {
         >
             {{ importForm.errors.csv_file }}
         </p>
+        <label
+            v-if="visibleLeadIds.length"
+            class="mt-4 flex min-h-11 w-fit items-center gap-2 text-sm font-semibold text-[#4f514a]"
+        >
+            <input
+                :checked="allVisibleSelected"
+                :indeterminate="someVisibleSelected"
+                class="size-4 accent-kgj-gold"
+                type="checkbox"
+                @change="toggleVisibleSelection"
+            />
+            Pilih semua {{ visibleLeadIds.length }} lead pada halaman ini
+        </label>
         <form
-            v-if="isAdmin && selectedLeadIds.length"
+            v-if="selectedLeadIds.length"
             class="kgj-surface mt-4 flex flex-col gap-3 border border-[#dccd9f] p-4 sm:flex-row sm:items-center"
-            @submit.prevent="assignSelected"
         >
             <p class="text-sm font-semibold">
                 {{ selectedLeadIds.length }} lead dipilih
             </p>
-            <label class="sr-only" for="bulk-assignee"
-                >CS penanggung jawab</label
-            >
-            <select
-                id="bulk-assignee"
-                v-model="bulkForm.assigned_user_id"
-                class="kgj-input sm:ml-auto sm:max-w-xs"
-                required
-            >
-                <option value="">Pilih CS penanggung jawab</option>
-                <option
-                    v-for="account in csAccounts"
-                    :key="account.id"
-                    :value="String(account.id)"
+            <template v-if="!archiveMode">
+                <label v-if="isAdmin" class="sr-only" for="bulk-assignee"
+                    >CS penanggung jawab</label
                 >
-                    {{ account.branch_name }} — {{ account.name }}
-                </option>
-            </select>
-            <button
-                class="kgj-button-gold"
-                :disabled="bulkForm.processing || !bulkForm.assigned_user_id"
-            >
-                {{ bulkForm.processing ? 'Menugaskan…' : 'Tugaskan' }}
-            </button>
+                <select
+                    v-if="isAdmin"
+                    id="bulk-assignee"
+                    v-model="bulkForm.assigned_user_id"
+                    class="kgj-input sm:ml-auto sm:max-w-xs"
+                    required
+                >
+                    <option value="">Pilih CS penanggung jawab</option>
+                    <option
+                        v-for="account in csAccounts"
+                        :key="account.id"
+                        :value="String(account.id)"
+                    >
+                        {{ account.branch_name }} — {{ account.name }}
+                    </option>
+                </select>
+                <button
+                    v-if="isAdmin"
+                    class="kgj-button-gold"
+                    type="button"
+                    :disabled="
+                        bulkForm.processing || !bulkForm.assigned_user_id
+                    "
+                    @click="assignSelected"
+                >
+                    {{ bulkForm.processing ? 'Menugaskan…' : 'Tugaskan' }}
+                </button>
+                <button
+                    class="kgj-button-secondary"
+                    type="button"
+                    :disabled="selectionForm.processing"
+                    @click="archiveDialogOpen = true"
+                >
+                    Arsipkan
+                </button>
+            </template>
+            <template v-else>
+                <button
+                    class="kgj-button-primary sm:ml-auto"
+                    type="button"
+                    :disabled="selectionForm.processing"
+                    @click="restoreSelected"
+                >
+                    {{ selectionForm.processing ? 'Memproses…' : 'Pulihkan' }}
+                </button>
+                <button
+                    class="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#d8aaa2] px-3 text-sm font-semibold text-kgj-rose transition hover:bg-[#fff3f1]"
+                    type="button"
+                    :disabled="selectionForm.processing"
+                    @click="deleteDialogOpen = true"
+                >
+                    Hapus permanen
+                </button>
+            </template>
             <button
                 class="kgj-button-secondary"
                 type="button"
-                @click="selectedLeadIds = []"
+                @click="clearSelection"
             >
                 Batal
             </button>
@@ -550,7 +669,6 @@ const assignSelected = () => {
                 class="rounded-2xl border border-kgj-line bg-kgj-paper p-4 shadow-[0_8px_22px_rgba(58,48,31,0.06)] transition hover:-translate-y-0.5 hover:border-[#c3a463]"
             >
                 <label
-                    v-if="isAdmin"
                     class="mb-3 flex min-h-11 items-center gap-2 text-sm font-semibold"
                     ><input
                         v-model="selectedLeadIds"
@@ -601,7 +719,7 @@ const assignSelected = () => {
                 {{
                     hasFilters
                         ? 'Tidak ada lead yang cocok dengan filter ini.'
-                        : 'Belum ada lead. Import CSV untuk memulai.'
+                        : 'Belum ada lead. Tambahkan lead untuk memulai.'
                 }}
                 <button
                     v-if="hasFilters"
@@ -620,7 +738,7 @@ const assignSelected = () => {
                     class="text-left text-xs tracking-wider text-[#62665b] uppercase"
                 >
                     <tr>
-                        <th v-if="isAdmin" class="p-4">
+                        <th class="p-4">
                             <span class="sr-only">Pilih lead</span>
                         </th>
                         <th class="p-4">Lead</th>
@@ -635,7 +753,7 @@ const assignSelected = () => {
                         :key="lead.id"
                         class="border-t border-[#e7eae5]"
                     >
-                        <td v-if="isAdmin" class="p-4">
+                        <td class="p-4">
                             <input
                                 v-model="selectedLeadIds"
                                 class="size-4 accent-kgj-gold"
@@ -690,14 +808,11 @@ const assignSelected = () => {
                         </td>
                     </tr>
                     <tr v-if="!leads.data.length">
-                        <td
-                            :colspan="isAdmin ? 5 : 4"
-                            class="p-12 text-center text-[#62665b]"
-                        >
+                        <td colspan="5" class="p-12 text-center text-[#62665b]">
                             {{
                                 hasFilters
                                     ? 'Tidak ada lead yang cocok dengan filter ini.'
-                                    : 'Belum ada lead. Import CSV untuk memulai.'
+                                    : 'Belum ada lead. Tambahkan lead untuk memulai.'
                             }}
                         </td>
                     </tr>
@@ -728,5 +843,57 @@ const assignSelected = () => {
                 >
             </div>
         </nav>
+        <Dialog v-model:open="archiveDialogOpen">
+            <DialogContent>
+                <DialogHeader
+                    ><DialogTitle>Arsipkan lead terpilih?</DialogTitle
+                    ><DialogDescription
+                        >{{ selectedLeadIds.length }} lead akan disembunyikan
+                        dari daftar kerja aktif, tetapi data dan riwayatnya
+                        tetap tersimpan.</DialogDescription
+                    ></DialogHeader
+                >
+                <DialogFooter
+                    ><DialogClose as-child
+                        ><button class="kgj-button-secondary" type="button">
+                            Batalkan
+                        </button></DialogClose
+                    ><button
+                        class="kgj-button-primary"
+                        type="button"
+                        :disabled="selectionForm.processing"
+                        @click="archiveSelected"
+                    >
+                        Arsipkan lead
+                    </button></DialogFooter
+                >
+            </DialogContent>
+        </Dialog>
+        <Dialog v-model:open="deleteDialogOpen">
+            <DialogContent>
+                <DialogHeader
+                    ><DialogTitle>Hapus permanen lead terpilih?</DialogTitle
+                    ><DialogDescription
+                        >{{ selectedLeadIds.length }} lead, milestone, dan
+                        riwayatnya akan dihapus dan tidak dapat
+                        dipulihkan.</DialogDescription
+                    ></DialogHeader
+                >
+                <DialogFooter
+                    ><DialogClose as-child
+                        ><button class="kgj-button-secondary" type="button">
+                            Batalkan
+                        </button></DialogClose
+                    ><button
+                        class="inline-flex min-h-11 items-center justify-center rounded-lg bg-kgj-rose px-4 text-sm font-semibold text-white transition hover:bg-[#84362e]"
+                        type="button"
+                        :disabled="selectionForm.processing"
+                        @click="destroySelected"
+                    >
+                        Hapus permanen
+                    </button></DialogFooter
+                >
+            </DialogContent>
+        </Dialog>
     </section>
 </template>

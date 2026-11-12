@@ -140,6 +140,34 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('lead_milestones', ['milestone' => 'asked', 'is_active' => true]);
     }
 
+    public function test_local_and_international_indonesian_phone_formats_are_the_same_lead(): void
+    {
+        $admin = $this->user('admin');
+
+        $this->actingAs($admin)->post('/leads', ['contact_raw' => '0812-3456-7890'])->assertRedirect();
+        $this->actingAs($admin)->post('/leads', ['contact_raw' => '+62 812 3456 7890'])
+            ->assertSessionHasErrors('contact_raw');
+
+        $this->assertDatabaseCount('leads', 1);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567890']);
+    }
+
+    public function test_international_phone_format_does_not_duplicate_a_legacy_local_phone_key(): void
+    {
+        $admin = $this->user('admin');
+        \DB::table('leads')->insert([
+            'contact_raw' => '0812-3456-7890',
+            'contact_key' => 'phone:081234567890',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->post('/leads', ['contact_raw' => '+62 812 3456 7890'])
+            ->assertSessionHasErrors('contact_raw');
+
+        $this->assertDatabaseCount('leads', 1);
+    }
+
     public function test_admin_can_import_the_all_leads_shape_from_xlsx(): void
     {
         $admin = $this->user('admin');
@@ -154,6 +182,35 @@ class LeadManagementTest extends TestCase
 
         $response->assertRedirect('/leads');
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177773333', 'source_date_raw' => '31', 'imported_definition' => 'Cold']);
+        @unlink($path);
+    }
+
+    public function test_admin_can_import_leads_from_all_numeric_daily_tabs_in_an_xlsx(): void
+    {
+        $admin = $this->user('admin');
+        $path = tempnam(sys_get_temp_dir(), 'daily-leads-').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+
+        $this->writeDailyLeadSheet($writer, '1', '1 November 2026', '+62 851-7777-4444');
+        $writer->addNewSheetAndMakeItCurrent();
+        $this->writeDailyLeadSheet($writer, '2', '2 November 2026', '+62 851-7777-5555');
+        $writer->addNewSheetAndMakeItCurrent()->setName('All Leads');
+        $writer->addRow(Row::fromValues(['Tanggal', 'Nama/Nomor']));
+        $writer->addRow(Row::fromValues(['1', '+62 851-7777-6666']));
+        $writer->close();
+
+        $response = $this->actingAs($admin)->post('/leads/import', [
+            'csv_file' => new UploadedFile($path, 'daily-leads.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+            'import_mode' => 'daily_tabs',
+        ]);
+
+        $response->assertRedirect('/leads');
+        $this->assertDatabaseCount('leads', 2);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177774444', 'source_date_raw' => '1 November 2026']);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177775555', 'source_date_raw' => '2 November 2026']);
+        $this->assertDatabaseHas('lead_activity', ['action' => 'Diimpor dari tab harian', 'detail' => 'Sumber: tab 1 (1 November 2026). Belum ditugaskan ke CS.']);
+        $this->assertDatabaseMissing('leads', ['contact_key' => 'phone:6285177776666']);
         @unlink($path);
     }
 
@@ -221,11 +278,94 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'Lead diarsipkan']);
     }
 
+    public function test_lead_history_can_load_older_entries(): void
+    {
+        $admin = $this->user('admin');
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285300000001',
+            'contact_key' => 'phone:6285300000001',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        foreach (range(1, 31) as $number) {
+            \DB::table('lead_activity')->insert([
+                'lead_id' => $leadId,
+                'action' => "Riwayat {$number}",
+                'created_at' => now(),
+            ]);
+        }
+
+        $this->actingAs($admin)
+            ->withHeader('X-Inertia', 'true')
+            ->get("/leads/{$leadId}?history_page=2")
+            ->assertJsonPath('props.history.current_page', 2)
+            ->assertJsonPath('props.history.total', 31);
+    }
+
+    public function test_cs_can_create_a_lead_that_is_automatically_assigned_to_them(): void
+    {
+        $cs = $this->user('cs');
+        $otherCs = $this->user('cs');
+
+        $response = $this->actingAs($cs)->post('/leads', [
+            'contact_raw' => '+62 851-7777-7777',
+            'assigned_user_id' => $otherCs->id,
+            'milestone' => 'asked',
+        ]);
+
+        $response->assertRedirect();
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177777777',
+            'assigned_user_id' => $cs->id,
+            'current_stage' => 'asked',
+        ]);
+    }
+
+    public function test_cs_can_bulk_archive_and_restore_only_their_own_leads(): void
+    {
+        $cs = $this->user('cs');
+        $otherCs = $this->user('cs');
+        $ownedLead = \DB::table('leads')->insertGetId(['assigned_user_id' => $cs->id, 'contact_raw' => '+6285100000001', 'contact_key' => 'phone:6285100000001', 'created_at' => now(), 'updated_at' => now()]);
+        $otherLead = \DB::table('leads')->insertGetId(['assigned_user_id' => $otherCs->id, 'contact_raw' => '+6285100000002', 'contact_key' => 'phone:6285100000002', 'created_at' => now(), 'updated_at' => now()]);
+
+        $this->actingAs($cs)->post('/leads/archive', ['lead_ids' => [$ownedLead]])->assertRedirect('/leads');
+        $this->assertDatabaseMissing('leads', ['id' => $ownedLead, 'archived_at' => null]);
+
+        $this->actingAs($cs)->post('/leads/archive', ['lead_ids' => [$otherLead]])->assertNotFound();
+
+        $this->actingAs($cs)->post('/leads/restore', ['lead_ids' => [$ownedLead]])->assertRedirect('/leads?archived=1');
+        $this->assertDatabaseHas('leads', ['id' => $ownedLead, 'archived_at' => null]);
+    }
+
+    public function test_cs_can_permanently_delete_only_their_own_archived_leads(): void
+    {
+        $cs = $this->user('cs');
+        $leadId = \DB::table('leads')->insertGetId(['assigned_user_id' => $cs->id, 'contact_raw' => '+6285100000003', 'contact_key' => 'phone:6285100000003', 'archived_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        \DB::table('lead_milestones')->insert(['lead_id' => $leadId, 'milestone' => 'asked', 'is_active' => true, 'marked_at' => now()]);
+        \DB::table('lead_activity')->insert(['lead_id' => $leadId, 'action' => 'Lead diarsipkan', 'created_at' => now()]);
+
+        $this->actingAs($cs)->delete('/leads', ['lead_ids' => [$leadId]])->assertRedirect('/leads?archived=1');
+
+        $this->assertDatabaseMissing('leads', ['id' => $leadId]);
+        $this->assertDatabaseMissing('lead_milestones', ['lead_id' => $leadId]);
+        $this->assertDatabaseMissing('lead_activity', ['lead_id' => $leadId]);
+    }
+
     private function user(string $role): User
     {
         $user = User::factory()->create();
         $user->forceFill(['role' => $role])->save();
 
         return $user;
+    }
+
+    private function writeDailyLeadSheet(Writer $writer, string $tab, string $date, string $phone): void
+    {
+        $writer->getCurrentSheet()->setName($tab);
+        $writer->addRow(Row::fromValues([null, 'Monitoring Leads']));
+        $writer->addRow(Row::fromValues([null, $date]));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['Whatsapp 1'])));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting*', 'Waktu Chat', 'Keterangan Sumber*', 'Keterangan Campaign*'])));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['1', $phone, '0', 'Dila', 'klik saja', 'nikah', 'halo', '10.38', 'Iklan', 'Bio'])));
     }
 }

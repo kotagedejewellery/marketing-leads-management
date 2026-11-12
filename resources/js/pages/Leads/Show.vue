@@ -110,15 +110,19 @@ function save() {
 function archiveLead() {
     archiveDialogOpen.value = false;
     lifecycleProcessing.value = true;
-    router.patch(`/leads/${props.lead.id}/archive`, {
-        onFinish: () => (lifecycleProcessing.value = false),
-    });
+    router.patch(
+        `/leads/${props.lead.id}/archive`,
+        {},
+        { onFinish: () => (lifecycleProcessing.value = false) },
+    );
 }
 function restoreLead() {
     lifecycleProcessing.value = true;
-    router.patch(`/leads/${props.lead.id}/restore`, {
-        onFinish: () => (lifecycleProcessing.value = false),
-    });
+    router.patch(
+        `/leads/${props.lead.id}/restore`,
+        {},
+        { onFinish: () => (lifecycleProcessing.value = false) },
+    );
 }
 function destroyLead() {
     deleteDialogOpen.value = false;

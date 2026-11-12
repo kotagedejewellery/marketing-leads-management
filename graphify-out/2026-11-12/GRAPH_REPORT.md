@@ -1,7 +1,7 @@
 # Graph Report - marketing-leads  (2026-11-12)
 
 ## Corpus Check
-- 292 files · ~54,100 words
+- 292 files · ~54,101 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 25 file(s) not represented in the graph (top: (none) 19, .example 2, .neon 1)
 
@@ -470,9 +470,9 @@ Nodes (3): delegatedProps, forwardedProps, props
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `vue` connect `vue` to `reka-ui`, `SidebarProvider.vue`, `@vueuse/core`, `@lucide/vue`, `SelectContent.vue`, `Leads/Index.vue`, `sheet/index.ts`, `types/index.ts`, `TwoFactorSetupModal.vue`, `DialogContent.vue`, `DeleteUser.vue`, `package.json`, `button/index.ts`, `AppSidebar.vue`, `@inertiajs/vue3`, `InputOTPSlot.vue`, `useAppearance.ts`, `Show.vue`, `Profile.vue`, `sidebar/index.ts`, `AppHeader.vue`, `global.d.ts`, `AlertError.vue`, `TwoFactorRecoveryCodes.vue`, `Accounts/Index.vue`, `PasskeyRegister.vue`, `SheetContent.vue`, `useCurrentUrl.ts`, `SidebarMenuSkeleton.vue`, `Separator.vue`, `DropdownMenuContent.vue`, `TooltipContent.vue`, `DialogDescription.vue`?**
-  _High betweenness centrality (0.129) - this node is a cross-community bridge._
+  _High betweenness centrality (0.133) - this node is a cross-community bridge._
 - **Why does `reka-ui` connect `reka-ui` to `SidebarProvider.vue`, `@vueuse/core`, `@lucide/vue`, `SelectContent.vue`, `sheet/index.ts`, `DialogContent.vue`, `package.json`, `button/index.ts`, `vue`, `InputOTPSlot.vue`, `sidebar/index.ts`, `AppHeader.vue`, `tooltip/index.ts`, `PasskeyRegister.vue`, `Collapsible.vue`, `dialog/index.ts`, `SheetContent.vue`, `Separator.vue`, `DropdownMenuContent.vue`, `TooltipContent.vue`, `DialogDescription.vue`?**
-  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+  _High betweenness centrality (0.048) - this node is a cross-community bridge._
 - **Why does `@inertiajs/vue3` connect `@inertiajs/vue3` to `UserMenuContent.vue`, `Profile.vue`, `AppHeader.vue`, `Leads/Index.vue`, `types/index.ts`, `TwoFactorSetupModal.vue`, `DeleteUser.vue`, `TwoFactorRecoveryCodes.vue`, `resources_js_routes_index`, `package.json`, `button/index.ts`, `vue`, `Layout.vue`, `Accounts/Index.vue`, `AppSidebar.vue`, `useCurrentUrl.ts`, `Show.vue`?**
   _High betweenness centrality (0.040) - this node is a cross-community bridge._
 - **What connects `$schema`, `style`, `config` to the rest of the system?**

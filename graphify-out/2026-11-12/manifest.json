@@ -1446,9 +1446,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
-    "mtime": 1794445331.0844219,
-    "seen": 1794445543.5400317,
-    "ast_hash": "a4772c864ed642fc6399dc338ff268cb",
+    "mtime": 1794446656.9238327,
+    "seen": 1794446736.8208566,
+    "ast_hash": "9600dd8e1ba4c11d32367eb659a13553",
     "semantic_hash": ""
   },
   "resources/js/pages/Statistics.vue": {

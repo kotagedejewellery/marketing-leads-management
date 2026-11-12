@@ -1,7 +1,7 @@
 # Graph Report - marketing-leads  (2026-11-12)
 
 ## Corpus Check
-- 292 files · ~54,101 words
+- 292 files · ~54,107 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 25 file(s) not represented in the graph (top: (none) 19, .example 2, .neon 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `83cbaf23`
+- Built from commit: `7bfaf8f0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

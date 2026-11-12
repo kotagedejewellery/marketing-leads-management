@@ -492,7 +492,13 @@ class LeadController extends Controller
     /** @return list<string> */
     private function contactKeys(string $contact): array
     {
-        return array_values(array_unique([$this->contactKey($contact), $this->legacyContactKey($contact)]));
+        $normalized = $this->contactKey($contact);
+        $keys = [$normalized, $this->legacyContactKey($contact)];
+        if (str_starts_with($normalized, 'phone:62')) {
+            $keys[] = 'phone:0'.substr($normalized, 8);
+        }
+
+        return array_values(array_unique($keys));
     }
 
     private function legacyContactKey(string $contact): string

@@ -7,6 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Schema;
+use Inertia\Testing\AssertableInertia as Assert;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer;
 use Tests\TestCase;
@@ -296,10 +297,12 @@ class LeadManagementTest extends TestCase
         }
 
         $this->actingAs($admin)
-            ->withHeader('X-Inertia', 'true')
             ->get("/leads/{$leadId}?history_page=2")
-            ->assertJsonPath('props.history.current_page', 2)
-            ->assertJsonPath('props.history.total', 31);
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Leads/Show')
+                ->where('history.current_page', 2)
+                ->where('history.total', 31),
+            );
     }
 
     public function test_cs_can_create_a_lead_that_is_automatically_assigned_to_them(): void

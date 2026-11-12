@@ -225,15 +225,15 @@ class DashboardController extends Controller
         ];
     }
 
-    /** @return list<object{id: int, name: string|null, current_stage: string|null, next_follow_up_at: string|null, updated_at: string|null, owner_name: string|null}> */
+    /** @return list<\stdClass> */
     private function recentLeads(Request $request): array
     {
-        return $this->activeLeads($request)
+        return array_values($this->activeLeads($request)
             ->leftJoin('users as u', 'u.id', '=', 'l.assigned_user_id')
             ->orderByDesc('l.updated_at')
             ->limit(6)
             ->get(['l.id', 'l.name', 'l.current_stage', 'l.next_follow_up_at', 'l.updated_at', 'u.name as owner_name'])
-            ->all();
+            ->all());
     }
 
     /** @return array{total: int, complete: int, follow_up_set: int} */
@@ -250,16 +250,16 @@ class DashboardController extends Controller
         ];
     }
 
-    /** @return list<object{name: string, cs_name: string|null, lead_count: int}> */
+    /** @return list<\stdClass> */
     private function workload(): array
     {
-        return DB::table('branches as b')
+        return array_values(DB::table('branches as b')
             ->leftJoin('users as u', fn ($join) => $join->on('u.branch_id', '=', 'b.id')->where('u.role', 'cs')->where('u.active', true))
             ->leftJoin('leads as l', fn ($join) => $join->on('l.assigned_user_id', '=', 'u.id')->whereNull('l.archived_at'))
             ->groupBy('b.id', 'b.name', 'u.name')
             ->orderBy('b.name')
             ->get(['b.name', 'u.name as cs_name', DB::raw('COUNT(l.id) as lead_count')])
-            ->all();
+            ->all());
     }
 
     private function activeLeads(Request $request): Builder

@@ -30,15 +30,15 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/DashboardController.php": {
-    "mtime": 1794390864.6661239,
-    "seen": 1794391877.0041373,
-    "ast_hash": "0a0cb29e65214388fb14537a506d5f08",
+    "mtime": 1794449236.1191912,
+    "seen": 1794449452.163528,
+    "ast_hash": "8bd39f6a1a67df21799808546b181b93",
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1794445729.4665196,
-    "seen": 1794445789.1585486,
-    "ast_hash": "9e3578e01f4352f10627ce7cfbe4a596",
+    "mtime": 1794447130.2087035,
+    "seen": 1794447381.4506223,
+    "ast_hash": "41b5ac54664b3f07436e8b8c5eb349ce",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -1434,9 +1434,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Dashboard.vue": {
-    "mtime": 1794378552.4283895,
-    "seen": 1794378595.5046942,
-    "ast_hash": "7801f2dafd3830df012e77a8a7e18788",
+    "mtime": 1794448590.2986646,
+    "seen": 1794449211.177233,
+    "ast_hash": "31db7ffe9a92c0096ba20c307f379476",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
@@ -1452,9 +1452,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Statistics.vue": {
-    "mtime": 1794378552.240863,
-    "seen": 1794378595.5047,
-    "ast_hash": "584b2d2d78a1a47386fdde24a60c1b4a",
+    "mtime": 1794448589.582503,
+    "seen": 1794449211.1772382,
+    "ast_hash": "278b0ad3b5c92b98733cf5cbde3a3794",
     "semantic_hash": ""
   },
   "resources/js/pages/Welcome.vue": {
@@ -1626,9 +1626,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/DashboardTest.php": {
-    "mtime": 1794385326.2749927,
-    "seen": 1794385531.5790677,
-    "ast_hash": "ee71dde7b61fb39197eb3387608dd3c9",
+    "mtime": 1794448985.2126634,
+    "seen": 1794449211.1772966,
+    "ast_hash": "90498fca66e570de40f3f8c2b2e70e16",
     "semantic_hash": ""
   },
   "tests/Feature/ExampleTest.php": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {
-    "mtime": 1794445049.8055022,
-    "seen": 1794445543.5401657,
-    "ast_hash": "23feaf556316ef4727ba606e380a9e8c",
+    "mtime": 1794449258.810022,
+    "seen": 1794449452.163958,
+    "ast_hash": "1c2771b7b024aed6f4886d6f15e9098c",
     "semantic_hash": ""
   },
   "tests/Feature/Settings/ProfileUpdateTest.php": {

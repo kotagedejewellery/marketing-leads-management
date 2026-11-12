@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
-import { BarChart3 } from '@lucide/vue';
+import { BarChart3, CheckCircle2, UsersRound } from '@lucide/vue';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -10,39 +10,42 @@ const props = defineProps<{
         warm: number;
         hot: number;
         closing: number;
-        unassigned: number;
-        follow_up_due: number;
+        unclassified: number;
     };
+    quality: { total: number; complete: number; follow_up_set: number };
+    workload: Array<{
+        name: string;
+        cs_name: string | null;
+        lead_count: number;
+    }>;
 }>();
+
 const isAdmin = usePage().props.auth.user?.role === 'admin';
-const rows = computed(() => [
-    {
-        label: 'Cold',
-        note: 'Interaksi awal',
-        value: props.stats.cold,
-        color: 'bg-[#9caeb4]',
-    },
+const stages = computed(() => [
+    { label: 'Cold', note: 'Klik saja', value: props.stats.cold },
     {
         label: 'Warm',
-        note: 'Mulai mempertimbangkan',
+        note: 'Tanya-tanya atau pricelist',
         value: props.stats.warm,
-        color: 'bg-[#caa85d]',
     },
     {
         label: 'Hot',
-        note: 'Siap ditindaklanjuti',
+        note: 'Offline, online, atau belum transfer',
         value: props.stats.hot,
-        color: 'bg-[#b85b47]',
     },
     {
         label: 'Closing',
-        note: 'Mengarah pada transaksi',
+        note: 'Closing atau repeat order',
         value: props.stats.closing,
-        color: 'bg-[#527260]',
+    },
+    {
+        label: 'Belum ditandai',
+        note: 'Tahap belum dipilih saat input atau impor',
+        value: props.stats.unclassified,
     },
 ]);
-const width = (value: number) =>
-    `${Math.max(props.stats.total ? (value / props.stats.total) * 100 : 0, value ? 5 : 0)}%`;
+const percentage = (value: number, total = props.stats.total) =>
+    total ? `${Math.round((value / total) * 100)}%` : '0%';
 </script>
 
 <template>
@@ -52,83 +55,149 @@ const width = (value: number) =>
             class="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"
         >
             <div>
-                <p class="kgj-eyebrow">Monitoring funnel</p>
-                <h1
-                    class="mt-2 text-4xl font-semibold tracking-[-.04em] sm:text-5xl"
-                >
-                    Statistik.
-                </h1>
+                <h1 class="kgj-title">Kualitas dan distribusi.</h1>
                 <p class="kgj-subtitle">
-                    Ringkasan funnel sesuai cakupan akses akun Anda.
+                    Laporan kondisi data lead dalam cakupan akses akun Anda.
                 </p>
             </div>
             <BarChart3 class="hidden size-7 text-kgj-gold sm:block" />
         </div>
-        <div class="kgj-surface mt-8 overflow-hidden">
-            <div
-                class="grid border-b border-kgj-line sm:grid-cols-3 lg:grid-cols-7"
+
+        <section
+            class="kgj-surface mt-8 overflow-hidden"
+            aria-label="Ringkasan kualitas data"
+        >
+            <dl
+                class="grid divide-y divide-kgj-line sm:grid-cols-3 sm:divide-x sm:divide-y-0"
             >
-                <div
-                    v-for="item in [
-                        { label: 'Total lead', value: stats.total },
-                        ...rows.map(({ label, value }) => ({ label, value })),
-                        ...(isAdmin
-                            ? [
-                                  {
-                                      label: 'Belum ditugaskan',
-                                      value: stats.unassigned,
-                                  },
-                              ]
-                            : []),
-                        {
-                            label: 'Follow-up jatuh tempo',
-                            value: stats.follow_up_due,
-                        },
-                    ]"
-                    :key="item.label"
-                    class="border-b border-kgj-line px-5 py-5 last:border-b-0 sm:border-r sm:border-b-0 lg:last:border-r-0"
-                >
-                    <dt
-                        class="text-xs font-bold tracking-[.12em] text-kgj-muted uppercase"
-                    >
-                        {{ item.label }}
-                    </dt>
-                    <dd class="mt-2 text-3xl font-semibold tabular-nums">
-                        {{ item.value }}
+                <div class="px-5 py-5 sm:px-7">
+                    <dt class="text-sm text-kgj-muted">Lead aktif</dt>
+                    <dd class="mt-1 text-2xl font-semibold tabular-nums">
+                        {{ quality.total }}
                     </dd>
                 </div>
-            </div>
-            <div class="p-5 sm:p-7">
-                <h2 class="text-lg font-semibold">Sebaran tahapan</h2>
-                <div class="mt-6 space-y-5">
+                <div class="px-5 py-5 sm:px-7">
+                    <dt class="text-sm text-kgj-muted">Kualifikasi lengkap</dt>
+                    <dd class="mt-1 text-2xl font-semibold tabular-nums">
+                        {{ quality.complete }}
+                        <span class="text-sm font-medium text-kgj-muted">{{
+                            percentage(quality.complete, quality.total)
+                        }}</span>
+                    </dd>
+                </div>
+                <div class="px-5 py-5 sm:px-7">
+                    <dt class="text-sm text-kgj-muted">Follow-up terjadwal</dt>
+                    <dd class="mt-1 text-2xl font-semibold tabular-nums">
+                        {{ quality.follow_up_set }}
+                        <span class="text-sm font-medium text-kgj-muted">{{
+                            percentage(quality.follow_up_set, quality.total)
+                        }}</span>
+                    </dd>
+                </div>
+            </dl>
+        </section>
+
+        <div
+            class="mt-7 grid gap-7 xl:grid-cols-[minmax(0,1fr)_minmax(340px,0.72fr)]"
+        >
+            <section
+                class="kgj-surface overflow-hidden"
+                aria-labelledby="stages-heading"
+            >
+                <div class="px-5 py-5 sm:px-7">
+                    <h2 id="stages-heading" class="text-lg font-semibold">
+                        Sebaran tahap aktif
+                    </h2>
+                    <p class="mt-1 text-sm text-kgj-muted">
+                        Komposisi tahap terakhir, bukan perhitungan konversi
+                        antar tahap.
+                    </p>
+                </div>
+                <div class="border-t border-kgj-line">
                     <div
-                        v-for="item in rows"
-                        :key="item.label"
-                        class="grid grid-cols-[82px_1fr_auto] items-center gap-3"
+                        v-for="stage in stages"
+                        :key="stage.label"
+                        class="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-4 border-b border-kgj-line px-5 py-4 last:border-b-0 sm:px-7"
                     >
-                        <div>
+                        <span>
                             <strong class="block text-sm">{{
-                                item.label
-                            }}</strong
-                            ><span class="text-xs text-kgj-muted">{{
-                                item.note
+                                stage.label
+                            }}</strong>
+                            <span class="mt-1 block text-xs text-kgj-muted">{{
+                                stage.note
                             }}</span>
-                        </div>
-                        <div
-                            class="h-2.5 overflow-hidden rounded-full bg-[#eee9df]"
+                        </span>
+                        <span class="text-sm text-kgj-muted tabular-nums">{{
+                            percentage(stage.value)
+                        }}</span>
+                        <strong
+                            class="min-w-9 text-right text-lg tabular-nums"
+                            >{{ stage.value }}</strong
                         >
-                            <div
-                                class="h-full rounded-full transition-[width] duration-500"
-                                :class="item.color"
-                                :style="{ width: width(item.value) }"
-                            />
-                        </div>
-                        <strong class="text-sm tabular-nums">{{
-                            item.value
-                        }}</strong>
                     </div>
                 </div>
-            </div>
+            </section>
+
+            <section
+                v-if="isAdmin"
+                class="kgj-surface overflow-hidden"
+                aria-labelledby="workload-heading"
+            >
+                <div class="px-5 py-5 sm:px-7">
+                    <div class="flex items-center gap-2">
+                        <UsersRound class="size-5 text-kgj-gold-deep" />
+                        <h2 id="workload-heading" class="text-lg font-semibold">
+                            Beban per cabang
+                        </h2>
+                    </div>
+                    <p class="mt-1 text-sm text-kgj-muted">
+                        Jumlah lead aktif berdasarkan CS aktif di tiap cabang.
+                    </p>
+                </div>
+                <ul
+                    v-if="workload.length"
+                    class="divide-y divide-kgj-line border-t border-kgj-line"
+                >
+                    <li
+                        v-for="branch in workload"
+                        :key="branch.name"
+                        class="flex items-center justify-between gap-4 px-5 py-4 sm:px-7"
+                    >
+                        <span>
+                            <strong class="block text-sm">{{
+                                branch.name
+                            }}</strong>
+                            <span class="mt-1 block text-xs text-kgj-muted">{{
+                                branch.cs_name || 'Belum ada CS aktif'
+                            }}</span>
+                        </span>
+                        <strong class="text-lg tabular-nums">{{
+                            branch.lead_count
+                        }}</strong>
+                    </li>
+                </ul>
+                <p
+                    v-else
+                    class="border-t border-kgj-line px-5 py-10 text-center text-sm text-kgj-muted sm:px-7"
+                >
+                    Belum ada cabang untuk dianalisis.
+                </p>
+            </section>
+
+            <section
+                v-else
+                class="kgj-surface p-5 sm:p-7"
+                aria-labelledby="scope-heading"
+            >
+                <CheckCircle2 class="size-5 text-kgj-gold-deep" />
+                <h2 id="scope-heading" class="mt-4 text-lg font-semibold">
+                    Fokus pada lead Anda
+                </h2>
+                <p class="mt-2 text-sm leading-6 text-kgj-muted">
+                    Laporan ini hanya menampilkan lead yang menjadi tanggung
+                    jawab Anda.
+                </p>
+            </section>
         </div>
     </section>
 </template>

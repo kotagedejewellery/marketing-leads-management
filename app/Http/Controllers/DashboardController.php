@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +15,10 @@ class DashboardController extends Controller
 {
     public function dashboard(Request $request): Response
     {
-        return Inertia::render('Dashboard', ['stats' => $this->stats($request)]);
+        return Inertia::render('Dashboard', [
+            'priorities' => $this->priorities($request),
+            'recent_leads' => $this->recentLeads($request),
+        ]);
     }
 
     public function leads(Request $request): Response
@@ -38,10 +42,10 @@ class DashboardController extends Controller
         if ($request->filled('stage')) {
             $query->where('l.current_stage', $request->string('stage')->toString());
         }
-        if ($request->user()->role === 'admin' && $request->filled('queue')) {
+        if ($request->filled('queue')) {
             match ($request->string('queue')->toString()) {
-                'unassigned' => $query->whereNull('l.assigned_user_id'),
-                'needs_qualification' => $query->whereNull('l.intent_buying')->whereNull('l.usage_date')->whereNull('l.budget'),
+                'unassigned' => $request->user()->role === 'admin' ? $query->whereNull('l.assigned_user_id') : null,
+                'needs_qualification' => $query->where(fn (Builder $builder) => $builder->whereNull('l.intent_buying')->orWhereNull('l.usage_date')->orWhereNull('l.budget')),
                 'follow_up_due' => $query->whereNotNull('l.next_follow_up_at')->where('l.next_follow_up_at', '<=', now()),
                 default => null,
             };
@@ -63,7 +67,11 @@ class DashboardController extends Controller
 
     public function statistics(Request $request): Response
     {
-        return Inertia::render('Statistics', ['stats' => $this->stats($request)]);
+        return Inertia::render('Statistics', [
+            'stats' => $this->stats($request),
+            'quality' => $this->quality($request),
+            'workload' => $request->user()->role === 'admin' ? $this->workload() : [],
+        ]);
     }
 
     public function branches(): Response
@@ -185,22 +193,82 @@ class DashboardController extends Controller
         ];
     }
 
-    /** @return array<string, int> */
+    /** @return array{total: int, cold: int, warm: int, hot: int, closing: int, unclassified: int} */
     private function stats(Request $request): array
+    {
+        $counts = (array) $this->activeLeads($request)
+            ->selectRaw("COUNT(*) as total, COALESCE(SUM(CASE WHEN l.current_stage = 'clicked' THEN 1 ELSE 0 END), 0) as cold, COALESCE(SUM(CASE WHEN l.current_stage IN ('asked', 'price_list') THEN 1 ELSE 0 END), 0) as warm, COALESCE(SUM(CASE WHEN l.current_stage IN ('offline', 'online', 'closing_pending_transfer') THEN 1 ELSE 0 END), 0) as hot, COALESCE(SUM(CASE WHEN l.current_stage IN ('closing', 'repeat_order') THEN 1 ELSE 0 END), 0) as closing, COALESCE(SUM(CASE WHEN l.current_stage IS NULL THEN 1 ELSE 0 END), 0) as unclassified")
+            ->first();
+
+        return [
+            'total' => (int) ($counts['total'] ?? 0),
+            'cold' => (int) ($counts['cold'] ?? 0),
+            'warm' => (int) ($counts['warm'] ?? 0),
+            'hot' => (int) ($counts['hot'] ?? 0),
+            'closing' => (int) ($counts['closing'] ?? 0),
+            'unclassified' => (int) ($counts['unclassified'] ?? 0),
+        ];
+    }
+
+    /** @return array{total: int, unassigned: int, follow_up_due: int, needs_qualification: int} */
+    private function priorities(Request $request): array
+    {
+        $counts = (array) $this->activeLeads($request)
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(CASE WHEN l.assigned_user_id IS NULL THEN 1 ELSE 0 END), 0) as unassigned, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NOT NULL AND l.next_follow_up_at <= ? THEN 1 ELSE 0 END), 0) as follow_up_due, COALESCE(SUM(CASE WHEN l.intent_buying IS NULL OR l.usage_date IS NULL OR l.budget IS NULL THEN 1 ELSE 0 END), 0) as needs_qualification', [now()])
+            ->first();
+
+        return [
+            'total' => (int) ($counts['total'] ?? 0),
+            'unassigned' => $request->user()->role === 'admin' ? (int) ($counts['unassigned'] ?? 0) : 0,
+            'follow_up_due' => (int) ($counts['follow_up_due'] ?? 0),
+            'needs_qualification' => (int) ($counts['needs_qualification'] ?? 0),
+        ];
+    }
+
+    /** @return list<object{id: int, name: string|null, current_stage: string|null, next_follow_up_at: string|null, updated_at: string|null, owner_name: string|null}> */
+    private function recentLeads(Request $request): array
+    {
+        return $this->activeLeads($request)
+            ->leftJoin('users as u', 'u.id', '=', 'l.assigned_user_id')
+            ->orderByDesc('l.updated_at')
+            ->limit(6)
+            ->get(['l.id', 'l.name', 'l.current_stage', 'l.next_follow_up_at', 'l.updated_at', 'u.name as owner_name'])
+            ->all();
+    }
+
+    /** @return array{total: int, complete: int, follow_up_set: int} */
+    private function quality(Request $request): array
+    {
+        $counts = (array) $this->activeLeads($request)
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(CASE WHEN l.intent_buying IS NOT NULL AND l.usage_date IS NOT NULL AND l.budget IS NOT NULL THEN 1 ELSE 0 END), 0) as complete, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NOT NULL THEN 1 ELSE 0 END), 0) as follow_up_set')
+            ->first();
+
+        return [
+            'total' => (int) ($counts['total'] ?? 0),
+            'complete' => (int) ($counts['complete'] ?? 0),
+            'follow_up_set' => (int) ($counts['follow_up_set'] ?? 0),
+        ];
+    }
+
+    /** @return list<object{name: string, cs_name: string|null, lead_count: int}> */
+    private function workload(): array
+    {
+        return DB::table('branches as b')
+            ->leftJoin('users as u', fn ($join) => $join->on('u.branch_id', '=', 'b.id')->where('u.role', 'cs')->where('u.active', true))
+            ->leftJoin('leads as l', fn ($join) => $join->on('l.assigned_user_id', '=', 'u.id')->whereNull('l.archived_at'))
+            ->groupBy('b.id', 'b.name', 'u.name')
+            ->orderBy('b.name')
+            ->get(['b.name', 'u.name as cs_name', DB::raw('COUNT(l.id) as lead_count')])
+            ->all();
+    }
+
+    private function activeLeads(Request $request): Builder
     {
         $query = DB::table('leads as l')->whereNull('l.archived_at');
         if ($request->user()->role !== 'admin') {
             $query->where('l.assigned_user_id', $request->user()->id);
         }
 
-        return [
-            'total' => (clone $query)->count(),
-            'cold' => (clone $query)->where('current_stage', 'clicked')->count(),
-            'warm' => (clone $query)->whereIn('current_stage', ['asked', 'price_list'])->count(),
-            'hot' => (clone $query)->whereIn('current_stage', ['offline', 'online', 'closing_pending_transfer'])->count(),
-            'closing' => (clone $query)->whereIn('current_stage', ['closing', 'repeat_order'])->count(),
-            'unassigned' => $request->user()->role === 'admin' ? (clone $query)->whereNull('l.assigned_user_id')->count() : 0,
-            'follow_up_due' => (clone $query)->whereNotNull('l.next_follow_up_at')->where('l.next_follow_up_at', '<=', now())->count(),
-        ];
+        return $query;
     }
 }

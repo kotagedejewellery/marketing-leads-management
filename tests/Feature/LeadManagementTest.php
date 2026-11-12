@@ -266,6 +266,72 @@ class LeadManagementTest extends TestCase
         ]);
     }
 
+    public function test_incomplete_qualification_queue_matches_dashboard_priority(): void
+    {
+        $admin = $this->user('admin');
+        $incompleteLead = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285500000001',
+            'contact_key' => 'phone:6285500000001',
+            'intent_buying' => 'Nikahan',
+            'budget' => '10 juta',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \DB::table('leads')->insert([
+            'contact_raw' => '+6285500000002',
+            'contact_key' => 'phone:6285500000002',
+            'intent_buying' => 'Nikahan',
+            'usage_date' => '2026-12-12',
+            'budget' => '10 juta',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->get('/leads?queue=needs_qualification')
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Leads/Index')
+                ->where('leads.total', 1)
+                ->where('leads.data.0.id', $incompleteLead),
+            );
+    }
+
+    public function test_cs_can_open_its_dashboard_priority_queues(): void
+    {
+        $cs = $this->user('cs');
+        $priorityLead = \DB::table('leads')->insertGetId([
+            'assigned_user_id' => $cs->id,
+            'contact_raw' => '+6285500000003',
+            'contact_key' => 'phone:6285500000003',
+            'intent_buying' => 'Nikahan',
+            'budget' => '10 juta',
+            'next_follow_up_at' => now()->subMinute(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \DB::table('leads')->insert([
+            'assigned_user_id' => $cs->id,
+            'contact_raw' => '+6285500000004',
+            'contact_key' => 'phone:6285500000004',
+            'intent_buying' => 'Nikahan',
+            'usage_date' => '2026-12-12',
+            'budget' => '10 juta',
+            'next_follow_up_at' => now()->addDay(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($cs)->get('/leads?queue=needs_qualification')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('leads.total', 1)
+                ->where('leads.data.0.id', $priorityLead),
+            );
+        $this->actingAs($cs)->get('/leads?queue=follow_up_due')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('leads.total', 1)
+                ->where('leads.data.0.id', $priorityLead),
+            );
+    }
+
     public function test_admin_can_archive_a_lead_without_removing_its_history(): void
     {
         $admin = $this->user('admin');

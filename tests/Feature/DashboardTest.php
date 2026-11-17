@@ -30,6 +30,8 @@ class DashboardTest extends TestCase
             $table->string('budget')->nullable();
             $table->timestamp('archived_at')->nullable();
             $table->timestamp('next_follow_up_at')->nullable();
+            $table->timestamp('crm_taken_over_at')->nullable();
+            $table->unsignedBigInteger('revision')->default(0);
             $table->timestamps();
         });
 
@@ -38,6 +40,23 @@ class DashboardTest extends TestCase
             $table->unsignedBigInteger('lead_id');
             $table->string('milestone');
             $table->boolean('is_active')->default(false);
+        });
+        Schema::create('lead_activity', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('lead_id');
+            $table->unsignedBigInteger('actor_id')->nullable();
+            $table->string('action');
+            $table->text('detail')->nullable();
+            $table->timestamp('created_at')->nullable();
+        });
+        Schema::create('lead_collaborators', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('lead_id');
+            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('added_by')->nullable();
+            $table->timestamp('added_at')->nullable();
+            $table->timestamp('removed_at')->nullable();
+            $table->unique(['lead_id', 'user_id']);
         });
 
         Schema::table('users', function (Blueprint $table) {
@@ -228,5 +247,40 @@ class DashboardTest extends TestCase
             ->assertSessionHasErrors('branch');
 
         $this->assertDatabaseHas('branches', ['id' => $branchId]);
+    }
+
+    public function test_deactivating_cs_records_why_they_were_removed_from_a_lead(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'admin'])->save();
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Pusat']);
+        $cs = User::factory()->create(['name' => 'CS Pusat']);
+        $cs->forceFill(['role' => 'cs', 'branch_id' => $branchId, 'active' => true])->save();
+        $leadId = \DB::table('leads')->insertGetId([
+            'assigned_user_id' => $cs->id,
+            'name' => 'Lead kerja sama',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \DB::table('lead_collaborators')->insert([
+            'lead_id' => $leadId,
+            'user_id' => $cs->id,
+            'added_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->patch("/accounts/{$cs->id}", [
+                'name' => 'CS Pusat',
+                'email' => $cs->email,
+                'role' => 'cs',
+                'branch_id' => $branchId,
+                'active' => false,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'assigned_user_id' => null]);
+        $this->assertDatabaseMissing('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $cs->id, 'removed_at' => null]);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'CS utama dilepas']);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'CS pendamping dilepas']);
     }
 }

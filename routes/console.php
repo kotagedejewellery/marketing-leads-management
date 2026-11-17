@@ -11,3 +11,7 @@ Artisan::command('inspire', function () {
 Schedule::command('leads:sync-google-sheet')
     ->everyTwoMinutes()
     ->withoutOverlapping();
+
+Schedule::command('leads:mark-overdue-crm')
+    ->everyMinute()
+    ->withoutOverlapping();

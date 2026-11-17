@@ -23,6 +23,8 @@ class UpdateLeadRequest extends FormRequest
             'keterangan' => ['nullable', 'string'],
             'next_follow_up_at' => ['nullable', 'date'],
             'assigned_user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'crm_taken_over' => ['nullable', 'boolean'],
+            'revision' => ['nullable', 'integer', 'min:0'],
             'milestones' => ['array'],
             'milestones.*' => ['in:clicked,asked,price_list,offline,online,closing_repeat'],
         ];

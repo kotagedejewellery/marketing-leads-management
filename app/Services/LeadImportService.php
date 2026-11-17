@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\LeadSourceDate;
 use Illuminate\Support\Facades\DB;
 
 class LeadImportService
@@ -17,7 +18,7 @@ class LeadImportService
 
     /**
      * @param  list<array<string, string|null>>  $rows
-     * @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int}
+     * @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int}
      */
     public function import(array $rows, ?int $actorId, ?string $spreadsheetId = null, ?int $sourceBranchId = null): array
     {
@@ -35,7 +36,7 @@ class LeadImportService
             ->groupBy(fn (object $user) => $this->csKey($user->name))
             ->map(fn ($users) => $users->count() === 1 ? $users->first()->id : null)
             ->all();
-        $summary = ['inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0];
+        $summary = ['inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0];
 
         DB::transaction(function () use ($rows, $actorId, $spreadsheetId, $sourceBranchId, $sourceBranch, $branchOwner, $known, $csByName, &$summary): void {
             foreach ($rows as $row) {
@@ -106,6 +107,7 @@ class LeadImportService
                     : ($csByName[$this->csKey((string) ($row['imported_cs_name'] ?? ''))] ?? null);
                 $milestones = $this->initialMilestones($row);
                 $classification = $this->classification($row, $milestones);
+                $leadCreatedOn = LeadSourceDate::parse($row['source_date_raw'] ?? null);
                 $leadId = DB::table('leads')->insertGetId([
                     'assigned_user_id' => $owner,
                     'source_branch_id' => $sourceBranchId,
@@ -113,6 +115,7 @@ class LeadImportService
                     'contact_key' => $key,
                     'source_row_no' => $row['source_row_no'] ?? null,
                     'source_date_raw' => $row['source_date_raw'] ?? null,
+                    'lead_created_on' => $leadCreatedOn,
                     'contact_raw' => $contact,
                     'name' => $match[2] ?? null,
                     'phone' => $match[1] ?? null,
@@ -168,6 +171,7 @@ class LeadImportService
                 $summary['inserted']++;
                 $summary['unassigned'] += $owner ? 0 : 1;
                 $summary['needs_review'] += $classification ? 0 : 1;
+                $summary['missing_dates'] += $leadCreatedOn ? 0 : 1;
             }
         });
 

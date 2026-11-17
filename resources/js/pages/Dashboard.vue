@@ -6,6 +6,7 @@ import {
     ClipboardList,
     FileWarning,
     GitCompareArrows,
+    ShieldAlert,
     UserRoundPlus,
 } from '@lucide/vue';
 import { computed } from 'vue';
@@ -15,6 +16,7 @@ const props = defineProps<{
         total: number;
         unassigned: number;
         follow_up_due: number;
+        crm_taken_over: number;
         needs_qualification: number;
         source_conflict: number;
     };
@@ -46,6 +48,13 @@ const priorityRows = computed(() => [
     },
     ...(isAdmin
         ? [
+              {
+                  label: 'Lead ditandai CRM',
+                  detail: 'Follow-up terlewati tanpa aktivitas lanjutan.',
+                  value: props.priorities.crm_taken_over,
+                  href: '/leads?queue=crm_taken_over',
+                  icon: ShieldAlert,
+              },
               {
                   label: 'Nomor muncul di cabang lain',
                   detail: 'Periksa pemilik lead sebelum tindak lanjut dilakukan.',

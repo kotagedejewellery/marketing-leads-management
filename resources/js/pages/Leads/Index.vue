@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
+import { ChevronDown, ChevronUp, SlidersHorizontal } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import LeadSaveFeedback from '@/components/LeadSaveFeedback.vue';
 import LeadQuickUpdate from '@/components/LeadQuickUpdate.vue';
 import { budgetOptions } from '@/lib/lead-options';
 import {
@@ -25,14 +27,18 @@ type Lead = {
     imported_definition: string | null;
     current_stage: string | null;
     next_follow_up_at: string | null;
+    crm_taken_over_at: string | null;
     milestones: string[];
     latest_activity: string | null;
     latest_activity_detail: string | null;
     latest_activity_at: string | null;
     owner_name: string | null;
     branch_name: string | null;
+    collaborators: { id: number; name: string }[];
     source_conflict_at: string | null;
     source_conflict_branch_name: string | null;
+    lead_created_on: string | null;
+    revision: number;
     created_at: string;
     updated_at: string;
 };
@@ -44,6 +50,10 @@ type Page = {
     prev_page_url: string | null;
     next_page_url: string | null;
 };
+type LeadSaveState = {
+    state: 'saving' | 'saved' | 'error' | 'conflict';
+    message: string;
+};
 const props = defineProps<{
     leads: Page;
     filters: {
@@ -51,6 +61,14 @@ const props = defineProps<{
         branch?: string;
         stage?: string;
         queue?: string;
+        intent?: string;
+        budget?: string;
+        lead_date_from?: string;
+        lead_date_to?: string;
+        lead_date_status?: string;
+        follow_up?: string;
+        handling?: string;
+        crm?: string;
         archived?: string;
     };
     branches: { id: number; name: string }[];
@@ -64,6 +82,26 @@ const q = ref(props.filters.q || '');
 const branch = ref(props.filters.branch || '');
 const stage = ref(props.filters.stage || '');
 const queue = ref(props.filters.queue || '');
+const intent = ref(props.filters.intent || '');
+const budget = ref(props.filters.budget || '');
+const leadDateFrom = ref(props.filters.lead_date_from || '');
+const leadDateTo = ref(props.filters.lead_date_to || '');
+const leadDateStatus = ref(props.filters.lead_date_status || '');
+const followUp = ref(props.filters.follow_up || '');
+const handling = ref(props.filters.handling || '');
+const crm = ref(props.filters.crm || '');
+const showAdvancedFilters = ref(
+    Boolean(
+        intent.value ||
+        budget.value ||
+        leadDateFrom.value ||
+        leadDateTo.value ||
+        leadDateStatus.value ||
+        followUp.value ||
+        handling.value ||
+        crm.value,
+    ),
+);
 const isFiltering = ref(false);
 const selectedLeadIds = ref<number[]>([]);
 const visibleLeadIds = computed(() => props.leads.data.map((lead) => lead.id));
@@ -78,11 +116,17 @@ const someVisibleSelected = computed(
         visibleLeadIds.value.some((id) => selectedLeadIds.value.includes(id)),
 );
 const bulkForm = useForm({ assigned_user_id: '', lead_ids: [] as number[] });
+const collaboratorBulkForm = useForm({
+    user_id: '',
+    lead_ids: [] as number[],
+});
 const selectionForm = useForm({ lead_ids: [] as number[] });
 const archiveDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
 const discardChangesDialogOpen = ref(false);
 const dirtyLeadIds = ref(new Set<number>());
+const leadSaveStates = ref(new Map<number, LeadSaveState>());
+const leadRetryVersions = ref(new Map<number, number>());
 const pendingDiscardAction = ref<(() => void) | null>(null);
 const isDesktopWorkspace = ref(false);
 const importForm = useForm<{
@@ -119,7 +163,20 @@ const newLead = useForm({
 const showingNewLead = ref(false);
 const hasUnsavedChanges = computed(() => dirtyLeadIds.value.size > 0);
 const hasFilters = computed(() =>
-    Boolean(q.value || branch.value || stage.value || queue.value),
+    Boolean(
+        q.value ||
+        branch.value ||
+        stage.value ||
+        queue.value ||
+        intent.value ||
+        budget.value ||
+        leadDateFrom.value ||
+        leadDateTo.value ||
+        leadDateStatus.value ||
+        followUp.value ||
+        handling.value ||
+        crm.value,
+    ),
 );
 const selectedFile = computed(() => {
     if (!importForm.csv_file) return '';
@@ -137,6 +194,19 @@ const activeFilterText = computed(() =>
         branch.value ? 'Cabang dipilih' : '',
         stage.value ? 'Tahap dipilih' : '',
         queue.value ? 'Queue dipilih' : '',
+        intent.value ? `Kebutuhan: ${intent.value}` : '',
+        budget.value ? `Budget: ${budget.value}` : '',
+        leadDateFrom.value || leadDateTo.value
+            ? `Tanggal lead: ${leadDateFrom.value || 'awal'} – ${leadDateTo.value || 'akhir'}`
+            : '',
+        leadDateStatus.value === 'known'
+            ? 'Tanggal lead tercatat'
+            : leadDateStatus.value === 'missing'
+              ? 'Tanggal lead belum tercatat'
+              : '',
+        followUp.value ? 'Follow-up dipilih' : '',
+        handling.value ? 'Peran penanganan dipilih' : '',
+        crm.value ? 'Status CRM dipilih' : '',
     ]
         .filter(Boolean)
         .join(' · '),
@@ -160,6 +230,31 @@ const trackDirtyLead = (leadId: number, isDirty: boolean) => {
     }
     dirtyLeadIds.value = next;
 };
+const trackLeadSaveState = (
+    leadId: number,
+    state: 'idle' | 'saving' | 'saved' | 'error' | 'conflict',
+    message: string,
+) => {
+    const next = new Map(leadSaveStates.value);
+    if (state === 'idle') {
+        next.delete(leadId);
+    } else {
+        next.set(leadId, { state, message });
+    }
+    leadSaveStates.value = next;
+};
+const leadSaveState = (leadId: number) => leadSaveStates.value.get(leadId);
+const leadRetryVersion = (leadId: number) =>
+    leadRetryVersions.value.get(leadId) || 0;
+const retryLeadSave = (leadId: number) => {
+    const next = new Map(leadRetryVersions.value);
+    next.set(leadId, (next.get(leadId) || 0) + 1);
+    leadRetryVersions.value = next;
+};
+const resolveLeadConflict = (leadId: number) => {
+    trackDirtyLead(leadId, false);
+    window.location.assign(`/leads/${leadId}`);
+};
 const discardChangesAndContinue = () => {
     const action = pendingDiscardAction.value;
     dirtyLeadIds.value = new Set();
@@ -175,6 +270,14 @@ const applyFiltersNow = () =>
             branch: branch.value || undefined,
             stage: stage.value || undefined,
             queue: queue.value || undefined,
+            intent: intent.value || undefined,
+            budget: budget.value || undefined,
+            lead_date_from: leadDateFrom.value || undefined,
+            lead_date_to: leadDateTo.value || undefined,
+            lead_date_status: leadDateStatus.value || undefined,
+            follow_up: followUp.value || undefined,
+            handling: handling.value || undefined,
+            crm: crm.value || undefined,
             archived: props.archiveMode ? '1' : undefined,
         },
         {
@@ -195,6 +298,15 @@ const clearFilters = () =>
         branch.value = '';
         stage.value = '';
         queue.value = '';
+        intent.value = '';
+        budget.value = '';
+        leadDateFrom.value = '';
+        leadDateTo.value = '';
+        leadDateStatus.value = '';
+        followUp.value = '';
+        handling.value = '';
+        crm.value = '';
+        showAdvancedFilters.value = false;
         applyFiltersNow();
     });
 const importCsvNow = () =>
@@ -246,6 +358,14 @@ const stageLabel = (value: string | null) =>
         online: 'Diskusi Online',
         closing_repeat: 'Closing / Repeat Order',
     })[value || ''];
+const formatLeadDate = (value: string | null) =>
+    value
+        ? new Intl.DateTimeFormat('id-ID', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+          }).format(new Date(`${value}T12:00:00`))
+        : '—';
 const assignSelectedNow = () => {
     bulkForm.lead_ids = selectedLeadIds.value;
     bulkForm.post('/leads/assign', {
@@ -256,9 +376,22 @@ const assignSelectedNow = () => {
     });
 };
 const assignSelected = () => guardUnsavedChanges(assignSelectedNow);
+const addCollaboratorSelectedNow = () => {
+    collaboratorBulkForm.lead_ids = selectedLeadIds.value;
+    collaboratorBulkForm.post('/leads/collaborators', {
+        onSuccess: () => {
+            selectedLeadIds.value = [];
+            collaboratorBulkForm.reset();
+        },
+    });
+};
+const addCollaboratorSelected = () =>
+    guardUnsavedChanges(addCollaboratorSelectedNow);
 const clearSelection = () => {
     selectedLeadIds.value = [];
     selectionForm.reset();
+    bulkForm.reset();
+    collaboratorBulkForm.reset();
 };
 const toggleVisibleSelection = () => {
     if (allVisibleSelected.value) {
@@ -420,17 +553,19 @@ onBeforeUnmount(() => {
                     chat, spreadsheet, atau kampanye.
                 </p>
                 <div class="mt-5 grid gap-4 lg:grid-cols-2">
-                    <label
-                        v-if="isAdmin"
-                        class="grid gap-2 text-sm font-semibold"
-                        >Nama<input v-model="newLead.name" class="kgj-input"
+                    <label class="grid gap-2 text-sm font-semibold"
+                        >Nama lead<input
+                            v-model="newLead.name"
+                            class="kgj-input"
                     /></label>
                     <label class="grid gap-2 text-sm font-semibold"
                         >Nomor WhatsApp<input
                             v-model="newLead.phone"
                             class="kgj-input"
                     /></label>
-                    <label class="grid gap-2 text-sm font-semibold"
+                    <label
+                        v-if="isAdmin"
+                        class="grid gap-2 text-sm font-semibold"
                         >CS penanggung jawab<select
                             v-model="newLead.assigned_user_id"
                             class="kgj-input"
@@ -445,11 +580,17 @@ onBeforeUnmount(() => {
                             </option>
                         </select></label
                     >
+                    <p
+                        v-else
+                        class="rounded-lg border border-kgj-line bg-kgj-canvas px-3 py-3 text-sm leading-5 text-[#4f514a]"
+                    >
+                        Lead ini otomatis menjadi tanggung jawab Anda.
+                    </p>
                     <label class="grid gap-2 text-sm font-semibold"
-                        >Tanggal sumber<input
+                        >Tanggal lead<input
                             v-model="newLead.source_date_raw"
+                            type="date"
                             class="kgj-input"
-                            placeholder="Contoh: 31"
                     /></label>
                     <label class="grid gap-2 text-sm font-semibold"
                         >Respond time<input
@@ -632,6 +773,22 @@ onBeforeUnmount(() => {
                     </option>
                 </select></label
             >
+            <button
+                class="kgj-button-secondary inline-flex items-center justify-center gap-2"
+                type="button"
+                :aria-expanded="showAdvancedFilters"
+                aria-controls="lead-advanced-filters"
+                @click="showAdvancedFilters = !showAdvancedFilters"
+            >
+                <SlidersHorizontal class="size-4" aria-hidden="true" />
+                Filter lengkap
+                <ChevronUp
+                    v-if="showAdvancedFilters"
+                    class="size-4"
+                    aria-hidden="true"
+                />
+                <ChevronDown v-else class="size-4" aria-hidden="true" />
+            </button>
             <label v-if="isAdmin" class="text-sm font-medium"
                 ><span class="sr-only">Queue kerja admin</span
                 ><select
@@ -646,6 +803,7 @@ onBeforeUnmount(() => {
                         Perlu kualifikasi
                     </option>
                     <option value="follow_up_due">Follow-up jatuh tempo</option>
+                    <option value="crm_taken_over">Diambil alih CRM</option>
                     <option value="source_conflict">Nomor lintas cabang</option>
                 </select></label
             >
@@ -710,6 +868,122 @@ onBeforeUnmount(() => {
                 </button>
             </form>
         </div>
+        <section
+            v-if="showAdvancedFilters"
+            id="lead-advanced-filters"
+            class="kgj-surface mt-3 grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4"
+            aria-label="Filter lead lengkap"
+        >
+            <label class="grid gap-2 text-sm font-semibold"
+                >Kebutuhan
+                <select
+                    v-model="intent"
+                    class="kgj-input"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                >
+                    <option value="">Semua kebutuhan</option>
+                    <option>Tunangan</option>
+                    <option>Lamaran</option>
+                    <option>Nikahan</option>
+                    <option>Anniversary</option>
+                    <option>Lainnya</option>
+                </select>
+            </label>
+            <label class="grid gap-2 text-sm font-semibold"
+                >Budget
+                <select
+                    v-model="budget"
+                    class="kgj-input"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                >
+                    <option value="">Semua budget</option>
+                    <option
+                        v-for="option in budgetOptions"
+                        :key="option"
+                        :value="option"
+                    >
+                        {{ option }}
+                    </option>
+                </select>
+            </label>
+            <label class="grid gap-2 text-sm font-semibold"
+                >Tanggal lead dari
+                <input
+                    v-model="leadDateFrom"
+                    class="kgj-input"
+                    type="date"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                />
+            </label>
+            <label class="grid gap-2 text-sm font-semibold"
+                >Tanggal lead sampai
+                <input
+                    v-model="leadDateTo"
+                    class="kgj-input"
+                    type="date"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                />
+            </label>
+            <label class="grid gap-2 text-sm font-semibold"
+                >Status tanggal lead
+                <select
+                    v-model="leadDateStatus"
+                    class="kgj-input"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                >
+                    <option value="">Semua tanggal</option>
+                    <option value="known">Tanggal tercatat</option>
+                    <option value="missing">Tanggal belum tercatat</option>
+                </select>
+            </label>
+            <label class="grid gap-2 text-sm font-semibold"
+                >Follow-up
+                <select
+                    v-model="followUp"
+                    class="kgj-input"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                >
+                    <option value="">Semua follow-up</option>
+                    <option value="scheduled">Sudah dijadwalkan</option>
+                    <option value="none">Belum dijadwalkan</option>
+                    <option value="today">Hari ini</option>
+                    <option value="tomorrow">Besok</option>
+                    <option value="overdue">Jatuh tempo</option>
+                </select>
+            </label>
+            <label v-if="!isAdmin" class="grid gap-2 text-sm font-semibold"
+                >Peran saya
+                <select
+                    v-model="handling"
+                    class="kgj-input"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                >
+                    <option value="">Semua lead saya</option>
+                    <option value="primary">CS utama</option>
+                    <option value="collaborator">CS pendamping</option>
+                </select>
+            </label>
+            <label class="grid gap-2 text-sm font-semibold"
+                >Status CRM
+                <select
+                    v-model="crm"
+                    class="kgj-input"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                >
+                    <option value="">Semua status CRM</option>
+                    <option value="not_taken_over">Belum diambil CRM</option>
+                    <option value="taken_over">Diambil alih CRM</option>
+                </select>
+            </label>
+        </section>
         <div
             class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[#62665b]"
             aria-live="polite"
@@ -800,6 +1074,39 @@ onBeforeUnmount(() => {
                 >
                     {{ bulkForm.processing ? 'Menugaskan…' : 'Tugaskan' }}
                 </button>
+                <label v-if="isAdmin" class="sr-only" for="bulk-collaborator"
+                    >CS pendamping</label
+                ><select
+                    v-if="isAdmin"
+                    id="bulk-collaborator"
+                    v-model="collaboratorBulkForm.user_id"
+                    class="kgj-input sm:max-w-xs"
+                >
+                    <option value="">Pilih CS pendamping</option>
+                    <option
+                        v-for="account in csAccounts"
+                        :key="account.id"
+                        :value="String(account.id)"
+                    >
+                        {{ account.branch_name }} — {{ account.name }}
+                    </option>
+                </select>
+                <button
+                    v-if="isAdmin"
+                    class="kgj-button-secondary"
+                    type="button"
+                    :disabled="
+                        collaboratorBulkForm.processing ||
+                        !collaboratorBulkForm.user_id
+                    "
+                    @click="addCollaboratorSelected"
+                >
+                    {{
+                        collaboratorBulkForm.processing
+                            ? 'Menambahkan…'
+                            : 'Tambah pendamping'
+                    }}
+                </button>
                 <button
                     class="kgj-button-secondary"
                     type="button"
@@ -862,6 +1169,10 @@ onBeforeUnmount(() => {
                     ><span class="mt-1 block text-sm text-[#62665b]">{{
                         lead.phone || lead.contact_raw
                     }}</span
+                    ><span class="mt-2 block text-xs text-[#62665b]"
+                        >Tanggal lead:
+                        {{ formatLeadDate(lead.lead_created_on) }}</span
+                    >
                     ><span class="mt-3 block text-sm font-semibold">{{
                         lead.owner_name || 'Belum ditugaskan'
                     }}</span
@@ -876,6 +1187,19 @@ onBeforeUnmount(() => {
                             lead.imported_definition ||
                             'Belum dikualifikasi'
                         }}</span
+                    ><span
+                        v-if="lead.collaborators.length"
+                        class="mt-2 block text-xs font-semibold text-[#665a43]"
+                        >Pendamping:
+                        {{
+                            lead.collaborators
+                                .map((item) => item.name)
+                                .join(', ')
+                        }}</span
+                    ><span
+                        v-if="lead.crm_taken_over_at"
+                        class="mt-2 block text-xs font-semibold text-[#8a6b2d]"
+                        >Diambil alih CRM</span
                     ><span
                         v-if="lead.source_conflict_at"
                         class="mt-2 block text-xs font-semibold text-kgj-rose"
@@ -895,11 +1219,20 @@ onBeforeUnmount(() => {
                     >
                     ></Link
                 >
+                <LeadSaveFeedback
+                    :state="leadSaveState(lead.id)?.state"
+                    :message="leadSaveState(lead.id)?.message"
+                    @retry="retryLeadSave(lead.id)"
+                    @resolve-conflict="resolveLeadConflict(lead.id)"
+                />
                 <LeadQuickUpdate
                     v-if="!archiveMode"
                     class="mt-5"
                     :lead="lead"
+                    :can-mark-crm="isAdmin"
+                    :retry-save-version="leadRetryVersion(lead.id)"
                     @dirty-change="trackDirtyLead"
+                    @save-state="trackLeadSaveState"
                 />
                 <Link
                     v-else
@@ -954,7 +1287,7 @@ onBeforeUnmount(() => {
                         >
                             CS / Cabang
                         </th>
-                        <th class="w-40 min-w-40 p-4">Dibuat</th>
+                        <th class="w-40 min-w-40 p-4">Tanggal lead</th>
                         <template v-if="!archiveMode">
                             <th class="p-4">Cold</th>
                             <th class="p-4">Warm</th>
@@ -965,9 +1298,6 @@ onBeforeUnmount(() => {
                             <th class="p-4">Keterangan</th>
                             <th class="p-4">Follow-up</th>
                             <th class="p-4">Riwayat</th>
-                            <th class="sticky right-0 z-40 bg-[#f8f5ee] p-4">
-                                Autosimpan
-                            </th>
                         </template>
                         <th v-else class="p-4">Detail</th>
                     </tr>
@@ -1003,6 +1333,14 @@ onBeforeUnmount(() => {
                                     :title="lead.phone || lead.contact_raw"
                                     >{{ lead.phone || lead.contact_raw }}</small
                                 >
+                                <LeadSaveFeedback
+                                    :state="leadSaveState(lead.id)?.state"
+                                    :message="leadSaveState(lead.id)?.message"
+                                    @retry="retryLeadSave(lead.id)"
+                                    @resolve-conflict="
+                                        resolveLeadConflict(lead.id)
+                                    "
+                                />
                             </td>
                             <td
                                 class="sticky left-[17.5rem] z-10 w-44 min-w-44 overflow-hidden bg-kgj-paper p-4 group-hover:bg-[#fcfaf5]"
@@ -1029,23 +1367,38 @@ onBeforeUnmount(() => {
                                         'cabang lain'
                                     }}</small
                                 >
+                                <small
+                                    v-if="lead.collaborators.length"
+                                    class="mt-1 block truncate font-semibold text-[#665a43]"
+                                    :title="`CS pendamping: ${lead.collaborators.map((item) => item.name).join(', ')}`"
+                                    >+{{ lead.collaborators.length }} CS
+                                    pendamping</small
+                                >
+                                <small
+                                    v-if="lead.crm_taken_over_at"
+                                    class="mt-1 block font-semibold text-[#8a6b2d]"
+                                    >Diambil alih CRM</small
+                                >
                             </td>
                             <td
                                 class="w-40 min-w-40 p-4 text-sm text-[#4f514a]"
                             >
-                                <time :datetime="lead.created_at">
-                                    {{
-                                        new Date(
-                                            lead.created_at,
-                                        ).toLocaleString('id-ID')
-                                    }}
+                                <time
+                                    v-if="lead.lead_created_on"
+                                    :datetime="lead.lead_created_on"
+                                >
+                                    {{ formatLeadDate(lead.lead_created_on) }}
                                 </time>
+                                <span v-else>—</span>
                             </td>
                             <LeadQuickUpdate
                                 v-if="!archiveMode"
                                 variant="table"
                                 :lead="lead"
+                                :can-mark-crm="isAdmin"
+                                :retry-save-version="leadRetryVersion(lead.id)"
                                 @dirty-change="trackDirtyLead"
+                                @save-state="trackLeadSaveState"
                             />
                             <td v-else class="p-4" colspan="1">
                                 <Link
@@ -1058,7 +1411,7 @@ onBeforeUnmount(() => {
                     </template>
                     <tr v-if="!leads.data.length">
                         <td
-                            :colspan="archiveMode ? 5 : 14"
+                            :colspan="archiveMode ? 5 : 13"
                             class="p-12 text-center text-[#62665b]"
                         >
                             {{

@@ -14,9 +14,12 @@ Route::middleware('auth')->group(function () {
     Route::post('leads/import', [LeadController::class, 'import'])->middleware(EnsureAdmin::class)->name('leads.import');
     Route::post('leads/sync-google-sheet', [LeadController::class, 'syncGoogleSheet'])->middleware(EnsureAdmin::class)->name('leads.sync-google-sheet');
     Route::post('leads/assign', [LeadController::class, 'assign'])->middleware(EnsureAdmin::class)->name('leads.assign');
+    Route::post('leads/collaborators', [LeadController::class, 'addCollaboratorSelected'])->middleware(EnsureAdmin::class)->name('leads.collaborators.add-selected');
+    Route::patch('leads/{lead}/collaborators', [LeadController::class, 'updateCollaborators'])->middleware(EnsureAdmin::class)->name('leads.collaborators.update');
     Route::post('leads/archive', [LeadController::class, 'archiveSelected'])->name('leads.archive-selected');
     Route::post('leads/restore', [LeadController::class, 'restoreSelected'])->name('leads.restore-selected');
     Route::delete('leads', [LeadController::class, 'destroySelected'])->name('leads.destroy-selected');
+    Route::get('leads/{lead}/history-preview', [LeadController::class, 'historyPreview'])->name('leads.history-preview');
     Route::get('leads/{lead}', [LeadController::class, 'show'])->name('leads.show');
     Route::patch('leads/{lead}', [LeadController::class, 'update'])->name('leads.update');
     Route::patch('leads/{lead}/archive', [LeadController::class, 'archive'])->name('leads.archive');

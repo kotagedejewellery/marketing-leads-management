@@ -53,6 +53,10 @@ services:
             - ./database/postgres/009_branch_sheet_sources.sql:/docker-entrypoint-initdb.d/009_branch_sheet_sources.sql:ro
             - ./database/postgres/010_branch_sync_conflicts.sql:/docker-entrypoint-initdb.d/010_branch_sync_conflicts.sql:ro
             - ./database/postgres/011_expand_chat_time.sql:/docker-entrypoint-initdb.d/011_expand_chat_time.sql:ro
+            - ./database/postgres/012_multi_cs_crm_takeover.sql:/docker-entrypoint-initdb.d/012_multi_cs_crm_takeover.sql:ro
+            - ./database/postgres/013_lead_revision.sql:/docker-entrypoint-initdb.d/013_lead_revision.sql:ro
+            - ./database/postgres/014_lead_created_on.sql:/docker-entrypoint-initdb.d/014_lead_created_on.sql:ro
+            - ./database/postgres/015_backfill_indonesian_lead_dates.sql:/docker-entrypoint-initdb.d/015_backfill_indonesian_lead_dates.sql:ro
         healthcheck:
             test:
                 [
@@ -81,11 +85,15 @@ services:
             - ./database/postgres/009_branch_sheet_sources.sql:/migrations/009_branch_sheet_sources.sql:ro
             - ./database/postgres/010_branch_sync_conflicts.sql:/migrations/010_branch_sync_conflicts.sql:ro
             - ./database/postgres/011_expand_chat_time.sql:/migrations/011_expand_chat_time.sql:ro
+            - ./database/postgres/012_multi_cs_crm_takeover.sql:/migrations/012_multi_cs_crm_takeover.sql:ro
+            - ./database/postgres/013_lead_revision.sql:/migrations/013_lead_revision.sql:ro
+            - ./database/postgres/014_lead_created_on.sql:/migrations/014_lead_created_on.sql:ro
+            - ./database/postgres/015_backfill_indonesian_lead_dates.sql:/migrations/015_backfill_indonesian_lead_dates.sql:ro
         command:
             [
                 'sh',
                 '-c',
-                'psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/002_lead_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/003_backfill_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/004_crud_lifecycle.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/005_lead_source_date.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/006_operational_hardening.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/007_simplify_lead_milestones.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/008_google_sheet_sync.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/009_branch_sheet_sources.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/010_branch_sync_conflicts.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/011_expand_chat_time.sql',
+                'psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/002_lead_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/003_backfill_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/004_crud_lifecycle.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/005_lead_source_date.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/006_operational_hardening.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/007_simplify_lead_milestones.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/008_google_sheet_sync.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/009_branch_sheet_sources.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/010_branch_sync_conflicts.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/011_expand_chat_time.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/012_multi_cs_crm_takeover.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/013_lead_revision.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/014_lead_created_on.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/015_backfill_indonesian_lead_dates.sql',
             ]
 
 volumes:

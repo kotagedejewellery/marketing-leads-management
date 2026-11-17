@@ -19,7 +19,7 @@ Admin dapat melihat seluruh data lead, mengelola cabang dan akun CS, memantau si
 
 ### Customer Service
 
-CS melihat lead yang ditugaskan kepadanya serta dapat menambahkan lead baru yang otomatis menjadi tanggung jawabnya. CS dapat memperbarui perkembangan konsultasi, kebutuhan pelanggan, jadwal follow-up, catatan, dan riwayat komunikasi pada lead miliknya.
+CS melihat lead yang menjadi tanggung jawab utama atau yang ditangani bersama sebagai CS pendamping. CS dapat menambahkan lead baru yang otomatis menjadi tanggung jawabnya, lalu memperbarui perkembangan konsultasi, kebutuhan pelanggan, jadwal follow-up, catatan, dan riwayat komunikasi.
 
 ## Alur kerja harian
 
@@ -27,9 +27,10 @@ CS melihat lead yang ditugaskan kepadanya serta dapat menambahkan lead baru yang
 2. Sistem membaca spreadsheet setiap dua menit dan menyimpan lead baru ke cabang sumbernya.
 3. Lead baru langsung ditugaskan ke akun CS aktif pada cabang tersebut.
 4. CS memperbarui status, kebutuhan, catatan, dan follow-up dari sistem.
-5. Admin memantau antrean follow-up, kualitas data, konflik nomor lintas cabang, serta sinkronisasi tiap cabang.
+5. Bila batas follow-up terlewati tanpa aktivitas lanjutan, sistem memberi penanda pengambilalihan CRM tanpa mengganti CS utama.
+6. Admin memantau antrean follow-up, pengambilalihan CRM, kualitas data, konflik nomor lintas cabang, serta sinkronisasi tiap cabang.
 
-Lead dapat diarsipkan agar tidak tampil pada daftar aktif dan dapat dipulihkan kembali. Penghapusan permanen hanya tersedia dari arsip karena tindakan ini juga menghapus seluruh riwayat lead. Daftar lead juga menyediakan pilihan semua lead pada halaman untuk aksi massal.
+Lead dapat diarsipkan agar tidak tampil pada daftar aktif dan dapat dipulihkan kembali. Penghapusan permanen hanya tersedia dari arsip karena tindakan ini juga menghapus seluruh riwayat lead. Daftar lead juga menyediakan pilihan semua lead pada halaman untuk aksi massal, termasuk menambahkan CS pendamping tanpa mengganti CS utama.
 
 ## Status perkembangan lead
 

@@ -15,7 +15,7 @@ class GoogleSheetSyncService
 
     public function __construct(private readonly LeadImportService $leadImporter) {}
 
-    /** @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, failed: int} */
+    /** @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int, failed: int} */
     public function sync(?int $actorId = null, ?int $branchId = null): array
     {
         $credentialsPath = (string) config('leads.google_sheets.credentials_path');
@@ -41,11 +41,11 @@ class GoogleSheetSyncService
                 throw new RuntimeException('Token Google Sheets tidak dapat dibuat.');
             }
             $client = Http::withToken($accessToken)->acceptJson()->timeout(25);
-            $summary = ['inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'failed' => 0];
+            $summary = ['inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0, 'failed' => 0];
             foreach ($sources as $source) {
                 try {
                     $sourceSummary = $this->syncBranch($client, (int) $source->id, (string) $source->google_spreadsheet_id, $actorId);
-                    foreach (['inserted', 'skipped', 'resurfaced', 'unassigned', 'needs_review'] as $key) {
+                    foreach (['inserted', 'skipped', 'resurfaced', 'unassigned', 'needs_review', 'missing_dates'] as $key) {
                         $summary[$key] += $sourceSummary[$key];
                     }
                     DB::table('branches')->where('id', $source->id)->update(['google_sheets_synced_at' => now(), 'google_sheets_sync_error' => null]);
@@ -68,7 +68,7 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int} */
+    /** @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int} */
     private function syncBranch(PendingRequest $client, int $branchId, string $spreadsheetId, ?int $actorId): array
     {
         $metadata = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?fields=sheets.properties")->throw()->json();
@@ -142,7 +142,7 @@ class GoogleSheetSyncService
         return $headers;
     }
 
-    /** @param array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, failed: int}|null $summary */
+    /** @param array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int, failed: int}|null $summary */
     private function record(string $status, ?array $summary = null, ?string $error = null): void
     {
         DB::table('lead_sync_runs')->insert([

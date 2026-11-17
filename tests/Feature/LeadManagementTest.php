@@ -7,6 +7,7 @@ use App\Services\LeadImportService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
 use OpenSpout\Common\Entity\Row;
@@ -44,6 +45,7 @@ class LeadManagementTest extends TestCase
             $table->string('contact_key')->nullable()->unique();
             $table->string('source_row_no')->nullable();
             $table->string('source_date_raw')->nullable();
+            $table->date('lead_created_on')->nullable();
             $table->text('contact_raw')->nullable();
             $table->string('name')->nullable();
             $table->string('phone')->nullable();
@@ -62,6 +64,8 @@ class LeadManagementTest extends TestCase
             $table->text('keterangan')->nullable();
             $table->string('current_stage')->nullable();
             $table->timestamp('next_follow_up_at')->nullable();
+            $table->timestamp('crm_taken_over_at')->nullable();
+            $table->unsignedBigInteger('revision')->default(0);
             $table->timestamp('archived_at')->nullable();
             $table->timestamps();
         });
@@ -80,6 +84,15 @@ class LeadManagementTest extends TestCase
             $table->string('action');
             $table->text('detail')->nullable();
             $table->timestamp('created_at')->nullable();
+        });
+        Schema::create('lead_collaborators', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('lead_id');
+            $table->unsignedBigInteger('user_id');
+            $table->unsignedBigInteger('added_by')->nullable();
+            $table->timestamp('added_at')->nullable();
+            $table->timestamp('removed_at')->nullable();
+            $table->unique(['lead_id', 'user_id']);
         });
         Schema::create('lead_source_occurrences', function (Blueprint $table) {
             $table->id();
@@ -114,7 +127,7 @@ class LeadManagementTest extends TestCase
         $response->assertRedirect('/leads');
         $response->assertSessionHas('inertia.flash_data.toast', [
             'type' => 'success',
-            'message' => 'Import selesai: 1 baru, 0 duplikat dilewati, 1 perlu ditugaskan, 0 perlu review.',
+            'message' => 'Import selesai: 1 baru, 0 duplikat dilewati, 1 perlu ditugaskan, 0 perlu review, 1 tanpa tanggal lead.',
         ]);
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285187725089', 'current_stage' => 'price_list']);
         $this->assertDatabaseHas('lead_milestones', ['milestone' => 'price_list', 'is_active' => true]);
@@ -285,10 +298,34 @@ class LeadManagementTest extends TestCase
 
         $response->assertRedirect('/leads');
         $this->assertDatabaseCount('leads', 2);
-        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177774444', 'source_date_raw' => '1 November 2026', 'source_branch_id' => $branchId, 'assigned_user_id' => $cs->id]);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177774444', 'source_date_raw' => '1 November 2026', 'lead_created_on' => '2026-11-01', 'source_branch_id' => $branchId, 'assigned_user_id' => $cs->id]);
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177775555', 'source_date_raw' => '2 November 2026']);
         $this->assertDatabaseHas('lead_activity', ['action' => 'Diimpor dari tab harian', 'detail' => 'Sumber: tab 1 (1 November 2026). Ditugaskan otomatis ke CS Yogyakarta (Yogyakarta).']);
         $this->assertDatabaseMissing('leads', ['contact_key' => 'phone:6285177776666']);
+        @unlink($path);
+    }
+
+    public function test_daily_import_normalizes_an_indonesian_source_date(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Jakarta']);
+        $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Jakarta']);
+        $path = tempnam(sys_get_temp_dir(), 'daily-leads-id-').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $this->writeDailyLeadSheet($writer, '1', '1 Januari 2027', '+62 851-7777-7777');
+        $writer->close();
+
+        $this->actingAs($admin)->post('/leads/import', [
+            'csv_file' => new UploadedFile($path, 'daily-leads-id.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+            'import_mode' => 'daily_tabs',
+            'branch_id' => $branchId,
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177777777',
+            'lead_created_on' => '2027-01-01',
+        ]);
         @unlink($path);
     }
 
@@ -299,6 +336,74 @@ class LeadManagementTest extends TestCase
         $leadId = \DB::table('leads')->insertGetId(['assigned_user_id' => $owner->id, 'contact_raw' => '+6285100000000', 'contact_key' => 'phone:6285100000000', 'created_at' => now(), 'updated_at' => now()]);
 
         $this->actingAs($viewer)->get("/leads/{$leadId}")->assertNotFound();
+    }
+
+    public function test_cs_can_filter_visible_leads_by_business_date_and_work_context(): void
+    {
+        $cs = $this->user('cs');
+        $otherCs = $this->user('cs');
+        \DB::table('leads')->insert([
+            [
+                'assigned_user_id' => $cs->id,
+                'contact_raw' => '+6285200000001',
+                'contact_key' => 'phone:6285200000001',
+                'current_stage' => 'asked',
+                'intent_buying' => 'Nikahan',
+                'budget' => 'Rp10,1–15 juta',
+                'lead_created_on' => '2026-11-01',
+                'next_follow_up_at' => now()->addDay(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'assigned_user_id' => $cs->id,
+                'contact_raw' => '+6285200000002',
+                'contact_key' => 'phone:6285200000002',
+                'current_stage' => 'clicked',
+                'intent_buying' => null,
+                'budget' => null,
+                'lead_created_on' => null,
+                'next_follow_up_at' => null,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'assigned_user_id' => $otherCs->id,
+                'contact_raw' => '+6285200000003',
+                'contact_key' => 'phone:6285200000003',
+                'current_stage' => 'asked',
+                'intent_buying' => 'Nikahan',
+                'budget' => 'Rp10,1–15 juta',
+                'lead_created_on' => '2026-11-01',
+                'next_follow_up_at' => now()->addDay(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $this->actingAs($cs)->get('/leads?stage=asked&intent=Nikahan&budget=Rp10%2C1%E2%80%9315%20juta&lead_date_from=2026-11-01&lead_date_to=2026-11-01&follow_up=scheduled&handling=primary')->assertInertia(
+            fn (Assert $page) => $page
+                ->component('Leads/Index')
+                ->where('leads.total', 1)
+                ->where('leads.data.0.contact_raw', '+6285200000001')
+                ->where('leads.data.0.lead_created_on', '2026-11-01'),
+        );
+
+        $this->actingAs($cs)->get('/leads?lead_date_status=missing')->assertInertia(
+            fn (Assert $page) => $page
+                ->component('Leads/Index')
+                ->where('leads.total', 1)
+                ->where('leads.data.0.contact_raw', '+6285200000002'),
+        );
+    }
+
+    public function test_invalid_lead_date_filter_is_rejected_safely(): void
+    {
+        $cs = $this->user('cs');
+
+        $this->actingAs($cs)
+            ->get('/leads?lead_date_from=not-a-date')
+            ->assertSessionHasErrors('lead_date_from');
     }
 
     public function test_admin_can_assign_an_unassigned_lead_to_cs(): void
@@ -352,6 +457,50 @@ class LeadManagementTest extends TestCase
                 ->where('leads.data.0.latest_activity', 'Lead diperbarui')
                 ->where('leads.data.0.latest_activity_detail', 'Keterangan diperbarui'),
             );
+    }
+
+    public function test_cs_can_view_the_five_latest_activity_entries_for_an_assigned_lead(): void
+    {
+        $cs = $this->user('cs');
+        $leadId = \DB::table('leads')->insertGetId([
+            'assigned_user_id' => $cs->id,
+            'contact_raw' => '+6285100000998',
+            'contact_key' => 'phone:6285100000998',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        foreach (range(1, 6) as $number) {
+            \DB::table('lead_activity')->insert([
+                'lead_id' => $leadId,
+                'actor_id' => $cs->id,
+                'action' => "Riwayat {$number}",
+                'created_at' => now()->addSeconds($number),
+            ]);
+        }
+
+        $this->actingAs($cs)
+            ->getJson("/leads/{$leadId}/history-preview")
+            ->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonPath('data.0.action', 'Riwayat 6')
+            ->assertJsonPath('data.4.action', 'Riwayat 2');
+    }
+
+    public function test_cs_cannot_view_activity_entries_for_an_unassigned_lead(): void
+    {
+        $owner = $this->user('cs');
+        $viewer = $this->user('cs');
+        $leadId = \DB::table('leads')->insertGetId([
+            'assigned_user_id' => $owner->id,
+            'contact_raw' => '+6285100000997',
+            'contact_key' => 'phone:6285100000997',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($viewer)
+            ->getJson("/leads/{$leadId}/history-preview")
+            ->assertNotFound();
     }
 
     public function test_inline_lead_update_returns_to_the_lead_list(): void
@@ -424,9 +573,9 @@ class LeadManagementTest extends TestCase
         $rows[0]['source_date_raw'] = '2 November 2026';
         $reappeared = app(LeadImportService::class)->import($rows, null, 'sheet-utama');
 
-        $this->assertSame(['inserted' => 1, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 1, 'needs_review' => 0], $first);
-        $this->assertSame(['inserted' => 0, 'skipped' => 1, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0], $again);
-        $this->assertSame(['inserted' => 0, 'skipped' => 0, 'resurfaced' => 1, 'unassigned' => 0, 'needs_review' => 0], $reappeared);
+        $this->assertSame(['inserted' => 1, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 1, 'needs_review' => 0, 'missing_dates' => 0], $first);
+        $this->assertSame(['inserted' => 0, 'skipped' => 1, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0], $again);
+        $this->assertSame(['inserted' => 0, 'skipped' => 0, 'resurfaced' => 1, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0], $reappeared);
         $this->assertDatabaseCount('leads', 1);
         $this->assertDatabaseCount('lead_source_occurrences', 2);
         $this->assertDatabaseHas('lead_activity', ['action' => 'Lead muncul kembali dari Google Sheets']);
@@ -752,6 +901,131 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseMissing('leads', ['id' => $leadId]);
         $this->assertDatabaseMissing('lead_milestones', ['lead_id' => $leadId]);
         $this->assertDatabaseMissing('lead_activity', ['lead_id' => $leadId]);
+    }
+
+    public function test_admin_can_add_a_cs_pendamping_who_can_update_the_lead(): void
+    {
+        $admin = $this->user('admin');
+        $owner = $this->user('cs');
+        $collaborator = $this->user('cs');
+        $leadId = \DB::table('leads')->insertGetId([
+            'assigned_user_id' => $owner->id,
+            'contact_raw' => '+6285100000011',
+            'contact_key' => 'phone:6285100000011',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->patch("/leads/{$leadId}/collaborators", ['user_ids' => [$collaborator->id]])
+            ->assertRedirect();
+        $this->assertDatabaseHas('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $collaborator->id, 'removed_at' => null]);
+
+        $this->actingAs($collaborator)
+            ->patch("/leads/{$leadId}", ['inline' => true, 'keterangan' => 'Follow-up oleh CS pendamping'])
+            ->assertRedirect();
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'keterangan' => 'Follow-up oleh CS pendamping']);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'actor_id' => $collaborator->id]);
+
+        $this->actingAs($admin)
+            ->patch("/leads/{$leadId}/collaborators", ['user_ids' => []])
+            ->assertRedirect();
+        $this->assertDatabaseMissing('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $collaborator->id, 'removed_at' => null]);
+        $this->actingAs($collaborator)->get("/leads/{$leadId}")->assertNotFound();
+    }
+
+    public function test_only_admin_can_mark_a_lead_as_taken_over_by_crm(): void
+    {
+        $admin = $this->user('admin');
+        $cs = $this->user('cs');
+        $leadId = \DB::table('leads')->insertGetId([
+            'assigned_user_id' => $cs->id,
+            'contact_raw' => '+6285100000012',
+            'contact_key' => 'phone:6285100000012',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($cs)
+            ->patch("/leads/{$leadId}", ['inline' => true, 'crm_taken_over' => true])
+            ->assertForbidden();
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'crm_taken_over_at' => null]);
+
+        $this->actingAs($admin)
+            ->patch("/leads/{$leadId}", ['crm_taken_over' => true])
+            ->assertRedirect("/leads/{$leadId}");
+        $this->assertDatabaseMissing('leads', ['id' => $leadId, 'crm_taken_over_at' => null]);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'Lead diperbarui']);
+    }
+
+    public function test_overdue_lead_without_newer_activity_is_marked_for_crm(): void
+    {
+        $overdueLead = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285100000013',
+            'contact_key' => 'phone:6285100000013',
+            'next_follow_up_at' => now()->subMinute(),
+            'created_at' => now()->subHours(2),
+            'updated_at' => now()->subHours(2),
+        ]);
+        $activeLead = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285100000014',
+            'contact_key' => 'phone:6285100000014',
+            'next_follow_up_at' => now()->subMinute(),
+            'created_at' => now()->subHours(2),
+            'updated_at' => now(),
+        ]);
+        \DB::table('lead_activity')->insert([
+            'lead_id' => $activeLead,
+            'action' => 'Lead diperbarui',
+            'created_at' => now(),
+        ]);
+
+        Artisan::call('leads:mark-overdue-crm');
+
+        $this->assertDatabaseMissing('leads', ['id' => $overdueLead, 'crm_taken_over_at' => null]);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $overdueLead, 'action' => 'Lead ditandai CRM otomatis']);
+        $this->assertDatabaseHas('leads', ['id' => $activeLead, 'crm_taken_over_at' => null]);
+    }
+
+    public function test_admin_can_add_a_cs_pendamping_to_selected_leads(): void
+    {
+        $admin = $this->user('admin');
+        $owner = $this->user('cs');
+        $collaborator = $this->user('cs');
+        $leadId = \DB::table('leads')->insertGetId([
+            'assigned_user_id' => $owner->id,
+            'contact_raw' => '+6285100000015',
+            'contact_key' => 'phone:6285100000015',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->post('/leads/collaborators', ['lead_ids' => [$leadId], 'user_id' => $collaborator->id])
+            ->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $collaborator->id, 'removed_at' => null]);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'CS pendamping ditambahkan']);
+    }
+
+    public function test_stale_inline_lead_update_is_rejected_instead_of_overwriting(): void
+    {
+        $cs = $this->user('cs');
+        $leadId = \DB::table('leads')->insertGetId([
+            'assigned_user_id' => $cs->id,
+            'contact_raw' => '+6285100000016',
+            'contact_key' => 'phone:6285100000016',
+            'keterangan' => 'Catatan baru',
+            'revision' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($cs)
+            ->patch("/leads/{$leadId}", ['inline' => true, 'revision' => 0, 'keterangan' => 'Catatan lama'])
+            ->assertSessionHasErrors('revision');
+
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'keterangan' => 'Catatan baru', 'revision' => 1]);
     }
 
     /** @param array<string, mixed> $attributes */

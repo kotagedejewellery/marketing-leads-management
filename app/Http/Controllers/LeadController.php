@@ -6,8 +6,11 @@ use App\Http\Requests\UpdateLeadRequest;
 use App\Services\GoogleSheetSyncService;
 use App\Services\LeadImportService;
 use App\Support\LeadBudgetRanges;
+use App\Support\LeadSourceDate;
 use DateTimeImmutable;
 use DateTimeInterface;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -79,6 +82,7 @@ class LeadController extends Controller
                 'phone' => $data['phone'] ?? null,
                 'assigned_user_id' => $assignedUserId,
                 'source_date_raw' => $data['source_date_raw'] ?? null,
+                'lead_created_on' => LeadSourceDate::parse($data['source_date_raw'] ?? null) ?? now()->toDateString(),
                 'respond_time' => $data['respond_time'] ?? null,
                 'imported_cs_name' => $data['imported_cs_name'] ?? null,
                 'imported_keterangan' => $data['imported_keterangan'] ?? null,
@@ -162,7 +166,7 @@ class LeadController extends Controller
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => "Import selesai: {$summary['inserted']} baru, {$summary['skipped']} duplikat dilewati, {$summary['unassigned']} perlu ditugaskan, {$summary['needs_review']} perlu review.",
+            'message' => "Import selesai: {$summary['inserted']} baru, {$summary['skipped']} duplikat dilewati, {$summary['unassigned']} perlu ditugaskan, {$summary['needs_review']} perlu review, {$summary['missing_dates']} tanpa tanggal lead.",
         ]);
 
         return to_route('leads.index');
@@ -181,6 +185,9 @@ class LeadController extends Controller
         }
 
         $message = "Sinkronisasi selesai: {$summary['inserted']} lead baru, {$summary['resurfaced']} muncul kembali.";
+        if ($summary['missing_dates']) {
+            $message .= " {$summary['missing_dates']} lead baru tanpa tanggal lead; periksa format tanggal sumber.";
+        }
         if ($summary['failed']) {
             $message .= " {$summary['failed']} cabang gagal disinkronkan; periksa statusnya di menu Cabang.";
         }
@@ -207,8 +214,38 @@ class LeadController extends Controller
         $csAccounts = $request->user()->role === 'admin'
             ? DB::table('users as u')->join('branches as b', 'b.id', '=', 'u.branch_id')->where('u.role', 'cs')->where('u.active', true)->orderBy('b.name')->get(['u.id', 'u.name', 'b.name as branch_name'])
             : [];
+        $collaborators = DB::table('lead_collaborators as c')
+            ->join('users as u', 'u.id', '=', 'c.user_id')
+            ->join('branches as b', 'b.id', '=', 'u.branch_id')
+            ->where('c.lead_id', $lead)
+            ->whereNull('c.removed_at')
+            ->orderBy('b.name')
+            ->get(['u.id', 'u.name', 'b.name as branch_name']);
 
-        return Inertia::render('Leads/Show', ['lead' => $record, 'milestones' => $milestones, 'history' => $history, 'csAccounts' => $csAccounts]);
+        return Inertia::render('Leads/Show', ['lead' => $record, 'milestones' => $milestones, 'history' => $history, 'csAccounts' => $csAccounts, 'collaborators' => $collaborators]);
+    }
+
+    public function historyPreview(Request $request, int $lead): JsonResponse
+    {
+        $this->visibleLead($request, $lead, null);
+
+        $history = DB::table('lead_activity as a')
+            ->leftJoin('users as u', 'u.id', '=', 'a.actor_id')
+            ->where('a.lead_id', $lead)
+            ->orderByDesc('a.created_at')
+            ->orderByDesc('a.id')
+            ->limit(5)
+            ->get(['a.action', 'a.detail', 'a.created_at', 'u.name as actor_name'])
+            ->map(static fn (object $activity): array => [
+                'action' => (string) $activity->action,
+                'detail' => $activity->detail === null ? null : (string) $activity->detail,
+                'created_at' => $activity->created_at === null ? null : (string) $activity->created_at,
+                'actor_name' => $activity->actor_name === null ? null : (string) $activity->actor_name,
+            ])
+            ->values()
+            ->all();
+
+        return response()->json(['data' => $history]);
     }
 
     public function assign(Request $request): RedirectResponse
@@ -229,7 +266,7 @@ class LeadController extends Controller
             if ($ids === []) {
                 return 0;
             }
-            DB::table('leads')->whereIn('id', $ids)->update(['assigned_user_id' => $owner->id, 'updated_at' => now()]);
+            DB::table('leads')->whereIn('id', $ids)->update(['assigned_user_id' => $owner->id, 'updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
             DB::table('lead_activity')->insert(array_map(fn ($id) => [
                 'lead_id' => $id,
                 'actor_id' => $request->user()->id,
@@ -244,6 +281,109 @@ class LeadController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => "{$assigned} lead ditugaskan ke {$owner->name}."]);
 
         return to_route('leads.index');
+    }
+
+    public function addCollaboratorSelected(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()->role === 'admin', 403);
+        $data = $request->validate([
+            'lead_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'lead_ids.*' => ['integer', 'distinct', 'exists:leads,id'],
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+        ]);
+        $user = DB::table('users')->where('id', $data['user_id'])->where('role', 'cs')->where('active', true)->first(['id', 'name']);
+        if (! $user) {
+            throw ValidationException::withMessages(['user_id' => 'Pilih akun CS aktif.']);
+        }
+
+        $summary = DB::transaction(function () use ($data, $request, $user): array {
+            $leads = DB::table('leads')->whereIn('id', $data['lead_ids'])->whereNull('archived_at')->get(['id', 'assigned_user_id']);
+            abort_unless($leads->count() === count($data['lead_ids']), 404);
+            $leadIds = $leads->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all();
+            $existing = DB::table('lead_collaborators')->whereIn('lead_id', $leadIds)->where('user_id', $user->id)->whereNull('removed_at')->pluck('lead_id')->map(static fn (mixed $id): int => (int) $id)->all();
+            $eligible = $leads->filter(static fn (object $lead): bool => (int) $lead->assigned_user_id !== (int) $user->id && ! in_array((int) $lead->id, $existing, true))->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all();
+            $now = now();
+
+            foreach ($eligible as $leadId) {
+                DB::table('lead_collaborators')->updateOrInsert(
+                    ['lead_id' => $leadId, 'user_id' => $user->id],
+                    ['added_by' => $request->user()->id, 'added_at' => $now, 'removed_at' => null],
+                );
+            }
+            if ($eligible !== []) {
+                DB::table('leads')->whereIn('id', $eligible)->update(['updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+                DB::table('lead_activity')->insert(array_map(fn (int $leadId): array => [
+                    'lead_id' => $leadId,
+                    'actor_id' => $request->user()->id,
+                    'action' => 'CS pendamping ditambahkan',
+                    'detail' => "{$user->name} ditambahkan sebagai CS pendamping.",
+                    'created_at' => $now,
+                ], $eligible));
+            }
+
+            return ['added' => count($eligible), 'skipped' => count($leadIds) - count($eligible)];
+        });
+
+        $message = "{$summary['added']} lead ditambahkan ke penanganan {$user->name}.";
+        if ($summary['skipped'] > 0) {
+            $message .= " {$summary['skipped']} lead sudah ditangani CS tersebut atau menjadi CS utama.";
+        }
+        Inertia::flash('toast', ['type' => 'success', 'message' => $message]);
+
+        return to_route('leads.index');
+    }
+
+    public function updateCollaborators(Request $request, int $lead): RedirectResponse
+    {
+        abort_unless($request->user()->role === 'admin', 403);
+        $record = $this->visibleLead($request, $lead, false);
+        $data = $request->validate([
+            'user_ids' => ['present', 'array', 'max:10'],
+            'user_ids.*' => ['integer', 'distinct', 'exists:users,id'],
+        ]);
+        $userIds = array_values(array_map('intval', $data['user_ids']));
+        if ($record->assigned_user_id !== null && in_array((int) $record->assigned_user_id, $userIds, true)) {
+            throw ValidationException::withMessages(['user_ids' => 'CS utama tidak perlu ditambahkan sebagai CS pendamping.']);
+        }
+        $users = DB::table('users')->whereIn('id', $userIds)->where('role', 'cs')->where('active', true)->get(['id', 'name']);
+        if ($users->count() !== count($userIds)) {
+            throw ValidationException::withMessages(['user_ids' => 'Pilih hanya akun CS aktif.']);
+        }
+
+        DB::transaction(function () use ($lead, $request, $userIds): void {
+            $currentIds = DB::table('lead_collaborators')->where('lead_id', $lead)->whereNull('removed_at')->pluck('user_id')->map(static fn (mixed $id): int => (int) $id)->all();
+            $addedIds = array_values(array_diff($userIds, $currentIds));
+            $removedIds = array_values(array_diff($currentIds, $userIds));
+            $now = now();
+
+            if ($removedIds !== []) {
+                DB::table('lead_collaborators')->where('lead_id', $lead)->whereIn('user_id', $removedIds)->whereNull('removed_at')->update(['removed_at' => $now]);
+            }
+            foreach ($addedIds as $userId) {
+                DB::table('lead_collaborators')->updateOrInsert(
+                    ['lead_id' => $lead, 'user_id' => $userId],
+                    ['added_by' => $request->user()->id, 'added_at' => $now, 'removed_at' => null],
+                );
+            }
+            if ($addedIds === [] && $removedIds === []) {
+                return;
+            }
+
+            $names = DB::table('users')->whereIn('id', array_values(array_unique([...$addedIds, ...$removedIds])))->pluck('name', 'id');
+            $details = [];
+            if ($addedIds !== []) {
+                $details[] = 'Ditambahkan: '.implode(', ', array_map(static fn (int $id): string => (string) ($names[$id] ?? $id), $addedIds));
+            }
+            if ($removedIds !== []) {
+                $details[] = 'Dilepas: '.implode(', ', array_map(static fn (int $id): string => (string) ($names[$id] ?? $id), $removedIds));
+            }
+            DB::table('lead_activity')->insert(['lead_id' => $lead, 'actor_id' => $request->user()->id, 'action' => 'CS pendamping diperbarui', 'detail' => implode('. ', $details), 'created_at' => $now]);
+            DB::table('leads')->where('id', $lead)->update(['updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+        });
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Tim penanganan lead diperbarui.']);
+
+        return back();
     }
 
     public function update(UpdateLeadRequest $request, int $lead): RedirectResponse
@@ -261,8 +401,17 @@ class LeadController extends Controller
                 throw ValidationException::withMessages(['assigned_user_id' => 'CS tidak valid.']);
             }
         }
+        if (! $isAdmin && array_key_exists('crm_taken_over', $data)) {
+            abort(403);
+        }
 
         DB::transaction(function () use ($request, $lead, $record, $data, $selected, $isAdmin): void {
+            if (array_key_exists('revision', $data)) {
+                $revision = (int) DB::table('leads')->where('id', $lead)->lockForUpdate()->value('revision');
+                if ($revision !== (int) $data['revision']) {
+                    throw ValidationException::withMessages(['revision' => 'Lead sudah diperbarui CS lain. Buka detail lead untuk meninjau perubahan terbaru.']);
+                }
+            }
             $changes = [];
             $updates = [];
             foreach (['intent_buying' => 'Intent buying', 'usage_date' => 'Waktu pemakaian', 'budget' => 'Budget', 'keterangan' => 'Keterangan', 'next_follow_up_at' => 'Tindak lanjut berikutnya'] as $field => $label) {
@@ -279,7 +428,17 @@ class LeadController extends Controller
             }
             if ($isAdmin && array_key_exists('assigned_user_id', $data) && (int) $record->assigned_user_id !== (int) ($data['assigned_user_id'] ?? 0)) {
                 $updates['assigned_user_id'] = $data['assigned_user_id'] ?: null;
+                if ($data['assigned_user_id']) {
+                    DB::table('lead_collaborators')->where('lead_id', $lead)->where('user_id', $data['assigned_user_id'])->whereNull('removed_at')->update(['removed_at' => now()]);
+                }
                 $changes[] = $data['assigned_user_id'] ? 'CS penanggung jawab diperbarui' : 'Lead belum ditugaskan';
+            }
+            if ($isAdmin && array_key_exists('crm_taken_over', $data)) {
+                $takenOver = (bool) $data['crm_taken_over'];
+                if (($record->crm_taken_over_at !== null) !== $takenOver) {
+                    $updates['crm_taken_over_at'] = $takenOver ? now() : null;
+                    $changes[] = $takenOver ? 'Lead ditandai diambil alih CRM' : 'Penanda pengambilalihan CRM dibatalkan';
+                }
             }
 
             $active = DB::table('lead_milestones')->where('lead_id', $lead)->where('is_active', true)->pluck('milestone')->all();
@@ -302,7 +461,7 @@ class LeadController extends Controller
             }
 
             if ($updates || $changes) {
-                DB::table('leads')->where('id', $lead)->update($updates + ['updated_at' => now()]);
+                DB::table('leads')->where('id', $lead)->update($updates + ['updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
                 DB::table('lead_activity')->insert(['lead_id' => $lead, 'actor_id' => $request->user()->id, 'action' => 'Lead diperbarui', 'detail' => implode('; ', $changes), 'created_at' => now()]);
             }
         });
@@ -318,7 +477,7 @@ class LeadController extends Controller
     {
         $record = $this->visibleLead($request, $lead, false);
         DB::transaction(function () use ($record, $request): void {
-            DB::table('leads')->where('id', $record->id)->update(['archived_at' => now(), 'updated_at' => now()]);
+            DB::table('leads')->where('id', $record->id)->update(['archived_at' => now(), 'updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
             DB::table('lead_activity')->insert(['lead_id' => $record->id, 'actor_id' => $request->user()->id, 'action' => 'Lead diarsipkan', 'detail' => 'Lead disembunyikan dari daftar kerja aktif.', 'created_at' => now()]);
         });
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead diarsipkan.']);
@@ -330,7 +489,7 @@ class LeadController extends Controller
     {
         $record = $this->visibleLead($request, $lead, true);
         DB::transaction(function () use ($record, $request): void {
-            DB::table('leads')->where('id', $record->id)->update(['archived_at' => null, 'updated_at' => now()]);
+            DB::table('leads')->where('id', $record->id)->update(['archived_at' => null, 'updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
             DB::table('lead_activity')->insert(['lead_id' => $record->id, 'actor_id' => $request->user()->id, 'action' => 'Lead dipulihkan', 'detail' => 'Lead kembali ke daftar kerja aktif.', 'created_at' => now()]);
         });
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead dipulihkan.']);
@@ -342,7 +501,7 @@ class LeadController extends Controller
     {
         $ids = $this->selectedLeadIds($request, false);
         DB::transaction(function () use ($ids, $request): void {
-            DB::table('leads')->whereIn('id', $ids)->update(['archived_at' => now(), 'updated_at' => now()]);
+            DB::table('leads')->whereIn('id', $ids)->update(['archived_at' => now(), 'updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
             DB::table('lead_activity')->insert(array_map(fn ($id) => [
                 'lead_id' => $id,
                 'actor_id' => $request->user()->id,
@@ -361,7 +520,7 @@ class LeadController extends Controller
     {
         $ids = $this->selectedLeadIds($request, true);
         DB::transaction(function () use ($ids, $request): void {
-            DB::table('leads')->whereIn('id', $ids)->update(['archived_at' => null, 'updated_at' => now()]);
+            DB::table('leads')->whereIn('id', $ids)->update(['archived_at' => null, 'updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
             DB::table('lead_activity')->insert(array_map(fn ($id) => [
                 'lead_id' => $id,
                 'actor_id' => $request->user()->id,
@@ -397,21 +556,19 @@ class LeadController extends Controller
     }
 
     /**
-     * @return object{id: int, assigned_user_id: int|null, archived_at: string|null, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null}
+     * @return object{id: int, assigned_user_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null}
      */
     private function visibleLead(Request $request, int $lead, ?bool $archived = false): object
     {
         $query = DB::table('leads')->where('id', $lead);
-        if ($request->user()->role !== 'admin') {
-            $query->where('assigned_user_id', $request->user()->id);
-        }
+        $this->restrictToVisibleLeads($query, $request);
         if ($archived !== null) {
             $query->{$archived ? 'whereNotNull' : 'whereNull'}('archived_at');
         }
 
         $record = $query->first() ?? abort(404);
 
-        /** @var object{id: int, assigned_user_id: int|null, archived_at: string|null, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null} $record */
+        /** @var object{id: int, assigned_user_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null} $record */
         return $record;
     }
 
@@ -424,9 +581,7 @@ class LeadController extends Controller
         ]);
         $query = DB::table('leads')->whereIn('id', $data['lead_ids']);
         $query->{$archived ? 'whereNotNull' : 'whereNull'}('archived_at');
-        if ($request->user()->role !== 'admin') {
-            $query->where('assigned_user_id', $request->user()->id);
-        }
+        $this->restrictToVisibleLeads($query, $request);
         $ids = array_values($query->pluck('id')->map(fn ($id) => (int) $id)->all());
         abort_unless(count($ids) === count($data['lead_ids']), 404);
 
@@ -437,9 +592,28 @@ class LeadController extends Controller
     private function deleteLeadRecords(array $ids): void
     {
         DB::transaction(function () use ($ids): void {
+            DB::table('lead_collaborators')->whereIn('lead_id', $ids)->delete();
             DB::table('lead_activity')->whereIn('lead_id', $ids)->delete();
             DB::table('lead_milestones')->whereIn('lead_id', $ids)->delete();
             DB::table('leads')->whereIn('id', $ids)->delete();
+        });
+    }
+
+    private function restrictToVisibleLeads(Builder $query, Request $request): void
+    {
+        if ($request->user()->role === 'admin') {
+            return;
+        }
+
+        $userId = $request->user()->id;
+        $query->where(function (Builder $visible) use ($userId): void {
+            $visible->where('assigned_user_id', $userId)->orWhereExists(function (Builder $collaborator) use ($userId): void {
+                $collaborator->selectRaw('1')
+                    ->from('lead_collaborators')
+                    ->whereColumn('lead_collaborators.lead_id', 'leads.id')
+                    ->where('lead_collaborators.user_id', $userId)
+                    ->whereNull('lead_collaborators.removed_at');
+            });
         });
     }
 

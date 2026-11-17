@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Link, router } from '@inertiajs/vue3';
-import { CheckCircle2, History, LoaderCircle } from '@lucide/vue';
+import { router } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import LeadHistoryPopover from '@/components/LeadHistoryPopover.vue';
 import { budgetOptions } from '@/lib/lead-options';
 
 type Lead = {
@@ -11,10 +11,9 @@ type Lead = {
     budget: string | null;
     keterangan: string | null;
     next_follow_up_at: string | null;
+    crm_taken_over_at: string | null;
+    revision: number;
     milestones: string[];
-    latest_activity: string | null;
-    latest_activity_detail: string | null;
-    latest_activity_at: string | null;
 };
 type QuickUpdateFields = {
     intent_buying: string;
@@ -22,16 +21,25 @@ type QuickUpdateFields = {
     budget: string;
     keterangan: string;
     next_follow_up_at: string;
+    crm_taken_over: boolean;
+    revision: number;
     milestones: string[];
 };
 type QuickUpdatePayload = { inline: true } & Partial<QuickUpdateFields>;
+type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
 
 const props = withDefaults(
-    defineProps<{ lead: Lead; variant?: 'card' | 'table' }>(),
-    { variant: 'card' },
+    defineProps<{
+        lead: Lead;
+        variant?: 'card' | 'table';
+        retrySaveVersion?: number;
+        canMarkCrm?: boolean;
+    }>(),
+    { variant: 'card', retrySaveVersion: 0, canMarkCrm: false },
 );
 const emit = defineEmits<{
     'dirty-change': [leadId: number, isDirty: boolean];
+    'save-state': [leadId: number, state: SaveState, message: string];
 }>();
 const toDateTimeLocal = (value: string | null) =>
     value ? value.replace(' ', 'T').slice(0, 16) : '';
@@ -41,6 +49,8 @@ const values = reactive<QuickUpdateFields>({
     budget: props.lead.budget || '',
     keterangan: props.lead.keterangan || '',
     next_follow_up_at: toDateTimeLocal(props.lead.next_follow_up_at),
+    crm_taken_over: Boolean(props.lead.crm_taken_over_at),
+    revision: props.lead.revision,
     milestones: [...props.lead.milestones],
 });
 const groups = [
@@ -70,19 +80,16 @@ const groups = [
         ],
     },
 ] as const;
-const latestActivityTime = computed(() =>
-    props.lead.latest_activity_at
-        ? new Date(props.lead.latest_activity_at).toLocaleString('id-ID')
-        : '',
-);
 const errorId = `lead-${props.lead.id}-quick-update-error`;
 const processing = ref(false);
 const queued = ref(false);
 const waiting = ref(false);
 const hasSaved = ref(false);
 const saveError = ref('');
+const hasConflict = ref(false);
 const invalidField = ref<string | null>(null);
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
 const snapshot = (): QuickUpdateFields => ({
     intent_buying: values.intent_buying,
@@ -90,6 +97,8 @@ const snapshot = (): QuickUpdateFields => ({
     budget: values.budget,
     keterangan: values.keterangan,
     next_follow_up_at: values.next_follow_up_at,
+    crm_taken_over: values.crm_taken_over,
+    revision: values.revision,
     milestones: [...values.milestones].sort(),
 });
 const signature = (payload: QuickUpdateFields) => JSON.stringify(payload);
@@ -97,16 +106,17 @@ const savedValues = reactive<QuickUpdateFields>(snapshot());
 const isDirty = computed(
     () => signature(snapshot()) !== signature(savedValues),
 );
-const saveStatus = computed(() => {
-    if (processing.value) return 'Menyimpan…';
-    if (saveError.value) return saveError.value;
-    if (waiting.value || isDirty.value) return 'Menyiapkan simpan…';
-    return hasSaved.value ? 'Tersimpan' : '';
-});
 const isInvalid = (field: string) => invalidField.value === field;
+const saveState = computed<SaveState>(() => {
+    if (hasConflict.value) return 'conflict';
+    if (saveError.value) return 'error';
+    if (processing.value || waiting.value || isDirty.value) return 'saving';
+    return hasSaved.value ? 'saved' : 'idle';
+});
 
 const changedPayload = (current: QuickUpdateFields): QuickUpdatePayload => {
     const payload: QuickUpdatePayload = { inline: true };
+    payload.revision = current.revision;
     if (current.intent_buying !== savedValues.intent_buying)
         payload.intent_buying = current.intent_buying;
     if (current.usage_date !== savedValues.usage_date)
@@ -116,6 +126,11 @@ const changedPayload = (current: QuickUpdateFields): QuickUpdatePayload => {
         payload.keterangan = current.keterangan;
     if (current.next_follow_up_at !== savedValues.next_follow_up_at)
         payload.next_follow_up_at = current.next_follow_up_at;
+    if (
+        props.canMarkCrm &&
+        current.crm_taken_over !== savedValues.crm_taken_over
+    )
+        payload.crm_taken_over = current.crm_taken_over;
     if (
         JSON.stringify(current.milestones) !==
         JSON.stringify(savedValues.milestones)
@@ -128,6 +143,11 @@ const changedPayload = (current: QuickUpdateFields): QuickUpdatePayload => {
 watch(isDirty, (dirty) => emit('dirty-change', props.lead.id, dirty), {
     immediate: true,
 });
+watch(
+    saveState,
+    (state) => emit('save-state', props.lead.id, state, saveError.value),
+    { immediate: true },
+);
 
 const save = () => {
     waiting.value = false;
@@ -149,16 +169,25 @@ const save = () => {
         preserveState: true,
         onSuccess: () => {
             Object.assign(savedValues, requestValues);
+            values.revision++;
+            savedValues.revision = values.revision;
             hasSaved.value = true;
+            if (savedTimer) clearTimeout(savedTimer);
+            savedTimer = setTimeout(() => {
+                hasSaved.value = false;
+            }, 3000);
             handled = true;
         },
         onError: (errors) => {
             handled = true;
             const [field, message] = Object.entries(errors)[0] || [];
             invalidField.value = field || null;
-            saveError.value = message
-                ? `${field === 'budget' ? 'Budget' : 'Data'}: ${message}`
-                : 'Gagal menyimpan. Ubah kembali data untuk mencoba lagi.';
+            hasConflict.value = field === 'revision';
+            saveError.value = hasConflict.value
+                ? 'Lead sudah diperbarui CS lain. Buka detail untuk meninjau data terbaru.'
+                : message
+                  ? `${field === 'budget' ? 'Budget' : 'Data'}: ${message}`
+                  : 'Gagal menyimpan. Ubah kembali data untuk mencoba lagi.';
         },
         onFinish: () => {
             processing.value = false;
@@ -175,6 +204,7 @@ const save = () => {
 };
 const queueSave = (delay = 0) => {
     saveError.value = '';
+    hasConflict.value = false;
     invalidField.value = null;
     if (saveTimer) clearTimeout(saveTimer);
     if (processing.value) {
@@ -189,8 +219,17 @@ const saveImmediately = () => queueSave();
 const saveAfterTyping = () => queueSave(650);
 const retrySave = () => queueSave(0);
 
+watch(
+    () => props.retrySaveVersion,
+    (version, previous) => {
+        if (version !== previous && saveError.value) retrySave();
+    },
+);
+
 onBeforeUnmount(() => {
     if (saveTimer) clearTimeout(saveTimer);
+    if (savedTimer) clearTimeout(savedTimer);
+    emit('save-state', props.lead.id, 'idle', '');
 });
 </script>
 
@@ -286,53 +325,23 @@ onBeforeUnmount(() => {
                 @change="saveImmediately"
             />
         </td>
-        <td class="min-w-36 p-3 align-middle text-sm">
-            <div class="flex items-center gap-2 text-[#62665b]">
-                <History class="size-4 shrink-0" aria-hidden="true" />
-                <Link
-                    :href="`/leads/${lead.id}`"
-                    class="font-semibold text-kgj-gold-deep underline underline-offset-4"
-                >
-                    Detail
-                </Link>
-            </div>
-            <p
-                class="mt-1 truncate text-xs text-[#62665b]"
-                :title="`${lead.latest_activity || 'Belum ada aktivitas'} · ${latestActivityTime || '—'}`"
+        <td class="min-w-40 p-3 align-middle text-sm">
+            <LeadHistoryPopover :lead-id="lead.id" label="Riwayat" />
+            <label
+                v-if="canMarkCrm"
+                class="mt-2 flex min-h-8 cursor-pointer items-center gap-2 text-xs font-semibold text-[#665a43]"
             >
-                {{ lead.latest_activity || 'Belum ada aktivitas' }}
-            </p>
-        </td>
-        <td
-            class="sticky right-0 z-10 min-w-36 bg-kgj-paper p-3 align-middle group-hover:bg-[#fcfaf5]"
-        >
-            <p
-                :id="saveError ? errorId : undefined"
-                class="flex min-h-11 items-center gap-2 text-xs"
-                :class="saveError ? 'text-kgj-rose' : 'text-[#62665b]'"
-                role="status"
-                aria-live="polite"
-            >
-                <LoaderCircle
-                    v-if="processing || waiting"
-                    class="size-4 shrink-0 animate-spin"
-                    aria-hidden="true"
+                <input
+                    v-model="values.crm_taken_over"
+                    class="size-4 accent-kgj-gold"
+                    type="checkbox"
+                    @change="saveImmediately"
                 />
-                <CheckCircle2
-                    v-else-if="hasSaved && !saveError"
-                    class="size-4 shrink-0 text-kgj-gold-deep"
-                    aria-hidden="true"
-                />
-                {{ saveStatus || '—' }}
-            </p>
-            <button
-                v-if="saveError"
-                class="mt-1 text-xs font-semibold text-kgj-gold-deep underline underline-offset-4"
-                type="button"
-                @click="retrySave"
-            >
-                Coba lagi
-            </button>
+                Diambil alih CRM
+            </label>
+            <span v-if="saveError" :id="errorId" class="sr-only" role="status">
+                {{ saveError }}
+            </span>
         </td>
     </template>
     <section
@@ -438,43 +447,27 @@ onBeforeUnmount(() => {
         <div
             class="mt-4 flex flex-col gap-3 border-t border-[#e7dfcf] pt-4 sm:flex-row sm:items-center sm:justify-between"
         >
-            <div class="flex items-start gap-2 text-sm text-[#62665b]">
-                <History class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                <p>
-                    <span class="font-semibold text-[#31332f]">Riwayat:</span>
-                    {{ lead.latest_activity || 'Belum ada aktivitas.' }}
-                    <span v-if="latestActivityTime">
-                        · {{ latestActivityTime }}</span
-                    >
-                    <span v-if="lead.latest_activity_detail" class="block">
-                        {{ lead.latest_activity_detail }}
-                    </span>
-                    <Link
-                        :href="`/leads/${lead.id}`"
-                        class="ml-1 font-semibold text-kgj-gold-deep underline underline-offset-4"
-                    >
-                        Detail lengkap
-                    </Link>
-                </p>
-            </div>
-            <p
-                class="flex min-h-11 items-center gap-2 text-sm"
-                :class="saveError ? 'text-kgj-rose' : 'text-[#62665b]'"
-                role="status"
-                aria-live="polite"
+            <LeadHistoryPopover
+                :lead-id="lead.id"
+                label="Lihat riwayat"
+                align="start"
+                trigger-class="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-[#4f514a] hover:text-kgj-gold-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kgj-gold"
+            />
+            <label
+                v-if="canMarkCrm"
+                class="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-[#665a43]"
             >
-                <LoaderCircle
-                    v-if="processing || waiting"
-                    class="size-4 animate-spin"
-                    aria-hidden="true"
+                <input
+                    v-model="values.crm_taken_over"
+                    class="size-4 accent-kgj-gold"
+                    type="checkbox"
+                    @change="saveImmediately"
                 />
-                <CheckCircle2
-                    v-else-if="hasSaved && !saveError"
-                    class="size-4 text-kgj-gold-deep"
-                    aria-hidden="true"
-                />
-                {{ saveStatus || 'Perubahan tersimpan otomatis.' }}
-            </p>
+                Diambil alih CRM
+            </label>
+            <span v-if="saveError" :id="errorId" class="sr-only" role="status">
+                {{ saveError }}
+            </span>
         </div>
     </section>
 </template>

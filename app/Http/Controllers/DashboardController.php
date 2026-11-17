@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\GoogleSheetSyncService;
+use App\Support\LeadBudgetRanges;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,12 +25,13 @@ class DashboardController extends Controller
 
     public function leads(Request $request): Response
     {
+        $this->validateLeadFilters($request);
         $query = DB::table('leads as l')
             ->leftJoin('users as u', 'u.id', '=', 'l.assigned_user_id')
             ->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')
             ->leftJoin('branches as source_b', 'source_b.id', '=', 'l.source_branch_id')
             ->leftJoin('branches as conflict_b', 'conflict_b.id', '=', 'l.source_conflict_branch_id')
-            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.source_conflict_at', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
+            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
             ->orderByDesc('l.updated_at');
 
         $showArchived = $request->boolean('archived');
@@ -45,18 +47,67 @@ class DashboardController extends Controller
         if ($request->filled('stage')) {
             $query->where('l.current_stage', $request->string('stage')->toString());
         }
+        if ($request->filled('intent')) {
+            $query->where('l.intent_buying', $request->string('intent')->toString());
+        }
+        if ($request->filled('budget')) {
+            $query->where('l.budget', $request->string('budget')->toString());
+        }
+        if ($request->filled('lead_date_from')) {
+            $query->whereDate('l.lead_created_on', '>=', $request->string('lead_date_from')->toString());
+        }
+        if ($request->filled('lead_date_to')) {
+            $query->whereDate('l.lead_created_on', '<=', $request->string('lead_date_to')->toString());
+        }
+        if ($request->filled('lead_date_status')) {
+            match ($request->string('lead_date_status')->toString()) {
+                'known' => $query->whereNotNull('l.lead_created_on'),
+                'missing' => $query->whereNull('l.lead_created_on'),
+                default => null,
+            };
+        }
+        if ($request->filled('follow_up')) {
+            match ($request->string('follow_up')->toString()) {
+                'scheduled' => $query->whereNotNull('l.next_follow_up_at'),
+                'none' => $query->whereNull('l.next_follow_up_at'),
+                'today' => $query->whereBetween('l.next_follow_up_at', [now()->startOfDay(), now()->endOfDay()]),
+                'tomorrow' => $query->whereBetween('l.next_follow_up_at', [now()->addDay()->startOfDay(), now()->addDay()->endOfDay()]),
+                'overdue' => $query->whereNotNull('l.next_follow_up_at')->where('l.next_follow_up_at', '<=', now()),
+                default => null,
+            };
+        }
+        if ($request->user()->role === 'cs' && $request->filled('handling')) {
+            $userId = $request->user()->id;
+            match ($request->string('handling')->toString()) {
+                'primary' => $query->where('l.assigned_user_id', $userId),
+                'collaborator' => $query->whereExists(function (Builder $collaborator) use ($userId): void {
+                    $collaborator->selectRaw('1')
+                        ->from('lead_collaborators as c')
+                        ->whereColumn('c.lead_id', 'l.id')
+                        ->where('c.user_id', $userId)
+                        ->whereNull('c.removed_at');
+                }),
+                default => null,
+            };
+        }
+        if ($request->filled('crm')) {
+            match ($request->string('crm')->toString()) {
+                'taken_over' => $query->whereNotNull('l.crm_taken_over_at'),
+                'not_taken_over' => $query->whereNull('l.crm_taken_over_at'),
+                default => null,
+            };
+        }
         if ($request->filled('queue')) {
             match ($request->string('queue')->toString()) {
                 'unassigned' => $request->user()->role === 'admin' ? $query->whereNull('l.assigned_user_id') : null,
                 'needs_qualification' => $query->where(fn (Builder $builder) => $builder->whereNull('l.intent_buying')->orWhereNull('l.usage_date')->orWhereNull('l.budget')),
                 'follow_up_due' => $query->whereNotNull('l.next_follow_up_at')->where('l.next_follow_up_at', '<=', now()),
+                'crm_taken_over' => $query->whereNotNull('l.crm_taken_over_at'),
                 'source_conflict' => $request->user()->role === 'admin' ? $query->whereNotNull('l.source_conflict_at') : null,
                 default => null,
             };
         }
-        if ($request->user()->role !== 'admin') {
-            $query->where('l.assigned_user_id', $request->user()->id);
-        }
+        $this->restrictToVisibleLeads($query, $request, 'l');
 
         $leads = $query->paginate(20)->withQueryString();
         $leadIds = $leads->pluck('id')->all();
@@ -72,8 +123,13 @@ class DashboardController extends Controller
         foreach (DB::query()->fromSub($rankedActivities, 'ranked_activities')->where('activity_rank', 1)->get() as $activity) {
             $latestActivityByLead[$activity->lead_id] = $activity;
         }
+        $collaboratorsByLead = [];
+        foreach (DB::table('lead_collaborators as c')->join('users as u', 'u.id', '=', 'c.user_id')->whereIn('c.lead_id', $leadIds)->whereNull('c.removed_at')->orderBy('u.name')->get(['c.lead_id', 'u.id', 'u.name']) as $collaborator) {
+            $collaboratorsByLead[$collaborator->lead_id][] = ['id' => (int) $collaborator->id, 'name' => (string) $collaborator->name];
+        }
         foreach ($leads->items() as $lead) {
             $lead->milestones = $milestonesByLead[$lead->id] ?? [];
+            $lead->collaborators = $collaboratorsByLead[$lead->id] ?? [];
             $activity = $latestActivityByLead[$lead->id] ?? null;
             $lead->latest_activity = $activity->action ?? null;
             $lead->latest_activity_detail = $activity->detail ?? null;
@@ -82,7 +138,7 @@ class DashboardController extends Controller
 
         return Inertia::render('Leads/Index', [
             'leads' => $leads,
-            'filters' => $request->only('q', 'branch', 'stage', 'queue', 'archived'),
+            'filters' => $request->only('q', 'branch', 'stage', 'queue', 'intent', 'budget', 'lead_date_from', 'lead_date_to', 'lead_date_status', 'follow_up', 'handling', 'crm', 'archived'),
             'archiveMode' => $showArchived,
             'branches' => $request->user()->role === 'admin' ? DB::table('branches')->orderBy('name')->get(['id', 'name']) : [],
             'csAccounts' => $request->user()->role === 'admin'
@@ -203,14 +259,29 @@ class DashboardController extends Controller
             throw ValidationException::withMessages(['role' => 'Minimal satu admin aktif harus tersedia.']);
         }
 
-        DB::transaction(function () use ($record, $data, $active): void {
+        DB::transaction(function () use ($record, $data, $active, $request): void {
             $updates = ['name' => $data['name'], 'email' => $data['email'], 'role' => $data['role'], 'branch_id' => $data['role'] === 'cs' ? $data['branch_id'] : null, 'active' => $active];
             if ($data['password']) {
                 $updates['password_hash'] = bcrypt($data['password']);
             }
             DB::table('users')->where('id', $record->id)->update($updates);
-            if (! $active && $record->active) {
-                DB::table('leads')->where('assigned_user_id', $record->id)->update(['assigned_user_id' => null, 'updated_at' => now()]);
+            if ((! $active || $data['role'] !== 'cs') && $record->role === 'cs') {
+                $now = now();
+                $primaryLeadIds = DB::table('leads')->where('assigned_user_id', $record->id)->pluck('id')->all();
+                $collaboratorLeadIds = DB::table('lead_collaborators')->where('user_id', $record->id)->whereNull('removed_at')->pluck('lead_id')->all();
+                DB::table('leads')->whereIn('id', $primaryLeadIds)->update(['assigned_user_id' => null, 'updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+                DB::table('lead_collaborators')->where('user_id', $record->id)->whereNull('removed_at')->update(['removed_at' => $now]);
+                DB::table('leads')->whereIn('id', $collaboratorLeadIds)->update(['updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+                $activity = [];
+                foreach ($primaryLeadIds as $leadId) {
+                    $activity[] = ['lead_id' => $leadId, 'actor_id' => $request->user()->id, 'action' => 'CS utama dilepas', 'detail' => "{$record->name} tidak lagi aktif sebagai CS.", 'created_at' => $now];
+                }
+                foreach ($collaboratorLeadIds as $leadId) {
+                    $activity[] = ['lead_id' => $leadId, 'actor_id' => $request->user()->id, 'action' => 'CS pendamping dilepas', 'detail' => "{$record->name} tidak lagi aktif sebagai CS.", 'created_at' => $now];
+                }
+                if ($activity !== []) {
+                    DB::table('lead_activity')->insert($activity);
+                }
             }
         });
 
@@ -270,17 +341,18 @@ class DashboardController extends Controller
         ];
     }
 
-    /** @return array{total: int, unassigned: int, follow_up_due: int, needs_qualification: int, source_conflict: int} */
+    /** @return array{total: int, unassigned: int, follow_up_due: int, crm_taken_over: int, needs_qualification: int, source_conflict: int} */
     private function priorities(Request $request): array
     {
         $counts = (array) $this->activeLeads($request)
-            ->selectRaw('COUNT(*) as total, COALESCE(SUM(CASE WHEN l.assigned_user_id IS NULL THEN 1 ELSE 0 END), 0) as unassigned, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NOT NULL AND l.next_follow_up_at <= ? THEN 1 ELSE 0 END), 0) as follow_up_due, COALESCE(SUM(CASE WHEN l.intent_buying IS NULL OR l.usage_date IS NULL OR l.budget IS NULL THEN 1 ELSE 0 END), 0) as needs_qualification, COALESCE(SUM(CASE WHEN l.source_conflict_at IS NOT NULL THEN 1 ELSE 0 END), 0) as source_conflict', [now()])
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(CASE WHEN l.assigned_user_id IS NULL THEN 1 ELSE 0 END), 0) as unassigned, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NOT NULL AND l.next_follow_up_at <= ? THEN 1 ELSE 0 END), 0) as follow_up_due, COALESCE(SUM(CASE WHEN l.crm_taken_over_at IS NOT NULL THEN 1 ELSE 0 END), 0) as crm_taken_over, COALESCE(SUM(CASE WHEN l.intent_buying IS NULL OR l.usage_date IS NULL OR l.budget IS NULL THEN 1 ELSE 0 END), 0) as needs_qualification, COALESCE(SUM(CASE WHEN l.source_conflict_at IS NOT NULL THEN 1 ELSE 0 END), 0) as source_conflict', [now()])
             ->first();
 
         return [
             'total' => (int) ($counts['total'] ?? 0),
             'unassigned' => $request->user()->role === 'admin' ? (int) ($counts['unassigned'] ?? 0) : 0,
             'follow_up_due' => (int) ($counts['follow_up_due'] ?? 0),
+            'crm_taken_over' => $request->user()->role === 'admin' ? (int) ($counts['crm_taken_over'] ?? 0) : 0,
             'needs_qualification' => (int) ($counts['needs_qualification'] ?? 0),
             'source_conflict' => $request->user()->role === 'admin' ? (int) ($counts['source_conflict'] ?? 0) : 0,
         ];
@@ -326,10 +398,45 @@ class DashboardController extends Controller
     private function activeLeads(Request $request): Builder
     {
         $query = DB::table('leads as l')->whereNull('l.archived_at');
-        if ($request->user()->role !== 'admin') {
-            $query->where('l.assigned_user_id', $request->user()->id);
-        }
+        $this->restrictToVisibleLeads($query, $request, 'l');
 
         return $query;
+    }
+
+    private function restrictToVisibleLeads(Builder $query, Request $request, string $alias): void
+    {
+        if ($request->user()->role === 'admin') {
+            return;
+        }
+
+        $userId = $request->user()->id;
+        $query->where(function (Builder $visible) use ($alias, $userId): void {
+            $visible->where("{$alias}.assigned_user_id", $userId)->orWhereExists(function (Builder $collaborator) use ($alias, $userId): void {
+                $collaborator->selectRaw('1')
+                    ->from('lead_collaborators as c')
+                    ->whereColumn('c.lead_id', "{$alias}.id")
+                    ->where('c.user_id', $userId)
+                    ->whereNull('c.removed_at');
+            });
+        });
+    }
+
+    private function validateLeadFilters(Request $request): void
+    {
+        $request->validate([
+            'q' => ['nullable', 'string', 'max:255'],
+            'branch' => ['nullable', 'integer', 'exists:branches,id'],
+            'stage' => ['nullable', Rule::in(['clicked', 'asked', 'price_list', 'offline', 'online', 'closing_repeat'])],
+            'queue' => ['nullable', Rule::in(['unassigned', 'needs_qualification', 'follow_up_due', 'crm_taken_over', 'source_conflict'])],
+            'intent' => ['nullable', Rule::in(['Tunangan', 'Lamaran', 'Nikahan', 'Anniversary', 'Lainnya'])],
+            'budget' => ['nullable', Rule::in(LeadBudgetRanges::OPTIONS)],
+            'lead_date_from' => ['nullable', 'date', 'before_or_equal:lead_date_to'],
+            'lead_date_to' => ['nullable', 'date', 'after_or_equal:lead_date_from'],
+            'lead_date_status' => ['nullable', Rule::in(['known', 'missing'])],
+            'follow_up' => ['nullable', Rule::in(['scheduled', 'none', 'today', 'tomorrow', 'overdue'])],
+            'handling' => ['nullable', Rule::in(['primary', 'collaborator'])],
+            'crm' => ['nullable', Rule::in(['taken_over', 'not_taken_over'])],
+            'archived' => ['nullable', 'boolean'],
+        ]);
     }
 }

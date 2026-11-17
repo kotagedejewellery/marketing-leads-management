@@ -20,6 +20,8 @@ type Lead = Record<string, string | number | null> & {
     phone: string | null;
     assigned_user_id: number | null;
     archived_at: string | null;
+    crm_taken_over_at: string | null;
+    revision: number;
 };
 const props = defineProps<{
     lead: Lead;
@@ -37,6 +39,7 @@ const props = defineProps<{
         next_page_url: string | null;
     };
     csAccounts: { id: number; name: string; branch_name: string }[];
+    collaborators: { id: number; name: string; branch_name: string }[];
 }>();
 const page = usePage();
 const isAdmin = page.props.auth.user?.role === 'admin';
@@ -49,7 +52,12 @@ const form = useForm({
     assigned_user_id: props.lead.assigned_user_id
         ? String(props.lead.assigned_user_id)
         : '',
+    crm_taken_over: Boolean(props.lead.crm_taken_over_at),
+    revision: props.lead.revision,
     milestones: [...props.milestones],
+});
+const collaboratorForm = useForm({
+    user_ids: props.collaborators.map((collaborator) => collaborator.id),
 });
 const clientError = ref('');
 const archiveDialogOpen = ref(false);
@@ -75,6 +83,7 @@ const formFields = [
     'keterangan',
     'next_follow_up_at',
     'assigned_user_id',
+    'crm_taken_over',
     'milestones',
 ] as const;
 const stageLabel = (value: string | null) =>
@@ -102,6 +111,11 @@ function save() {
     form.patch(`/leads/${props.lead.id}`, {
         preserveScroll: true,
         onError: focusFirstError,
+    });
+}
+function saveCollaborators() {
+    collaboratorForm.patch(`/leads/${props.lead.id}/collaborators`, {
+        preserveScroll: true,
     });
 }
 function archiveLead() {
@@ -292,7 +306,67 @@ function destroyLead() {
                         >{{ form.errors.assigned_user_id }}</span
                     ></label
                 >
+                <label v-if="isAdmin" class="grid gap-2 text-sm font-semibold"
+                    >Penanganan CRM<span
+                        class="flex min-h-11 items-center gap-2 font-normal"
+                        ><input
+                            id="crm_taken_over"
+                            v-model="form.crm_taken_over"
+                            class="size-4 accent-[#8a6b2d]"
+                            type="checkbox"
+                        />Lead sudah diambil alih CRM</span
+                    ></label
+                >
             </div>
+            <section v-if="isAdmin" class="kgj-surface p-5">
+                <h2 class="font-semibold">CS pendamping</h2>
+                <p class="mt-1 text-sm text-[#62665b]">
+                    Tambahkan CS pengganti tanpa mengubah CS utama.
+                </p>
+                <label class="mt-4 grid gap-2 text-sm font-semibold"
+                    >CS yang ikut menangani<select
+                        v-model="collaboratorForm.user_ids"
+                        class="kgj-input min-h-32"
+                        multiple
+                        :aria-invalid="
+                            Boolean(collaboratorForm.errors.user_ids)
+                        "
+                    >
+                        <option
+                            v-for="account in csAccounts"
+                            :key="account.id"
+                            :disabled="
+                                String(account.id) === form.assigned_user_id
+                            "
+                            :value="account.id"
+                        >
+                            {{ account.branch_name }} — {{ account.name }}
+                        </option></select
+                    ><span class="font-normal text-[#62665b]"
+                        >Gunakan Ctrl atau Cmd untuk memilih lebih dari satu
+                        CS.</span
+                    ><span
+                        v-if="collaboratorForm.errors.user_ids"
+                        class="font-normal text-[#a23e2b]"
+                        >{{ collaboratorForm.errors.user_ids }}</span
+                    ></label
+                >
+                <button
+                    class="kgj-button-secondary mt-4"
+                    type="button"
+                    :disabled="
+                        collaboratorForm.processing ||
+                        collaboratorForm.isDirty === false
+                    "
+                    @click="saveCollaborators"
+                >
+                    {{
+                        collaboratorForm.processing
+                            ? 'Menyimpan…'
+                            : 'Simpan CS pendamping'
+                    }}
+                </button>
+            </section>
             <label class="grid gap-2 text-sm font-semibold"
                 >Keterangan<textarea
                     id="keterangan"

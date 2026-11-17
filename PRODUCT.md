@@ -35,7 +35,7 @@ The initial data source is the existing KGJ monitoring spreadsheet. The working 
 - Import-ready fields preserve the spreadsheet's No, Nama/Nomor, Respond Time, Nama CS, Keterangan, Kebutuhan, Greeting, Waktu Chat, source, campaign, and initial lead definition alongside CS-maintained fields.
 - CS-maintained qualification is separate from imported source text: Intent Buying (Tunangan, Lamaran, Nikahan, Anniversary, or Lainnya), usage date, budget, keterangan, and grouped Cold/Warm/Hot milestones.
 - CSV and XLSX imports are one-way, select the `All Leads` worksheet when available, and reject duplicates by a stable contact key.
-- Lead milestones are: Cold (Klik saja), Warm (Tanya-tanya saja, Sampai Pricelist), and Hot (Datang Offline, Diskusi Online, Closing tapi belum Transfer, Closing, Repeat Order).
+- Lead milestones are: Cold (Klik saja), Warm (Tanya-Tanya, Sampai Pricelist), and Hot (Datang Offline, Diskusi Online, Closing / Repeat Order).
 
 ## Evidence on Hand
 

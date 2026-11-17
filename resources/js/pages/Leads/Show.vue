@@ -2,6 +2,7 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, ref } from 'vue';
 import { leadSchema } from '@/lib/lead-schema';
+import { budgetOptions } from '@/lib/lead-options';
 import {
     Dialog,
     DialogClose,
@@ -57,15 +58,13 @@ const lifecycleProcessing = ref(false);
 const groups = {
     Cold: [['clicked', 'Klik saja']],
     Warm: [
-        ['asked', 'Tanya-tanya saja'],
+        ['asked', 'Tanya-Tanya'],
         ['price_list', 'Sampai Pricelist'],
     ],
     Hot: [
         ['offline', 'Datang Offline'],
         ['online', 'Diskusi Online'],
-        ['closing_pending_transfer', 'Closing tapi belum Transfer'],
-        ['closing', 'Closing'],
-        ['repeat_order', 'Repeat Order'],
+        ['closing_repeat', 'Closing / Repeat Order'],
     ],
 };
 const milestoneCount = computed(() => form.milestones.length);
@@ -81,13 +80,11 @@ const formFields = [
 const stageLabel = (value: string | null) =>
     ({
         clicked: 'Klik saja',
-        asked: 'Tanya-tanya saja',
+        asked: 'Tanya-Tanya',
         price_list: 'Sampai Pricelist',
         offline: 'Datang Offline',
         online: 'Diskusi Online',
-        closing_pending_transfer: 'Closing belum transfer',
-        closing: 'Closing',
-        repeat_order: 'Repeat Order',
+        closing_repeat: 'Closing / Repeat Order',
     })[value || ''];
 const focusFirstError = () => {
     const field = formFields.find((key) => form.errors[key]);
@@ -243,13 +240,21 @@ function destroyLead() {
                         >{{ form.errors.usage_date }}</span
                     ></label
                 ><label class="grid gap-2 text-sm font-semibold"
-                    >Budget<input
+                    >Budget<select
                         id="budget"
                         v-model="form.budget"
-                        maxlength="120"
                         class="kgj-input"
                         :aria-invalid="Boolean(form.errors.budget)"
-                    /><span
+                    >
+                        <option value="">Pilih budget</option>
+                        <option
+                            v-for="option in budgetOptions"
+                            :key="option"
+                            :value="option"
+                        >
+                            {{ option }}
+                        </option></select
+                    ><span
                         v-if="form.errors.budget"
                         class="font-normal text-[#a23e2b]"
                         >{{ form.errors.budget }}</span

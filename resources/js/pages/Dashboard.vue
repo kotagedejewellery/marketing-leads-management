@@ -58,13 +58,11 @@ const priorityRows = computed(() => [
 const stageLabel = (stage: string | null) =>
     ({
         clicked: 'Klik saja',
-        asked: 'Tanya-tanya',
+        asked: 'Tanya-Tanya',
         price_list: 'Sampai pricelist',
         offline: 'Datang offline',
         online: 'Diskusi online',
-        closing_pending_transfer: 'Closing, belum transfer',
-        closing: 'Closing',
-        repeat_order: 'Repeat order',
+        closing_repeat: 'Closing / Repeat Order',
     })[stage ?? ''] ?? 'Belum ditandai';
 
 const formatUpdatedAt = (updatedAt: string | null) =>

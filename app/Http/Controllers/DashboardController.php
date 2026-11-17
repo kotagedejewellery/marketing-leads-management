@@ -26,7 +26,7 @@ class DashboardController extends Controller
         $query = DB::table('leads as l')
             ->leftJoin('users as u', 'u.id', '=', 'l.assigned_user_id')
             ->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')
-            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.intent_buying', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.updated_at', 'u.name as owner_name', 'b.name as branch_name')
+            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.created_at', 'l.updated_at', 'u.name as owner_name', 'b.name as branch_name')
             ->orderByDesc('l.updated_at');
 
         $showArchived = $request->boolean('archived');
@@ -54,14 +54,39 @@ class DashboardController extends Controller
             $query->where('l.assigned_user_id', $request->user()->id);
         }
 
+        $leads = $query->paginate(20)->withQueryString();
+        $leadIds = $leads->pluck('id')->all();
+        $milestonesByLead = [];
+        foreach (DB::table('lead_milestones')->whereIn('lead_id', $leadIds)->where('is_active', true)->orderBy('milestone')->get(['lead_id', 'milestone']) as $milestone) {
+            $milestonesByLead[$milestone->lead_id][] = $milestone->milestone;
+        }
+        $latestActivityByLead = [];
+        $rankedActivities = DB::table('lead_activity')
+            ->select('lead_id', 'action', 'detail', 'created_at')
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY lead_id ORDER BY created_at DESC, id DESC) as activity_rank')
+            ->whereIn('lead_id', $leadIds);
+        foreach (DB::query()->fromSub($rankedActivities, 'ranked_activities')->where('activity_rank', 1)->get() as $activity) {
+            $latestActivityByLead[$activity->lead_id] = $activity;
+        }
+        foreach ($leads->items() as $lead) {
+            $lead->milestones = $milestonesByLead[$lead->id] ?? [];
+            $activity = $latestActivityByLead[$lead->id] ?? null;
+            $lead->latest_activity = $activity->action ?? null;
+            $lead->latest_activity_detail = $activity->detail ?? null;
+            $lead->latest_activity_at = $activity->created_at ?? null;
+        }
+
         return Inertia::render('Leads/Index', [
-            'leads' => $query->paginate(50)->withQueryString(),
+            'leads' => $leads,
             'filters' => $request->only('q', 'branch', 'stage', 'queue', 'archived'),
             'archiveMode' => $showArchived,
             'branches' => $request->user()->role === 'admin' ? DB::table('branches')->orderBy('name')->get(['id', 'name']) : [],
             'csAccounts' => $request->user()->role === 'admin'
                 ? DB::table('users as u')->join('branches as b', 'b.id', '=', 'u.branch_id')->where('u.role', 'cs')->where('u.active', true)->orderBy('b.name')->get(['u.id', 'u.name', 'b.name as branch_name'])
                 : [],
+            'sheetSync' => $request->user()->role === 'admin'
+                ? DB::table('lead_sync_runs')->where('source', 'google_sheets')->orderByDesc('completed_at')->first(['status', 'completed_at'])
+                : null,
         ]);
     }
 
@@ -197,7 +222,7 @@ class DashboardController extends Controller
     private function stats(Request $request): array
     {
         $counts = (array) $this->activeLeads($request)
-            ->selectRaw("COUNT(*) as total, COALESCE(SUM(CASE WHEN l.current_stage = 'clicked' THEN 1 ELSE 0 END), 0) as cold, COALESCE(SUM(CASE WHEN l.current_stage IN ('asked', 'price_list') THEN 1 ELSE 0 END), 0) as warm, COALESCE(SUM(CASE WHEN l.current_stage IN ('offline', 'online', 'closing_pending_transfer') THEN 1 ELSE 0 END), 0) as hot, COALESCE(SUM(CASE WHEN l.current_stage IN ('closing', 'repeat_order') THEN 1 ELSE 0 END), 0) as closing, COALESCE(SUM(CASE WHEN l.current_stage IS NULL THEN 1 ELSE 0 END), 0) as unclassified")
+            ->selectRaw("COUNT(*) as total, COALESCE(SUM(CASE WHEN l.current_stage = 'clicked' THEN 1 ELSE 0 END), 0) as cold, COALESCE(SUM(CASE WHEN l.current_stage IN ('asked', 'price_list') THEN 1 ELSE 0 END), 0) as warm, COALESCE(SUM(CASE WHEN l.current_stage IN ('offline', 'online') THEN 1 ELSE 0 END), 0) as hot, COALESCE(SUM(CASE WHEN l.current_stage = 'closing_repeat' THEN 1 ELSE 0 END), 0) as closing, COALESCE(SUM(CASE WHEN l.current_stage IS NULL THEN 1 ELSE 0 END), 0) as unclassified")
             ->first();
 
         return [

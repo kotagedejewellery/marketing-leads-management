@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import LeadQuickUpdate from '@/components/LeadQuickUpdate.vue';
+import { budgetOptions } from '@/lib/lead-options';
 import {
     Dialog,
     DialogClose,
@@ -17,11 +19,19 @@ type Lead = {
     contact_raw: string;
     phone: string | null;
     intent_buying: string | null;
+    usage_date: string | null;
+    budget: string | null;
+    keterangan: string | null;
     imported_definition: string | null;
     current_stage: string | null;
     next_follow_up_at: string | null;
+    milestones: string[];
+    latest_activity: string | null;
+    latest_activity_detail: string | null;
+    latest_activity_at: string | null;
     owner_name: string | null;
     branch_name: string | null;
+    created_at: string;
     updated_at: string;
 };
 type Page = {
@@ -44,6 +54,7 @@ const props = defineProps<{
     branches: { id: number; name: string }[];
     csAccounts: { id: number; name: string; branch_name: string }[];
     archiveMode: boolean;
+    sheetSync: { status: string; completed_at: string | null } | null;
 }>();
 const page = usePage();
 const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
@@ -68,6 +79,10 @@ const bulkForm = useForm({ assigned_user_id: '', lead_ids: [] as number[] });
 const selectionForm = useForm({ lead_ids: [] as number[] });
 const archiveDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
+const discardChangesDialogOpen = ref(false);
+const dirtyLeadIds = ref(new Set<number>());
+const pendingDiscardAction = ref<(() => void) | null>(null);
+const isDesktopWorkspace = ref(false);
 const importForm = useForm<{
     csv_file: File | null;
     import_mode: 'all_leads' | 'daily_tabs';
@@ -76,6 +91,7 @@ const importForm = useForm<{
     import_mode: 'all_leads',
 });
 const newLead = useForm({
+    inline: true,
     contact_raw: '',
     name: '',
     phone: '',
@@ -97,6 +113,7 @@ const newLead = useForm({
     milestone: '',
 });
 const showingNewLead = ref(false);
+const hasUnsavedChanges = computed(() => dirtyLeadIds.value.size > 0);
 const hasFilters = computed(() =>
     Boolean(q.value || branch.value || stage.value || queue.value),
 );
@@ -121,7 +138,32 @@ const activeFilterText = computed(() =>
         .join(' · '),
 );
 
-const applyFilters = () =>
+const guardUnsavedChanges = (action: () => void) => {
+    if (!hasUnsavedChanges.value) {
+        action();
+
+        return;
+    }
+    pendingDiscardAction.value = action;
+    discardChangesDialogOpen.value = true;
+};
+const trackDirtyLead = (leadId: number, isDirty: boolean) => {
+    const next = new Set(dirtyLeadIds.value);
+    if (isDirty) {
+        next.add(leadId);
+    } else {
+        next.delete(leadId);
+    }
+    dirtyLeadIds.value = next;
+};
+const discardChangesAndContinue = () => {
+    const action = pendingDiscardAction.value;
+    dirtyLeadIds.value = new Set();
+    pendingDiscardAction.value = null;
+    discardChangesDialogOpen.value = false;
+    action?.();
+};
+const applyFiltersNow = () =>
     router.get(
         '/leads',
         {
@@ -142,42 +184,57 @@ const applyFilters = () =>
             },
         },
     );
-const clearFilters = () => {
-    q.value = '';
-    branch.value = '';
-    stage.value = '';
-    queue.value = '';
-    applyFilters();
-};
-const importCsv = () =>
+const applyFilters = () => guardUnsavedChanges(applyFiltersNow);
+const clearFilters = () =>
+    guardUnsavedChanges(() => {
+        q.value = '';
+        branch.value = '';
+        stage.value = '';
+        queue.value = '';
+        applyFiltersNow();
+    });
+const importCsvNow = () =>
     importForm.post('/leads/import', {
         forceFormData: true,
         onSuccess: () => importForm.reset(),
     });
+const importCsv = () => guardUnsavedChanges(importCsvNow);
+const syncingSheet = ref(false);
+const syncGoogleSheetNow = () =>
+    router.post(
+        '/leads/sync-google-sheet',
+        {},
+        {
+            preserveScroll: true,
+            onStart: () => (syncingSheet.value = true),
+            onFinish: () => (syncingSheet.value = false),
+        },
+    );
+const syncGoogleSheet = () => guardUnsavedChanges(syncGoogleSheetNow);
 const selectCsv = (event: Event) => {
     importForm.csv_file = (event.target as HTMLInputElement).files?.[0] || null;
 };
-const toggleArchive = () =>
+const toggleArchiveNow = () =>
     router.get('/leads', { archived: props.archiveMode ? undefined : '1' });
-const createLead = () =>
+const toggleArchive = () => guardUnsavedChanges(toggleArchiveNow);
+const createLeadNow = () =>
     newLead.post('/leads', {
         onSuccess: () => {
             newLead.reset();
             showingNewLead.value = false;
         },
     });
+const createLead = () => guardUnsavedChanges(createLeadNow);
 const stageLabel = (value: string | null) =>
     ({
         clicked: 'Klik saja',
-        asked: 'Tanya-tanya saja',
+        asked: 'Tanya-Tanya',
         price_list: 'Sampai Pricelist',
         offline: 'Datang Offline',
         online: 'Diskusi Online',
-        closing_pending_transfer: 'Closing belum transfer',
-        closing: 'Closing',
-        repeat_order: 'Repeat Order',
+        closing_repeat: 'Closing / Repeat Order',
     })[value || ''];
-const assignSelected = () => {
+const assignSelectedNow = () => {
     bulkForm.lead_ids = selectedLeadIds.value;
     bulkForm.post('/leads/assign', {
         onSuccess: () => {
@@ -186,6 +243,7 @@ const assignSelected = () => {
         },
     });
 };
+const assignSelected = () => guardUnsavedChanges(assignSelectedNow);
 const clearSelection = () => {
     selectedLeadIds.value = [];
     selectionForm.reset();
@@ -207,15 +265,60 @@ const archiveSelected = () => {
     selectionForm.lead_ids = selectedLeadIds.value;
     selectionForm.post('/leads/archive', { onSuccess: clearSelection });
 };
-const restoreSelected = () => {
+const openArchiveDialog = () =>
+    guardUnsavedChanges(() => (archiveDialogOpen.value = true));
+const restoreSelectedNow = () => {
     selectionForm.lead_ids = selectedLeadIds.value;
     selectionForm.post('/leads/restore', { onSuccess: clearSelection });
 };
+const restoreSelected = () => guardUnsavedChanges(restoreSelectedNow);
 const destroySelected = () => {
     deleteDialogOpen.value = false;
     selectionForm.lead_ids = selectedLeadIds.value;
     selectionForm.delete('/leads', { onSuccess: clearSelection });
 };
+const openDeleteDialog = () =>
+    guardUnsavedChanges(() => (deleteDialogOpen.value = true));
+
+const beforeUnload = (event: BeforeUnloadEvent) => {
+    if (!hasUnsavedChanges.value) {
+        return;
+    }
+    event.preventDefault();
+    event.returnValue = '';
+};
+let removeNavigationGuard: (() => void) | undefined;
+let desktopBreakpoint: MediaQueryList | undefined;
+const syncWorkspaceLayout = () => {
+    if (!hasUnsavedChanges.value && desktopBreakpoint) {
+        isDesktopWorkspace.value = desktopBreakpoint.matches;
+    }
+};
+watch(hasUnsavedChanges, (isDirty) => {
+    if (!isDirty) {
+        syncWorkspaceLayout();
+    }
+});
+onMounted(() => {
+    desktopBreakpoint = window.matchMedia('(min-width: 1280px)');
+    desktopBreakpoint.addEventListener('change', syncWorkspaceLayout);
+    syncWorkspaceLayout();
+    window.addEventListener('beforeunload', beforeUnload);
+    removeNavigationGuard = router.on('before', (event) => {
+        if (event.detail.visit.method !== 'get' || !hasUnsavedChanges.value) {
+            return;
+        }
+        const href = event.detail.visit.url.toString();
+        guardUnsavedChanges(() => window.location.assign(href));
+
+        return false;
+    });
+});
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', beforeUnload);
+    desktopBreakpoint?.removeEventListener('change', syncWorkspaceLayout);
+    removeNavigationGuard?.();
+});
 </script>
 
 <template>
@@ -387,15 +490,13 @@ const destroySelected = () => {
                         >
                             <option value="">Belum dikualifikasi</option>
                             <option value="clicked">Klik saja</option>
-                            <option value="asked">Tanya-tanya saja</option>
+                            <option value="asked">Tanya-Tanya</option>
                             <option value="price_list">Sampai Pricelist</option>
                             <option value="offline">Datang Offline</option>
                             <option value="online">Diskusi Online</option>
-                            <option value="closing_pending_transfer">
-                                Closing tapi belum Transfer
+                            <option value="closing_repeat">
+                                Closing / Repeat Order
                             </option>
-                            <option value="closing">Closing</option>
-                            <option value="repeat_order">Repeat Order</option>
                         </select></label
                     >
                     <label class="grid gap-2 text-sm font-semibold"
@@ -418,10 +519,20 @@ const destroySelected = () => {
                             class="kgj-input"
                     /></label>
                     <label class="grid gap-2 text-sm font-semibold"
-                        >Budget<input
+                        >Budget<select
                             v-model="newLead.budget"
                             class="kgj-input"
-                    /></label>
+                        >
+                            <option value="">Pilih budget</option>
+                            <option
+                                v-for="option in budgetOptions"
+                                :key="option"
+                                :value="option"
+                            >
+                                {{ option }}
+                            </option>
+                        </select></label
+                    >
                     <label class="grid gap-2 text-sm font-semibold"
                         >Tindak lanjut berikutnya<input
                             v-model="newLead.next_follow_up_at"
@@ -494,15 +605,13 @@ const destroySelected = () => {
                 >
                     <option value="">Semua tahap</option>
                     <option value="clicked">Klik saja</option>
-                    <option value="asked">Tanya-tanya</option>
+                    <option value="asked">Tanya-Tanya</option>
                     <option value="price_list">Sampai Pricelist</option>
                     <option value="offline">Datang Offline</option>
                     <option value="online">Diskusi Online</option>
-                    <option value="closing_pending_transfer">
-                        Belum transfer
+                    <option value="closing_repeat">
+                        Closing / Repeat Order
                     </option>
-                    <option value="closing">Closing</option>
-                    <option value="repeat_order">Repeat Order</option>
                 </select></label
             >
             <label v-if="isAdmin" class="text-sm font-medium"
@@ -550,6 +659,14 @@ const destroySelected = () => {
                 >
                     {{ importForm.processing ? 'Mengimpor…' : 'Import' }}
                 </button>
+                <button
+                    class="kgj-button-secondary"
+                    type="button"
+                    :disabled="syncingSheet"
+                    @click="syncGoogleSheet"
+                >
+                    {{ syncingSheet ? 'Menyinkronkan…' : 'Sinkronkan Sheet' }}
+                </button>
             </form>
         </div>
         <div
@@ -567,6 +684,15 @@ const destroySelected = () => {
             </button>
             <span v-if="selectedFile">Siap diimpor: {{ selectedFile }}</span>
             <span v-if="isAdmin && !selectedFile">{{ importHint }}</span>
+            <span v-if="isAdmin && sheetSync"
+                >Sinkronisasi terakhir:
+                {{ sheetSync.status === 'success' ? 'berhasil' : 'gagal' }}
+                {{
+                    sheetSync.completed_at
+                        ? `· ${new Date(sheetSync.completed_at).toLocaleString('id-ID')}`
+                        : ''
+                }}</span
+            >
         </div>
         <p
             v-if="importForm.errors.csv_file"
@@ -630,7 +756,7 @@ const destroySelected = () => {
                     class="kgj-button-secondary"
                     type="button"
                     :disabled="selectionForm.processing"
-                    @click="archiveDialogOpen = true"
+                    @click="openArchiveDialog"
                 >
                     Arsipkan
                 </button>
@@ -648,7 +774,7 @@ const destroySelected = () => {
                     class="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#d8aaa2] px-3 text-sm font-semibold text-kgj-rose transition hover:bg-[#fff3f1]"
                     type="button"
                     :disabled="selectionForm.processing"
-                    @click="deleteDialogOpen = true"
+                    @click="openDeleteDialog"
                 >
                     Hapus permanen
                 </button>
@@ -662,7 +788,7 @@ const destroySelected = () => {
             </button>
         </form>
 
-        <div class="mt-6 grid gap-3 md:hidden">
+        <div v-if="!isDesktopWorkspace" class="mt-6 grid gap-3">
             <article
                 v-for="lead in leads.data"
                 :key="lead.id"
@@ -688,9 +814,12 @@ const destroySelected = () => {
                     ><span class="mt-1 block text-sm text-[#62665b]">{{
                         lead.phone || lead.contact_raw
                     }}</span
-                    ><span class="mt-3 block text-sm"
-                        >{{ lead.branch_name || 'Belum ditugaskan' }} ·
-                        {{ lead.owner_name || '—' }}</span
+                    ><span class="mt-3 block text-sm font-semibold">{{
+                        lead.owner_name || 'Belum ditugaskan'
+                    }}</span
+                    ><span class="mt-1 block text-xs text-[#62665b]">{{
+                        lead.branch_name || '—'
+                    }}</span
                     ><span
                         class="mt-1 block text-xs tracking-wide text-[#8a6b2d] uppercase"
                         >{{
@@ -710,6 +839,18 @@ const destroySelected = () => {
                         }}</span
                     >
                     ></Link
+                >
+                <LeadQuickUpdate
+                    v-if="!archiveMode"
+                    class="mt-5"
+                    :lead="lead"
+                    @dirty-change="trackDirtyLead"
+                />
+                <Link
+                    v-else
+                    :href="`/leads/${lead.id}`"
+                    class="mt-4 block font-semibold text-[#62665b] underline underline-offset-4"
+                    >Detail lengkap</Link
                 >
             </article>
             <p
@@ -732,83 +873,130 @@ const destroySelected = () => {
             </p>
         </div>
 
-        <div class="kgj-table mt-6 hidden overflow-x-auto md:block">
-            <table class="w-full min-w-[760px] text-sm">
+        <div
+            v-if="isDesktopWorkspace"
+            class="kgj-table mt-6 max-h-[calc(100dvh-18rem)] overflow-auto"
+        >
+            <table
+                class="w-full min-w-[2210px] border-separate border-spacing-0 text-sm"
+            >
                 <thead
-                    class="text-left text-xs tracking-wider text-[#62665b] uppercase"
+                    class="sticky top-0 z-30 text-left text-xs tracking-wider text-[#62665b] uppercase"
                 >
                     <tr>
-                        <th class="p-4">
+                        <th
+                            class="sticky left-0 z-40 w-14 min-w-14 bg-[#f8f5ee] p-4"
+                        >
                             <span class="sr-only">Pilih lead</span>
                         </th>
-                        <th class="p-4">Lead</th>
-                        <th class="p-4">Cabang / CS</th>
-                        <th class="p-4">Status</th>
-                        <th class="p-4">Update</th>
+                        <th
+                            class="sticky left-14 z-40 w-56 min-w-56 bg-[#f8f5ee] p-4"
+                        >
+                            Lead
+                        </th>
+                        <th
+                            class="sticky left-[17.5rem] z-40 w-44 min-w-44 bg-[#f8f5ee] p-4"
+                        >
+                            CS / Cabang
+                        </th>
+                        <th class="w-40 min-w-40 p-4">Dibuat</th>
+                        <template v-if="!archiveMode">
+                            <th class="p-4">Cold</th>
+                            <th class="p-4">Warm</th>
+                            <th class="p-4">Hot</th>
+                            <th class="p-4">Intent buying</th>
+                            <th class="p-4">Waktu pakai</th>
+                            <th class="p-4">Budget</th>
+                            <th class="p-4">Keterangan</th>
+                            <th class="p-4">Follow-up</th>
+                            <th class="p-4">Riwayat</th>
+                            <th class="sticky right-0 z-40 bg-[#f8f5ee] p-4">
+                                Autosimpan
+                            </th>
+                        </template>
+                        <th v-else class="p-4">Detail</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr
-                        v-for="lead in leads.data"
-                        :key="lead.id"
-                        class="border-t border-[#e7eae5]"
-                    >
-                        <td class="p-4">
-                            <input
-                                v-model="selectedLeadIds"
-                                class="size-4 accent-kgj-gold"
-                                type="checkbox"
-                                :disabled="
-                                    !selectedLeadIds.includes(lead.id) &&
-                                    selectedLeadIds.length >= 100
-                                "
-                                :aria-label="`Pilih ${lead.name || lead.contact_raw}`"
-                                :value="lead.id"
+                    <template v-for="lead in leads.data" :key="lead.id">
+                        <tr class="group border-t border-[#e7eae5]">
+                            <td
+                                class="sticky left-0 z-10 w-14 min-w-14 bg-kgj-paper p-4 group-hover:bg-[#fcfaf5]"
+                            >
+                                <input
+                                    v-model="selectedLeadIds"
+                                    class="size-4 accent-kgj-gold"
+                                    type="checkbox"
+                                    :disabled="
+                                        !selectedLeadIds.includes(lead.id) &&
+                                        selectedLeadIds.length >= 100
+                                    "
+                                    :aria-label="`Pilih ${lead.name || lead.contact_raw}`"
+                                    :value="lead.id"
+                                />
+                            </td>
+                            <td
+                                class="sticky left-14 z-10 w-56 min-w-56 overflow-hidden bg-kgj-paper p-4 font-semibold group-hover:bg-[#fcfaf5]"
+                            >
+                                <Link
+                                    :href="`/leads/${lead.id}`"
+                                    class="block truncate hover:underline"
+                                    :title="lead.name || lead.contact_raw"
+                                    >{{ lead.name || lead.contact_raw }}</Link
+                                ><small
+                                    class="mt-1 block truncate font-normal text-[#62665b]"
+                                    :title="lead.phone || lead.contact_raw"
+                                    >{{ lead.phone || lead.contact_raw }}</small
+                                >
+                            </td>
+                            <td
+                                class="sticky left-[17.5rem] z-10 w-44 min-w-44 overflow-hidden bg-kgj-paper p-4 group-hover:bg-[#fcfaf5]"
+                            >
+                                <span
+                                    class="block truncate"
+                                    :title="
+                                        lead.owner_name || 'Belum ditugaskan'
+                                    "
+                                    >{{
+                                        lead.owner_name || 'Belum ditugaskan'
+                                    }}</span
+                                ><small
+                                    class="mt-1 block truncate text-[#62665b]"
+                                    :title="lead.branch_name || '—'"
+                                    >{{ lead.branch_name || '—' }}</small
+                                >
+                            </td>
+                            <td
+                                class="w-40 min-w-40 p-4 text-sm text-[#4f514a]"
+                            >
+                                <time :datetime="lead.created_at">
+                                    {{
+                                        new Date(
+                                            lead.created_at,
+                                        ).toLocaleString('id-ID')
+                                    }}
+                                </time>
+                            </td>
+                            <LeadQuickUpdate
+                                v-if="!archiveMode"
+                                variant="table"
+                                :lead="lead"
+                                @dirty-change="trackDirtyLead"
                             />
-                        </td>
-                        <td class="p-4 font-semibold">
-                            <Link
-                                :href="`/leads/${lead.id}`"
-                                class="hover:underline"
-                                >{{ lead.name || lead.contact_raw }}</Link
-                            ><small
-                                class="mt-1 block font-normal text-[#62665b]"
-                                >{{ lead.phone || lead.contact_raw }}</small
-                            >
-                        </td>
-                        <td class="p-4">
-                            {{ lead.branch_name || 'Belum ditugaskan'
-                            }}<small class="mt-1 block text-[#62665b]">{{
-                                lead.owner_name || '—'
-                            }}</small>
-                        </td>
-                        <td class="p-4">
-                            {{
-                                stageLabel(lead.current_stage) ||
-                                lead.intent_buying ||
-                                lead.imported_definition ||
-                                'Belum dikualifikasi'
-                            }}<small
-                                v-if="lead.next_follow_up_at"
-                                class="mt-1 block text-[#62665b]"
-                                >Follow-up:
-                                {{
-                                    new Date(
-                                        lead.next_follow_up_at,
-                                    ).toLocaleString('id-ID')
-                                }}</small
-                            >
-                        </td>
-                        <td class="p-4">
-                            {{
-                                new Date(lead.updated_at).toLocaleDateString(
-                                    'id-ID',
-                                )
-                            }}
-                        </td>
-                    </tr>
+                            <td v-else class="p-4" colspan="1">
+                                <Link
+                                    :href="`/leads/${lead.id}`"
+                                    class="font-semibold text-[#62665b] underline underline-offset-4"
+                                    >Detail lengkap</Link
+                                >
+                            </td>
+                        </tr>
+                    </template>
                     <tr v-if="!leads.data.length">
-                        <td colspan="5" class="p-12 text-center text-[#62665b]">
+                        <td
+                            :colspan="archiveMode ? 5 : 14"
+                            class="p-12 text-center text-[#62665b]"
+                        >
                             {{
                                 hasFilters
                                     ? 'Tidak ada lead yang cocok dengan filter ini.'
@@ -843,6 +1031,30 @@ const destroySelected = () => {
                 >
             </div>
         </nav>
+        <Dialog v-model:open="discardChangesDialogOpen">
+            <DialogContent>
+                <DialogHeader
+                    ><DialogTitle>Buang perubahan belum disimpan?</DialogTitle
+                    ><DialogDescription
+                        >Checklist, keterangan, dan jadwal tindak lanjut yang
+                        sedang diisi akan hilang bila Anda melanjutkan.
+                    </DialogDescription></DialogHeader
+                >
+                <DialogFooter
+                    ><DialogClose as-child
+                        ><button class="kgj-button-secondary" type="button">
+                            Tetap di halaman ini
+                        </button></DialogClose
+                    ><button
+                        class="kgj-button-primary"
+                        type="button"
+                        @click="discardChangesAndContinue"
+                    >
+                        Lanjut tanpa menyimpan
+                    </button></DialogFooter
+                >
+            </DialogContent>
+        </Dialog>
         <Dialog v-model:open="archiveDialogOpen">
             <DialogContent>
                 <DialogHeader

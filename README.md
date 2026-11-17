@@ -32,11 +32,11 @@ Lead dapat diarsipkan agar tidak tampil pada daftar aktif dan dapat dipulihkan k
 
 ## Status perkembangan lead
 
-| Kelompok | Status yang tersedia                                                               |
-| -------- | ---------------------------------------------------------------------------------- |
-| Cold     | Klik saja                                                                          |
-| Warm     | Tanya-tanya saja, Sampai Pricelist                                                 |
-| Hot      | Datang Offline, Diskusi Online, Closing tapi belum Transfer, Closing, Repeat Order |
+| Kelompok | Status yang tersedia                                   |
+| -------- | ------------------------------------------------------ |
+| Cold     | Klik saja                                              |
+| Warm     | Tanya-Tanya, Sampai Pricelist                          |
+| Hot      | Datang Offline, Diskusi Online, Closing / Repeat Order |
 
 Setiap lead memiliki satu status perkembangan terbaru. Seluruh perubahan tetap tersimpan dalam riwayat sehingga alur komunikasi dapat ditinjau kembali.
 

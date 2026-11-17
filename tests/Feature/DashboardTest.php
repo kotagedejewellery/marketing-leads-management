@@ -88,7 +88,7 @@ class DashboardTest extends TestCase
             [
                 'name' => 'Lead terbaru',
                 'assigned_user_id' => $cs->id,
-                'current_stage' => 'closing',
+                'current_stage' => 'closing_repeat',
                 'intent_buying' => 'Nikahan',
                 'usage_date' => '2026-12-12',
                 'budget' => '10 juta',
@@ -111,6 +111,7 @@ class DashboardTest extends TestCase
                 ->component('Statistics')
                 ->where('quality.total', 2)
                 ->where('quality.complete', 1)
+                ->where('stats.closing', 1)
                 ->where('workload.0.name', 'Pusat')
                 ->where('workload.0.lead_count', 1),
         );
@@ -138,7 +139,7 @@ class DashboardTest extends TestCase
             [
                 'name' => 'Lead akun lain',
                 'assigned_user_id' => $otherCs->id,
-                'current_stage' => 'closing',
+                'current_stage' => 'closing_repeat',
                 'intent_buying' => 'Nikahan',
                 'usage_date' => '2026-12-12',
                 'budget' => '10 juta',

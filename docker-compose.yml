@@ -22,6 +22,8 @@ services:
             SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-false}
             CACHE_STORE: file
             QUEUE_CONNECTION: sync
+            GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-}
+            GOOGLE_SERVICE_ACCOUNT_JSON: /run/secrets/google-service-account.json
         depends_on:
             db:
                 condition: service_healthy
@@ -29,6 +31,7 @@ services:
                 condition: service_completed_successfully
         volumes:
             - app_storage:/var/www/html/storage
+            - ./secrets:/run/secrets:ro
 
     db:
         image: postgres:16-alpine
@@ -46,6 +49,8 @@ services:
             - ./database/postgres/004_crud_lifecycle.sql:/docker-entrypoint-initdb.d/004_crud_lifecycle.sql:ro
             - ./database/postgres/005_lead_source_date.sql:/docker-entrypoint-initdb.d/005_lead_source_date.sql:ro
             - ./database/postgres/006_operational_hardening.sql:/docker-entrypoint-initdb.d/006_operational_hardening.sql:ro
+            - ./database/postgres/007_simplify_lead_milestones.sql:/docker-entrypoint-initdb.d/007_simplify_lead_milestones.sql:ro
+            - ./database/postgres/008_google_sheet_sync.sql:/docker-entrypoint-initdb.d/008_google_sheet_sync.sql:ro
         healthcheck:
             test:
                 [
@@ -69,11 +74,13 @@ services:
             - ./database/postgres/004_crud_lifecycle.sql:/migrations/004_crud_lifecycle.sql:ro
             - ./database/postgres/005_lead_source_date.sql:/migrations/005_lead_source_date.sql:ro
             - ./database/postgres/006_operational_hardening.sql:/migrations/006_operational_hardening.sql:ro
+            - ./database/postgres/007_simplify_lead_milestones.sql:/migrations/007_simplify_lead_milestones.sql:ro
+            - ./database/postgres/008_google_sheet_sync.sql:/migrations/008_google_sheet_sync.sql:ro
         command:
             [
                 'sh',
                 '-c',
-                'psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/002_lead_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/003_backfill_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/004_crud_lifecycle.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/005_lead_source_date.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/006_operational_hardening.sql',
+                'psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/002_lead_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/003_backfill_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/004_crud_lifecycle.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/005_lead_source_date.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/006_operational_hardening.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/007_simplify_lead_milestones.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/008_google_sheet_sync.sql',
             ]
 
 volumes:

@@ -12,6 +12,7 @@ Route::middleware('auth')->group(function () {
     Route::get('leads', [DashboardController::class, 'leads'])->name('leads.index');
     Route::post('leads', [LeadController::class, 'store'])->name('leads.store');
     Route::post('leads/import', [LeadController::class, 'import'])->middleware(EnsureAdmin::class)->name('leads.import');
+    Route::post('leads/sync-google-sheet', [LeadController::class, 'syncGoogleSheet'])->middleware(EnsureAdmin::class)->name('leads.sync-google-sheet');
     Route::post('leads/assign', [LeadController::class, 'assign'])->middleware(EnsureAdmin::class)->name('leads.assign');
     Route::post('leads/archive', [LeadController::class, 'archiveSelected'])->name('leads.archive-selected');
     Route::post('leads/restore', [LeadController::class, 'restoreSelected'])->name('leads.restore-selected');

@@ -3,10 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\UpdateLeadRequest;
+use App\Services\GoogleSheetSyncService;
+use App\Services\LeadImportService;
+use App\Support\LeadBudgetRanges;
+use DateTimeImmutable;
 use DateTimeInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -19,14 +24,14 @@ class LeadController extends Controller
 
     private const MILESTONES = [
         'clicked' => 'Klik saja',
-        'asked' => 'Tanya-tanya saja',
+        'asked' => 'Tanya-Tanya',
         'price_list' => 'Sampai Pricelist',
         'offline' => 'Datang Offline',
         'online' => 'Diskusi Online',
-        'closing_pending_transfer' => 'Closing tapi belum Transfer',
-        'closing' => 'Closing',
-        'repeat_order' => 'Repeat Order',
+        'closing_repeat' => 'Closing / Repeat Order',
     ];
+
+    public function __construct(private readonly LeadImportService $leadImporter) {}
 
     public function store(Request $request): RedirectResponse
     {
@@ -46,11 +51,14 @@ class LeadController extends Controller
             'campaign_description' => ['nullable', 'string', 'max:160'],
             'intent_buying' => ['nullable', 'in:Tunangan,Lamaran,Nikahan,Anniversary,Lainnya'],
             'usage_date' => ['nullable', 'date'],
-            'budget' => ['nullable', 'string', 'max:120'],
+            'budget' => ['nullable', Rule::in(LeadBudgetRanges::OPTIONS)],
             'keterangan' => ['nullable', 'string'],
             'next_follow_up_at' => ['nullable', 'date'],
-            'milestone' => ['nullable', 'in:clicked,asked,price_list,offline,online,closing_pending_transfer,closing,repeat_order'],
+            'milestone' => ['nullable', 'in:clicked,asked,price_list,offline,online,closing_repeat'],
         ]);
+        $data['next_follow_up_at'] = $this->normalizedDateTime(
+            isset($data['next_follow_up_at']) ? (string) $data['next_follow_up_at'] : null,
+        );
         $isAdmin = $request->user()->role === 'admin';
         $assignedUserId = $isAdmin ? ($data['assigned_user_id'] ?? null) : $request->user()->id;
         $contact = ($data['phone'] ?? null) ?: $data['contact_raw'];
@@ -99,7 +107,7 @@ class LeadController extends Controller
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead ditambahkan.']);
 
-        return to_route('leads.show', $id);
+        return $request->boolean('inline') ? back() : to_route('leads.show', $id);
     }
 
     public function import(Request $request): RedirectResponse
@@ -142,99 +150,31 @@ class LeadController extends Controller
                 $rows[] = $normalized;
             }
         }
-        $keys = [];
-        foreach ($rows as $row) {
-            foreach ($this->contactKeys($row['contact_raw']) as $key) {
-                $keys[$key] = true;
-            }
-        }
-        $keys = array_keys($keys);
-        $existing = collect($keys)->chunk(500)->flatMap(fn ($chunk) => DB::table('leads')->whereIn('contact_key', $chunk)->pluck('contact_key'))->flip()->all();
-        $csByName = DB::table('users')->where('role', 'cs')->where('active', true)->get(['id', 'name'])
-            ->groupBy(fn ($user) => $this->csKey($user->name))
-            ->map(fn ($users) => $users->count() === 1 ? $users->first()->id : null)
-            ->all();
-        $inserted = 0;
-        $skipped = 0;
-        $unassigned = 0;
-        $needsReview = 0;
-
-        DB::transaction(function () use ($rows, $request, $existing, $csByName, &$inserted, &$skipped, &$unassigned, &$needsReview): void {
-            $known = $existing;
-
-            foreach ($rows as $row) {
-                $contact = trim((string) $row['contact_raw']);
-                $key = $this->contactKey($contact);
-                $duplicate = false;
-                foreach ($this->contactKeys($contact) as $candidate) {
-                    if (isset($known[$candidate])) {
-                        $duplicate = true;
-
-                        break;
-                    }
-                }
-                if ($duplicate) {
-                    $skipped++;
-
-                    continue;
-                }
-
-                preg_match('/^(\+?[0-9][0-9\s-]*)(?:\s+(.+))?$/u', $contact, $match);
-                $owner = $csByName[$this->csKey((string) $row['imported_cs_name'])] ?? null;
-                $classification = $this->importClassification($row);
-                $initialMilestones = $this->initialMilestones($row);
-                $id = DB::table('leads')->insertGetId([
-                    'assigned_user_id' => $owner,
-                    'import_fingerprint' => hash('sha256', json_encode($row, JSON_THROW_ON_ERROR)),
-                    'contact_key' => $key,
-                    'source_row_no' => $row['source_row_no'],
-                    'source_date_raw' => $row['source_date_raw'],
-                    'contact_raw' => $contact,
-                    'name' => $match[2] ?? null,
-                    'phone' => $match[1] ?? null,
-                    'respond_time' => $row['respond_time'],
-                    'imported_cs_name' => $row['imported_cs_name'],
-                    'imported_keterangan' => $row['imported_keterangan'],
-                    'raw_kebutuhan' => $row['raw_kebutuhan'],
-                    'greeting' => $row['greeting'],
-                    'chat_time' => $row['chat_time'],
-                    'source_description' => $row['source_description'],
-                    'campaign_description' => $row['campaign_description'],
-                    'imported_definition' => $classification,
-                    'current_stage' => $this->currentStage($initialMilestones),
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-
-                foreach ($initialMilestones as $milestone) {
-                    DB::table('lead_milestones')->insert([
-                        'lead_id' => $id,
-                        'milestone' => $milestone,
-                        'is_active' => true,
-                        'marked_at' => now(),
-                        'marked_by' => $request->user()->id,
-                    ]);
-                }
-
-                DB::table('lead_activity')->insert([
-                    'lead_id' => $id,
-                    'actor_id' => $request->user()->id,
-                    'action' => $row['source_tab'] ? 'Diimpor dari tab harian' : 'Diimpor dari CSV/XLSX',
-                    'detail' => $row['source_tab']
-                        ? "Sumber: tab {$row['source_tab']} ({$row['source_date_raw']}). ".($owner ? 'CS terhubung dari nama pada XLSX.' : 'Belum ditugaskan ke CS.')
-                        : ($owner ? 'CS terhubung dari nama pada CSV/XLSX.' : 'Belum ditugaskan ke CS.'),
-                    'created_at' => now(),
-                ]);
-                $known[$key] = true;
-                $inserted++;
-                $unassigned += $owner ? 0 : 1;
-                $needsReview += $classification ? 0 : 1;
-            }
-        });
+        $summary = $this->leadImporter->import($rows, $request->user()->id);
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => "Import selesai: {$inserted} baru, {$skipped} duplikat dilewati, {$unassigned} perlu ditugaskan, {$needsReview} perlu review.",
+            'message' => "Import selesai: {$summary['inserted']} baru, {$summary['skipped']} duplikat dilewati, {$summary['unassigned']} perlu ditugaskan, {$summary['needs_review']} perlu review.",
+        ]);
+
+        return to_route('leads.index');
+    }
+
+    public function syncGoogleSheet(Request $request, GoogleSheetSyncService $sync): RedirectResponse
+    {
+        abort_unless($request->user()->role === 'admin', 403);
+
+        try {
+            $summary = $sync->sync($request->user()->id);
+        } catch (\RuntimeException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
+
+            return to_route('leads.index');
+        }
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => "Sinkronisasi selesai: {$summary['inserted']} lead baru, {$summary['resurfaced']} muncul kembali.",
         ]);
 
         return to_route('leads.index');
@@ -313,8 +253,14 @@ class LeadController extends Controller
             $changes = [];
             $updates = [];
             foreach (['intent_buying' => 'Intent buying', 'usage_date' => 'Waktu pemakaian', 'budget' => 'Budget', 'keterangan' => 'Keterangan', 'next_follow_up_at' => 'Tindak lanjut berikutnya'] as $field => $label) {
-                if (($record->{$field} ?? null) !== ($data[$field] ?? null)) {
-                    $updates[$field] = $data[$field] ?? null;
+                if (! array_key_exists($field, $data)) {
+                    continue;
+                }
+                $value = $field === 'next_follow_up_at'
+                    ? $this->normalizedDateTime(isset($data[$field]) ? (string) $data[$field] : null)
+                    : ($data[$field] ?? null);
+                if (($record->{$field} ?? null) !== $value) {
+                    $updates[$field] = $value;
                     $changes[] = "{$label} diperbarui";
                 }
             }
@@ -348,9 +294,11 @@ class LeadController extends Controller
             }
         });
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead berhasil diperbarui.']);
+        if (! $request->boolean('inline')) {
+            Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead berhasil diperbarui.']);
+        }
 
-        return to_route('leads.show', $lead);
+        return $request->boolean('inline') ? back() : to_route('leads.show', $lead);
     }
 
     public function archive(Request $request, int $lead): RedirectResponse
@@ -518,9 +466,7 @@ class LeadController extends Controller
         $text = mb_strtolower(trim(($row['imported_keterangan'] ?? '').' '.($row['imported_definition'] ?? '')));
 
         return match (true) {
-            str_contains($text, 'repeat') => ['repeat_order'],
-            str_contains($text, 'closing') && (str_contains($text, 'belum') || str_contains($text, 'transfer')) => ['closing_pending_transfer'],
-            str_contains($text, 'closing') => ['closing'],
+            str_contains($text, 'repeat') || str_contains($text, 'closing') => ['closing_repeat'],
             str_contains($text, 'offline') || str_contains($text, 'datang') => ['offline'],
             str_contains($text, 'online') => ['online'],
             str_contains($text, 'pricelist') || str_contains($text, 'sampai pl') => ['price_list'],
@@ -730,25 +676,9 @@ class LeadController extends Controller
         return $value instanceof DateTimeInterface ? $value->format('Y-m-d H:i:s') : (string) $value;
     }
 
-    private function csKey(string $name): string
+    private function normalizedDateTime(?string $value): ?string
     {
-        $key = mb_strtolower(trim($name));
-
-        return match ($key) {
-            'bela' => 'bella',
-            default => $key,
-        };
-    }
-
-    /** @param array<string, mixed> $row */
-    private function importClassification(array $row): ?string
-    {
-        $definition = mb_strtolower(trim((string) ($row['imported_definition'] ?? '')));
-        if (in_array($definition, ['cold', 'warm', 'hot'], true)) {
-            return ucfirst($definition);
-        }
-
-        return $this->classificationForMilestone($this->initialMilestones($row)[0] ?? null);
+        return $value ? (new DateTimeImmutable($value))->format('Y-m-d H:i:s') : null;
     }
 
     private function classificationForMilestone(?string $milestone): ?string
@@ -756,7 +686,7 @@ class LeadController extends Controller
         return match ($milestone) {
             'clicked' => 'Cold',
             'asked', 'price_list' => 'Warm',
-            'offline', 'online', 'closing_pending_transfer', 'closing', 'repeat_order' => 'Hot',
+            'offline', 'online', 'closing_repeat' => 'Hot',
             default => null,
         };
     }

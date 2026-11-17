@@ -30,15 +30,15 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/DashboardController.php": {
-    "mtime": 1794449236.1191912,
-    "seen": 1794449452.163528,
-    "ast_hash": "8bd39f6a1a67df21799808546b181b93",
+    "mtime": 1794476410.1557808,
+    "seen": 1794476761.4339347,
+    "ast_hash": "f125a7f30ef4d4e2f192900b948d4487",
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1794447130.2087035,
-    "seen": 1794447381.4506223,
-    "ast_hash": "41b5ac54664b3f07436e8b8c5eb349ce",
+    "mtime": 1794475403.6904702,
+    "seen": 1794475818.66432,
+    "ast_hash": "7f1bf650ce203ee5228a92b6008c3108",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -96,9 +96,9 @@
     "semantic_hash": ""
   },
   "app/Http/Requests/UpdateLeadRequest.php": {
-    "mtime": 1794382600.576008,
-    "seen": 1794383457.1342654,
-    "ast_hash": "1e27cd3f10a22a54e073ac3e99b5c657",
+    "mtime": 1794475031.506013,
+    "seen": 1794475818.6643565,
+    "ast_hash": "31be82662b98a60d71addff654d41250",
     "semantic_hash": ""
   },
   "app/Http/Responses/LoginResponse.php": {
@@ -1434,27 +1434,27 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Dashboard.vue": {
-    "mtime": 1794448590.2986646,
-    "seen": 1794449211.177233,
-    "ast_hash": "31db7ffe9a92c0096ba20c307f379476",
+    "mtime": 1794475144.6181512,
+    "seen": 1794475818.6728191,
+    "ast_hash": "25528fabbba55241412e529fcca73a6d",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1794445258.493102,
-    "seen": 1794445543.5400274,
-    "ast_hash": "d2f8818524e807fedacf6a7aa387805a",
+    "mtime": 1794476500.0754743,
+    "seen": 1794476761.434465,
+    "ast_hash": "357522e7228df9730925542ce3be962b",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
-    "mtime": 1794446656.9238327,
-    "seen": 1794446736.8208566,
-    "ast_hash": "9600dd8e1ba4c11d32367eb659a13553",
+    "mtime": 1794475143.6320477,
+    "seen": 1794475818.67283,
+    "ast_hash": "e6614e8c1ae2fd543b7337f1fde3bb9b",
     "semantic_hash": ""
   },
   "resources/js/pages/Statistics.vue": {
-    "mtime": 1794448589.582503,
-    "seen": 1794449211.1772382,
-    "ast_hash": "278b0ad3b5c92b98733cf5cbde3a3794",
+    "mtime": 1794475145.4429898,
+    "seen": 1794475818.6728349,
+    "ast_hash": "e1517c0ecd1db80c1cb3a7586605864b",
     "semantic_hash": ""
   },
   "resources/js/pages/Welcome.vue": {
@@ -1626,9 +1626,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/DashboardTest.php": {
-    "mtime": 1794448985.2126634,
-    "seen": 1794449211.1772966,
-    "ast_hash": "90498fca66e570de40f3f8c2b2e70e16",
+    "mtime": 1794476412.8601437,
+    "seen": 1794476761.4345365,
+    "ast_hash": "b4fdfcb757e5f939bff2ef01c8a9b000",
     "semantic_hash": ""
   },
   "tests/Feature/ExampleTest.php": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {
-    "mtime": 1794449258.810022,
-    "seen": 1794449452.163958,
-    "ast_hash": "1c2771b7b024aed6f4886d6f15e9098c",
+    "mtime": 1794475404.67682,
+    "seen": 1794475818.67301,
+    "ast_hash": "c3abff1783c3fdc1bf89903e146c5c22",
     "semantic_hash": ""
   },
   "tests/Feature/Settings/ProfileUpdateTest.php": {
@@ -1722,9 +1722,9 @@
     "semantic_hash": ""
   },
   "docker-compose.yml": {
-    "mtime": 1794378550.632998,
-    "seen": 1794378595.504809,
-    "ast_hash": "16514a5696dbfb37df11e52d4d28bd0a",
+    "mtime": 1794475052.291821,
+    "seen": 1794475818.673097,
+    "ast_hash": "49d0be98ef90f8c70129b4b11f747284",
     "semantic_hash": ""
   },
   "pnpm-workspace.yaml": {
@@ -1809,6 +1809,18 @@
     "mtime": 1794387142.2922852,
     "seen": 1794387235.807025,
     "ast_hash": "1812d5ad1ca75b5e9c7e1670d182140b",
+    "semantic_hash": ""
+  },
+  "resources/js/components/LeadQuickUpdate.vue": {
+    "mtime": 1794476455.6010885,
+    "seen": 1794476761.4340842,
+    "ast_hash": "92f1160063840ddae2ab850e520086fb",
+    "semantic_hash": ""
+  },
+  "database/postgres/007_simplify_lead_milestones.sql": {
+    "mtime": 1794476411.9281564,
+    "seen": 1794476761.434044,
+    "ast_hash": "c24f55a46070c2503032b6915bf1c287",
     "semantic_hash": ""
   }
 }

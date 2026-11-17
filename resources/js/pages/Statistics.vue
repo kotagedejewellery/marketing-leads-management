@@ -25,17 +25,17 @@ const stages = computed(() => [
     { label: 'Cold', note: 'Klik saja', value: props.stats.cold },
     {
         label: 'Warm',
-        note: 'Tanya-tanya atau pricelist',
+        note: 'Tanya-Tanya atau pricelist',
         value: props.stats.warm,
     },
     {
         label: 'Hot',
-        note: 'Offline, online, atau belum transfer',
+        note: 'Datang offline atau diskusi online',
         value: props.stats.hot,
     },
     {
         label: 'Closing',
-        note: 'Closing atau repeat order',
+        note: 'Closing / Repeat Order',
         value: props.stats.closing,
     },
     {

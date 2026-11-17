@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\LeadImportService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -74,6 +75,25 @@ class LeadManagementTest extends TestCase
             $table->text('detail')->nullable();
             $table->timestamp('created_at')->nullable();
         });
+        Schema::create('lead_source_occurrences', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('lead_id');
+            $table->string('spreadsheet_id');
+            $table->string('source_tab');
+            $table->string('source_row_no')->nullable();
+            $table->string('source_date_raw')->nullable();
+            $table->string('source_hash')->unique();
+            $table->timestamp('created_at')->nullable();
+        });
+        Schema::create('lead_sync_runs', function (Blueprint $table) {
+            $table->id();
+            $table->string('source');
+            $table->string('status');
+            $table->json('summary')->nullable();
+            $table->text('error')->nullable();
+            $table->timestamp('created_at')->nullable();
+            $table->timestamp('completed_at')->nullable();
+        });
     }
 
     public function test_admin_imports_a_phone_once_and_maps_its_first_milestone(): void
@@ -115,6 +135,30 @@ class LeadManagementTest extends TestCase
             'imported_keterangan' => 'sampai pl banding',
         ]);
         $this->assertDatabaseHas('lead_milestones', ['milestone' => 'price_list', 'is_active' => true]);
+    }
+
+    public function test_hot_import_and_inline_update_use_the_combined_closing_repeat_order_stage(): void
+    {
+        $admin = $this->user('admin');
+        $csv = implode("\n", [
+            'No,Nama/Nomor,Respond Time,Nama CS,Keterangan,Kebutuhan,Greeting*,Waktu Chat,Keterangan Sumber*,Keterangan Campaign*,Definisi Leads',
+            '1,+62 851-7777-1999,0,Dila,closing tapi belum transfer,nikah 10jt,halo,10.38,Iklan,Bio,Hot',
+        ]);
+
+        $this->actingAs($admin)->post('/leads/import', [
+            'csv_file' => UploadedFile::fake()->createWithContent('hot-leads.csv', $csv),
+        ])->assertRedirect('/leads');
+
+        $leadId = (int) \DB::table('leads')->where('contact_key', 'phone:6285177771999')->value('id');
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'current_stage' => 'closing_repeat']);
+        $this->assertDatabaseHas('lead_milestones', ['lead_id' => $leadId, 'milestone' => 'closing_repeat', 'is_active' => true]);
+
+        $this->actingAs($admin)->from('/leads')->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'milestones' => ['offline', 'online', 'closing_repeat'],
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'current_stage' => 'closing_repeat']);
     }
 
     public function test_admin_can_create_a_lead_with_optional_source_data(): void
@@ -239,6 +283,177 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('leads', ['id' => $leadId, 'assigned_user_id' => $cs->id]);
     }
 
+    public function test_lead_list_has_the_data_needed_for_inline_quick_updates(): void
+    {
+        $admin = $this->user('admin');
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285100000999',
+            'contact_key' => 'phone:6285100000999',
+            'intent_buying' => 'Nikahan',
+            'usage_date' => '2026-12-12',
+            'budget' => '10 juta',
+            'keterangan' => 'Menunggu referensi model.',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \DB::table('lead_milestones')->insert([
+            'lead_id' => $leadId,
+            'milestone' => 'asked',
+            'is_active' => true,
+            'marked_at' => now(),
+        ]);
+        \DB::table('lead_activity')->insert([
+            'lead_id' => $leadId,
+            'action' => 'Lead diperbarui',
+            'detail' => 'Keterangan diperbarui',
+            'created_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->get('/leads')
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Leads/Index')
+                ->where('leads.data.0.id', $leadId)
+                ->where('leads.data.0.intent_buying', 'Nikahan')
+                ->has('leads.data.0.created_at')
+                ->where('leads.data.0.milestones', ['asked'])
+                ->where('leads.data.0.latest_activity', 'Lead diperbarui')
+                ->where('leads.data.0.latest_activity_detail', 'Keterangan diperbarui'),
+            );
+    }
+
+    public function test_inline_lead_update_returns_to_the_lead_list(): void
+    {
+        $admin = $this->user('admin');
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285100000998',
+            'contact_key' => 'phone:6285100000998',
+            'next_follow_up_at' => '2026-12-20 10:00:00',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->from('/leads')->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'intent_buying' => 'Nikahan',
+            'usage_date' => '2026-12-12',
+            'budget' => 'Rp5,1–10 juta',
+            'keterangan' => 'Update dari daftar lead.',
+            'milestones' => ['asked'],
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', [
+            'id' => $leadId,
+            'current_stage' => 'asked',
+            'keterangan' => 'Update dari daftar lead.',
+            'next_follow_up_at' => '2026-12-20 10:00:00',
+        ]);
+    }
+
+    public function test_budget_updates_only_accept_the_supported_ranges(): void
+    {
+        $admin = $this->user('admin');
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285100000994',
+            'contact_key' => 'phone:6285100000994',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'budget' => '10 juta',
+        ])->assertSessionHasErrors('budget');
+
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'budget' => null]);
+    }
+
+    public function test_importing_the_same_contact_from_a_new_daily_tab_records_a_reappearance(): void
+    {
+        $rows = [[
+            'source_row_no' => '1',
+            'source_date_raw' => '1 November 2026',
+            'source_tab' => '1',
+            'contact_raw' => '+62 851-7777-1999 Rini',
+            'respond_time' => '0',
+            'imported_cs_name' => 'Dila',
+            'imported_keterangan' => 'tanya-tanya',
+            'raw_kebutuhan' => 'cincin nikah',
+            'greeting' => 'Halo',
+            'chat_time' => '10.38',
+            'source_description' => 'Iklan',
+            'campaign_description' => 'Bio',
+            'imported_definition' => 'Warm',
+        ]];
+
+        $first = app(LeadImportService::class)->import($rows, null, 'sheet-utama');
+        $again = app(LeadImportService::class)->import($rows, null, 'sheet-utama');
+        $rows[0]['source_tab'] = '2';
+        $rows[0]['source_date_raw'] = '2 November 2026';
+        $reappeared = app(LeadImportService::class)->import($rows, null, 'sheet-utama');
+
+        $this->assertSame(['inserted' => 1, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 1, 'needs_review' => 0], $first);
+        $this->assertSame(['inserted' => 0, 'skipped' => 1, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0], $again);
+        $this->assertSame(['inserted' => 0, 'skipped' => 0, 'resurfaced' => 1, 'unassigned' => 0, 'needs_review' => 0], $reappeared);
+        $this->assertDatabaseCount('leads', 1);
+        $this->assertDatabaseCount('lead_source_occurrences', 2);
+        $this->assertDatabaseHas('lead_activity', ['action' => 'Lead muncul kembali dari Google Sheets']);
+    }
+
+    public function test_inline_lead_creation_returns_to_the_lead_list(): void
+    {
+        $cs = $this->user('cs');
+
+        $this->actingAs($cs)->from('/leads')->post('/leads', [
+            'inline' => true,
+            'contact_raw' => '+6285100000997',
+            'milestone' => 'asked',
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285100000997',
+            'assigned_user_id' => $cs->id,
+        ]);
+    }
+
+    public function test_inline_lead_update_can_schedule_the_next_follow_up(): void
+    {
+        $admin = $this->user('admin');
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285100000995',
+            'contact_key' => 'phone:6285100000995',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->from('/leads')->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'next_follow_up_at' => '2026-12-25T10:00',
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', [
+            'id' => $leadId,
+            'next_follow_up_at' => '2026-12-25 10:00:00',
+        ]);
+    }
+
+    public function test_cs_cannot_update_another_cs_lead_from_inline_workspace(): void
+    {
+        $owner = $this->user('cs');
+        $viewer = $this->user('cs');
+        $leadId = \DB::table('leads')->insertGetId([
+            'assigned_user_id' => $owner->id,
+            'contact_raw' => '+6285100000996',
+            'contact_key' => 'phone:6285100000996',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($viewer)->from('/leads')->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'milestones' => ['asked'],
+        ])->assertNotFound();
+    }
+
     public function test_admin_can_assign_selected_leads_in_bulk_and_current_stage_follows_the_highest_milestone(): void
     {
         $admin = $this->user('admin');
@@ -255,13 +470,13 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('leads', ['id' => $secondLead, 'assigned_user_id' => $cs->id]);
 
         $this->actingAs($admin)->patch("/leads/{$firstLead}", [
-            'milestones' => ['clicked', 'price_list', 'closing'],
+            'milestones' => ['clicked', 'price_list', 'closing_repeat'],
             'next_follow_up_at' => '2026-11-12T09:30',
         ])->assertRedirect("/leads/{$firstLead}");
 
         $this->assertDatabaseHas('leads', [
             'id' => $firstLead,
-            'current_stage' => 'closing',
+            'current_stage' => 'closing_repeat',
             'next_follow_up_at' => '2026-11-12T09:30',
         ]);
     }

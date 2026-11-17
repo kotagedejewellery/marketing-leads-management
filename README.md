@@ -57,7 +57,7 @@ Admin dapat mengimpor file CSV atau XLSX sebagai cadangan atau data historis. Pi
 
 ## Sumber Google Sheets per cabang
 
-Admin mengisi **Google Spreadsheet ID** pada menu Cabang dan memastikan cabang tersebut memiliki satu akun CS aktif. Spreadsheet dibagikan sebagai Viewer kepada Service Account sistem. Tombol **Sinkronkan** pada cabang digunakan saat ingin mengecek satu sumber sekarang juga; sinkronisasi rutin tetap berjalan otomatis.
+Admin mengisi **Google Spreadsheet ID** pada menu Cabang dan memastikan cabang tersebut memiliki satu akun CS aktif. Spreadsheet dibagikan sebagai Viewer kepada Service Account sistem. Simpan kredensial Service Account sebagai `secrets/google-service-account.json` di server (file ini tidak masuk Git). Tombol **Sinkronkan** pada cabang digunakan saat ingin mengecek satu sumber sekarang juga; sinkronisasi rutin tetap berjalan otomatis.
 
 Jika nomor yang sama muncul pada spreadsheet cabang lain, sistem tidak memindahkan pemiliknya secara otomatis. Lead diberi tanda nomor lintas cabang agar Admin dapat meninjaunya.
 

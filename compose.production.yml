@@ -34,7 +34,7 @@ services:
                 condition: service_completed_successfully
         volumes:
             - leadcontrol_app_storage:/var/www/html/storage
-            - ${GOOGLE_SERVICE_ACCOUNT_JSON_PATH}:/run/secrets/google-service-account.json:ro
+            - ./secrets:/run/secrets:ro
         networks:
             - proxy
             - internal
@@ -97,7 +97,7 @@ services:
                 condition: service_completed_successfully
         volumes:
             - leadcontrol_app_storage:/var/www/html/storage
-            - ${GOOGLE_SERVICE_ACCOUNT_JSON_PATH}:/run/secrets/google-service-account.json:ro
+            - ./secrets:/run/secrets:ro
         networks:
             - internal
 

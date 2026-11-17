@@ -458,25 +458,6 @@ class LeadController extends Controller
     }
 
     /**
-     * @param  array<string, mixed>  $row
-     * @return list<string>
-     */
-    private function initialMilestones(array $row): array
-    {
-        $text = mb_strtolower(trim(($row['imported_keterangan'] ?? '').' '.($row['imported_definition'] ?? '')));
-
-        return match (true) {
-            str_contains($text, 'repeat') || str_contains($text, 'closing') => ['closing_repeat'],
-            str_contains($text, 'offline') || str_contains($text, 'datang') => ['offline'],
-            str_contains($text, 'online') => ['online'],
-            str_contains($text, 'pricelist') || str_contains($text, 'sampai pl') => ['price_list'],
-            str_contains($text, 'tanya') || str_contains($text, 'warm') => ['asked'],
-            str_contains($text, 'klik') || str_contains($text, 'cold') => ['clicked'],
-            default => [],
-        };
-    }
-
-    /**
      * @param  list<string>  $headers
      * @return array<string, string>
      */

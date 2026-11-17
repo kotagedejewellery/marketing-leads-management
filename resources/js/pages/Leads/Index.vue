@@ -31,6 +31,8 @@ type Lead = {
     latest_activity_at: string | null;
     owner_name: string | null;
     branch_name: string | null;
+    source_conflict_at: string | null;
+    source_conflict_branch_name: string | null;
     created_at: string;
     updated_at: string;
 };
@@ -86,9 +88,11 @@ const isDesktopWorkspace = ref(false);
 const importForm = useForm<{
     csv_file: File | null;
     import_mode: 'all_leads' | 'daily_tabs';
+    branch_id: string;
 }>({
     csv_file: null,
     import_mode: 'all_leads',
+    branch_id: '',
 });
 const newLead = useForm({
     inline: true,
@@ -124,7 +128,7 @@ const selectedFile = computed(() => {
 });
 const importHint = computed(() =>
     importForm.import_mode === 'daily_tabs'
-        ? 'Unggah XLSX penuh dari spreadsheet monitoring untuk membaca tab 1–31.'
+        ? 'Unggah XLSX penuh dari spreadsheet monitoring, lalu pilih cabang pemilik data tab 1–31.'
         : 'Gunakan export CSV atau XLSX dari tab All Leads.',
 );
 const activeFilterText = computed(() =>
@@ -200,6 +204,14 @@ const importCsvNow = () =>
     });
 const importCsv = () => guardUnsavedChanges(importCsvNow);
 const syncingSheet = ref(false);
+const sheetSyncLabel = computed(
+    () =>
+        ({
+            success: 'berhasil',
+            partial: 'sebagian berhasil',
+            failed: 'gagal',
+        })[props.sheetSync?.status || ''] || 'belum diketahui',
+);
 const syncGoogleSheetNow = () =>
     router.post(
         '/leads/sync-google-sheet',
@@ -299,6 +311,12 @@ watch(hasUnsavedChanges, (isDirty) => {
         syncWorkspaceLayout();
     }
 });
+watch(
+    () => importForm.import_mode,
+    (mode) => {
+        if (mode === 'all_leads') importForm.branch_id = '';
+    },
+);
 onMounted(() => {
     desktopBreakpoint = window.matchMedia('(min-width: 1280px)');
     desktopBreakpoint.addEventListener('change', syncWorkspaceLayout);
@@ -628,6 +646,7 @@ onBeforeUnmount(() => {
                         Perlu kualifikasi
                     </option>
                     <option value="follow_up_due">Follow-up jatuh tempo</option>
+                    <option value="source_conflict">Nomor lintas cabang</option>
                 </select></label
             >
             <form
@@ -644,6 +663,28 @@ onBeforeUnmount(() => {
                 >
                     <option value="all_leads">All Leads</option>
                     <option value="daily_tabs">Tab harian</option>
+                </select>
+                <label
+                    v-if="importForm.import_mode === 'daily_tabs'"
+                    class="sr-only"
+                    for="import-branch"
+                    >Cabang sumber</label
+                >
+                <select
+                    v-if="importForm.import_mode === 'daily_tabs'"
+                    id="import-branch"
+                    v-model="importForm.branch_id"
+                    class="kgj-input min-h-11 max-w-44 text-sm"
+                    :disabled="importForm.processing"
+                >
+                    <option value="">Cabang sumber</option>
+                    <option
+                        v-for="item in branches"
+                        :key="item.id"
+                        :value="String(item.id)"
+                    >
+                        {{ item.name }}
+                    </option>
                 </select>
                 <label
                     class="inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-[#c9aa6a] bg-white px-3 py-3 text-sm font-semibold text-kgj-gold-deep transition hover:bg-[#fbf6e8]"
@@ -686,7 +727,7 @@ onBeforeUnmount(() => {
             <span v-if="isAdmin && !selectedFile">{{ importHint }}</span>
             <span v-if="isAdmin && sheetSync"
                 >Sinkronisasi terakhir:
-                {{ sheetSync.status === 'success' ? 'berhasil' : 'gagal' }}
+                {{ sheetSyncLabel }}
                 {{
                     sheetSync.completed_at
                         ? `· ${new Date(sheetSync.completed_at).toLocaleString('id-ID')}`
@@ -700,6 +741,13 @@ onBeforeUnmount(() => {
             role="alert"
         >
             {{ importForm.errors.csv_file }}
+        </p>
+        <p
+            v-if="importForm.errors.branch_id"
+            class="mt-2 text-sm text-[#a23e2b]"
+            role="alert"
+        >
+            {{ importForm.errors.branch_id }}
         </p>
         <label
             v-if="visibleLeadIds.length"
@@ -827,6 +875,13 @@ onBeforeUnmount(() => {
                             lead.intent_buying ||
                             lead.imported_definition ||
                             'Belum dikualifikasi'
+                        }}</span
+                    ><span
+                        v-if="lead.source_conflict_at"
+                        class="mt-2 block text-xs font-semibold text-kgj-rose"
+                        >Nomor juga masuk dari
+                        {{
+                            lead.source_conflict_branch_name || 'cabang lain'
                         }}</span
                     ><span
                         v-if="lead.next_follow_up_at"
@@ -964,6 +1019,15 @@ onBeforeUnmount(() => {
                                     class="mt-1 block truncate text-[#62665b]"
                                     :title="lead.branch_name || '—'"
                                     >{{ lead.branch_name || '—' }}</small
+                                ><small
+                                    v-if="lead.source_conflict_at"
+                                    class="mt-1 block truncate font-semibold text-kgj-rose"
+                                    :title="`Nomor juga masuk dari ${lead.source_conflict_branch_name || 'cabang lain'}`"
+                                    >Lintas:
+                                    {{
+                                        lead.source_conflict_branch_name ||
+                                        'cabang lain'
+                                    }}</small
                                 >
                             </td>
                             <td

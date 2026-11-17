@@ -19,16 +19,25 @@ class LeadImportService
      * @param  list<array<string, string|null>>  $rows
      * @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int}
      */
-    public function import(array $rows, ?int $actorId, ?string $spreadsheetId = null): array
+    public function import(array $rows, ?int $actorId, ?string $spreadsheetId = null, ?int $sourceBranchId = null): array
     {
         $known = $this->knownContacts($rows);
+        $sourceBranch = $sourceBranchId
+            ? DB::table('branches')->where('id', $sourceBranchId)->first(['id', 'name'])
+            : null;
+        $branchOwner = $sourceBranchId
+            ? DB::table('users')->where('branch_id', $sourceBranchId)->where('role', 'cs')->where('active', true)->first(['id', 'name'])
+            : null;
+        if ($sourceBranchId && (! $sourceBranch || ! $branchOwner)) {
+            throw new \RuntimeException('Cabang sumber harus memiliki satu akun CS aktif sebelum lead dapat disinkronkan.');
+        }
         $csByName = DB::table('users')->where('role', 'cs')->where('active', true)->get(['id', 'name'])
             ->groupBy(fn (object $user) => $this->csKey($user->name))
             ->map(fn ($users) => $users->count() === 1 ? $users->first()->id : null)
             ->all();
         $summary = ['inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0];
 
-        DB::transaction(function () use ($rows, $actorId, $spreadsheetId, $known, $csByName, &$summary): void {
+        DB::transaction(function () use ($rows, $actorId, $spreadsheetId, $sourceBranchId, $sourceBranch, $branchOwner, $known, $csByName, &$summary): void {
             foreach ($rows as $row) {
                 $contact = trim((string) ($row['contact_raw'] ?? ''));
                 if ($contact === '') {
@@ -43,15 +52,16 @@ class LeadImportService
                     continue;
                 }
 
-                $leadId = null;
+                $knownLead = null;
                 foreach ($this->contactKeys($contact) as $candidate) {
                     if (isset($known[$candidate])) {
-                        $leadId = $known[$candidate];
+                        $knownLead = $known[$candidate];
 
                         break;
                     }
                 }
-                if ($leadId) {
+                if ($knownLead) {
+                    $leadId = $knownLead['id'];
                     if ($spreadsheetId && $sourceHash) {
                         DB::table('lead_source_occurrences')->insert([
                             'lead_id' => $leadId,
@@ -62,14 +72,27 @@ class LeadImportService
                             'source_hash' => $sourceHash,
                             'created_at' => now(),
                         ]);
+                        $isCrossBranch = $sourceBranchId
+                            && $knownLead['source_branch_id']
+                            && $knownLead['source_branch_id'] !== $sourceBranchId;
+                        if ($isCrossBranch) {
+                            DB::table('leads')->where('id', $leadId)->update([
+                                'source_conflict_at' => now(),
+                                'source_conflict_branch_id' => $sourceBranchId,
+                                'updated_at' => now(),
+                            ]);
+                        }
                         DB::table('lead_activity')->insert([
                             'lead_id' => $leadId,
                             'actor_id' => $actorId,
-                            'action' => 'Lead muncul kembali dari Google Sheets',
-                            'detail' => "Sumber: tab {$row['source_tab']} ({$row['source_date_raw']}). Data kerja CS tidak diubah.",
+                            'action' => $isCrossBranch ? 'Konflik sumber cabang' : 'Lead muncul kembali dari Google Sheets',
+                            'detail' => $isCrossBranch
+                                ? "Nomor ini sudah berasal dari {$knownLead['source_branch_name']}; kemunculan dari {$sourceBranch->name} tidak memindahkan CS pemilik."
+                                : "Sumber: tab {$row['source_tab']} ({$row['source_date_raw']}). Data kerja CS tidak diubah.",
                             'created_at' => now(),
                         ]);
                         $summary['resurfaced']++;
+                        $summary['needs_review'] += $isCrossBranch ? 1 : 0;
                     } else {
                         $summary['skipped']++;
                     }
@@ -78,11 +101,14 @@ class LeadImportService
                 }
 
                 preg_match('/^(\+?[0-9][0-9\s-]*)(?:\s+(.+))?$/u', $contact, $match);
-                $owner = $csByName[$this->csKey((string) ($row['imported_cs_name'] ?? ''))] ?? null;
+                $owner = $branchOwner
+                    ? (int) $branchOwner->id
+                    : ($csByName[$this->csKey((string) ($row['imported_cs_name'] ?? ''))] ?? null);
                 $milestones = $this->initialMilestones($row);
                 $classification = $this->classification($row, $milestones);
                 $leadId = DB::table('leads')->insertGetId([
                     'assigned_user_id' => $owner,
+                    'source_branch_id' => $sourceBranchId,
                     'import_fingerprint' => hash('sha256', json_encode($row, JSON_THROW_ON_ERROR)),
                     'contact_key' => $key,
                     'source_row_no' => $row['source_row_no'] ?? null,
@@ -117,7 +143,7 @@ class LeadImportService
                     'actor_id' => $actorId,
                     'action' => $row['source_tab'] ? 'Diimpor dari tab harian' : 'Diimpor dari CSV/XLSX',
                     'detail' => $row['source_tab']
-                        ? "Sumber: tab {$row['source_tab']} ({$row['source_date_raw']}). ".($owner ? 'CS terhubung dari nama pada sumber.' : 'Belum ditugaskan ke CS.')
+                        ? "Sumber: tab {$row['source_tab']} ({$row['source_date_raw']}). ".($sourceBranch ? "Ditugaskan otomatis ke {$branchOwner->name} ({$sourceBranch->name})." : ($owner ? 'CS terhubung dari nama pada sumber.' : 'Belum ditugaskan ke CS.'))
                         : ($owner ? 'CS terhubung dari nama pada CSV/XLSX.' : 'Belum ditugaskan ke CS.'),
                     'created_at' => now(),
                 ]);
@@ -133,7 +159,11 @@ class LeadImportService
                     ]);
                 }
                 foreach ($this->contactKeys($contact) as $candidate) {
-                    $known[$candidate] = $leadId;
+                    $known[$candidate] = [
+                        'id' => $leadId,
+                        'source_branch_id' => $sourceBranchId,
+                        'source_branch_name' => $sourceBranch?->name,
+                    ];
                 }
                 $summary['inserted']++;
                 $summary['unassigned'] += $owner ? 0 : 1;
@@ -145,7 +175,7 @@ class LeadImportService
     }
 
     /** @param list<array<string, string|null>> $rows
-     *  @return array<string, int> */
+     *  @return array<string, array{id: int, source_branch_id: int|null, source_branch_name: string|null}> */
     private function knownContacts(array $rows): array
     {
         $keys = [];
@@ -155,7 +185,19 @@ class LeadImportService
             }
         }
 
-        return DB::table('leads')->whereIn('contact_key', array_keys($keys))->pluck('id', 'contact_key')->map(fn ($id) => (int) $id)->all();
+        $known = [];
+        foreach (DB::table('leads as l')
+            ->leftJoin('branches as b', 'b.id', '=', 'l.source_branch_id')
+            ->whereIn('l.contact_key', array_keys($keys))
+            ->get(['l.id', 'l.contact_key', 'l.source_branch_id', 'b.name as source_branch_name']) as $lead) {
+            $known[(string) $lead->contact_key] = [
+                'id' => (int) $lead->id,
+                'source_branch_id' => $lead->source_branch_id === null ? null : (int) $lead->source_branch_id,
+                'source_branch_name' => $lead->source_branch_name,
+            ];
+        }
+
+        return $known;
     }
 
     /** @param array<string, string|null> $row */

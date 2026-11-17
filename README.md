@@ -15,7 +15,7 @@ Sistem ini menggantikan proses pemantauan lead yang sebelumnya tersebar di sprea
 
 ### Admin
 
-Admin dapat melihat seluruh data lead, mengimpor data awal, mengelola cabang dan akun CS, membagikan lead, serta memantau statistik dan antrean follow-up.
+Admin dapat melihat seluruh data lead, mengelola cabang dan akun CS, memantau sinkronisasi spreadsheet, serta menangani pengecualian seperti lead tanpa penanggung jawab atau nomor lintas cabang.
 
 ### Customer Service
 
@@ -23,10 +23,11 @@ CS melihat lead yang ditugaskan kepadanya serta dapat menambahkan lead baru yang
 
 ## Alur kerja harian
 
-1. Admin mengimpor data lead dari spreadsheet atau file CSV/XLSX.
-2. Admin mengecek lead yang belum ditugaskan lalu membagikannya kepada CS yang sesuai.
-3. CS membuka daftar leadnya, lalu memperbarui status dan catatan setelah berkomunikasi dengan pelanggan.
-4. Admin memantau statistik, lead yang perlu ditindaklanjuti, serta kualitas pembagian lead antar cabang.
+1. CS mengisi spreadsheet harian cabangnya pada tab tanggal `1` sampai `31`.
+2. Sistem membaca spreadsheet setiap dua menit dan menyimpan lead baru ke cabang sumbernya.
+3. Lead baru langsung ditugaskan ke akun CS aktif pada cabang tersebut.
+4. CS memperbarui status, kebutuhan, catatan, dan follow-up dari sistem.
+5. Admin memantau antrean follow-up, kualitas data, konflik nomor lintas cabang, serta sinkronisasi tiap cabang.
 
 Lead dapat diarsipkan agar tidak tampil pada daftar aktif dan dapat dipulihkan kembali. Penghapusan permanen hanya tersedia dari arsip karena tindakan ini juga menghapus seluruh riwayat lead. Daftar lead juga menyediakan pilihan semua lead pada halaman untuk aksi massal.
 
@@ -52,7 +53,13 @@ Selain nama dan nomor pelanggan, sistem membantu mencatat:
 
 ## Import data lead
 
-Admin dapat mengimpor file CSV atau XLSX dari data monitoring lead. Pilih **All Leads** untuk data master, atau **Tab harian** untuk file XLSX penuh yang memiliki tab angka seperti `1` sampai `31`. Pada mode tab harian, sistem hanya membaca tabel lead utama pada area yang sesuai template, memakai tanggal dari header tab, dan melewati data duplikat tanpa menimpa pembaruan CS. Maksimal satu import adalah 5.000 lead total. Nomor Indonesia dengan awalan `08` dan `+62` diperlakukan sebagai kontak yang sama.
+Admin dapat mengimpor file CSV atau XLSX sebagai cadangan atau data historis. Pilih **All Leads** untuk data master, atau **Tab harian** untuk file XLSX penuh dengan tab angka `1` sampai `31`; pada mode ini pilih cabang pemilik data agar lead langsung masuk ke CS cabang tersebut. Sistem melewati duplikat tanpa menimpa pembaruan CS. Maksimal satu import adalah 5.000 lead total. Nomor Indonesia dengan awalan `08` dan `+62` diperlakukan sebagai kontak yang sama.
+
+## Sumber Google Sheets per cabang
+
+Admin mengisi **Google Spreadsheet ID** pada menu Cabang dan memastikan cabang tersebut memiliki satu akun CS aktif. Spreadsheet dibagikan sebagai Viewer kepada Service Account sistem. Tombol **Sinkronkan** pada cabang digunakan saat ingin mengecek satu sumber sekarang juga; sinkronisasi rutin tetap berjalan otomatis.
+
+Jika nomor yang sama muncul pada spreadsheet cabang lain, sistem tidak memindahkan pemiliknya secara otomatis. Lead diberi tanda nomor lintas cabang agar Admin dapat meninjaunya.
 
 ## Bantuan
 

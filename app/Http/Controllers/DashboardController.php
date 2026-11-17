@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\GoogleSheetSyncService;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,7 +27,9 @@ class DashboardController extends Controller
         $query = DB::table('leads as l')
             ->leftJoin('users as u', 'u.id', '=', 'l.assigned_user_id')
             ->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')
-            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.created_at', 'l.updated_at', 'u.name as owner_name', 'b.name as branch_name')
+            ->leftJoin('branches as source_b', 'source_b.id', '=', 'l.source_branch_id')
+            ->leftJoin('branches as conflict_b', 'conflict_b.id', '=', 'l.source_conflict_branch_id')
+            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.source_conflict_at', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
             ->orderByDesc('l.updated_at');
 
         $showArchived = $request->boolean('archived');
@@ -37,7 +40,7 @@ class DashboardController extends Controller
             $query->where(fn ($builder) => $builder->whereRaw('l.name ILIKE ?', [$term])->orWhereRaw('l.phone ILIKE ?', [$term])->orWhereRaw('l.contact_raw ILIKE ?', [$term]));
         }
         if ($request->user()->role === 'admin' && $request->filled('branch')) {
-            $query->where('u.branch_id', $request->integer('branch'));
+            $query->whereRaw('COALESCE(u.branch_id, l.source_branch_id) = ?', [$request->integer('branch')]);
         }
         if ($request->filled('stage')) {
             $query->where('l.current_stage', $request->string('stage')->toString());
@@ -47,6 +50,7 @@ class DashboardController extends Controller
                 'unassigned' => $request->user()->role === 'admin' ? $query->whereNull('l.assigned_user_id') : null,
                 'needs_qualification' => $query->where(fn (Builder $builder) => $builder->whereNull('l.intent_buying')->orWhereNull('l.usage_date')->orWhereNull('l.budget')),
                 'follow_up_due' => $query->whereNotNull('l.next_follow_up_at')->where('l.next_follow_up_at', '<=', now()),
+                'source_conflict' => $request->user()->role === 'admin' ? $query->whereNotNull('l.source_conflict_at') : null,
                 default => null,
             };
         }
@@ -101,7 +105,7 @@ class DashboardController extends Controller
 
     public function branches(): Response
     {
-        return Inertia::render('Branches/Index', ['branches' => DB::table('branches as b')->leftJoin('users as u', fn ($join) => $join->on('u.branch_id', '=', 'b.id')->where('u.role', 'cs')->where('u.active', true))->orderBy('b.name')->get(['b.id', 'b.name', 'u.name as cs_name', 'u.email as cs_email'])]);
+        return Inertia::render('Branches/Index', ['branches' => DB::table('branches as b')->leftJoin('users as u', fn ($join) => $join->on('u.branch_id', '=', 'b.id')->where('u.role', 'cs')->where('u.active', true))->orderBy('b.name')->get(['b.id', 'b.name', 'b.google_spreadsheet_id', 'b.google_sheets_synced_at', 'b.google_sheets_sync_error', 'u.name as cs_name', 'u.email as cs_email'])]);
     }
 
     public function accounts(): Response
@@ -111,8 +115,8 @@ class DashboardController extends Controller
 
     public function storeBranch(Request $request): RedirectResponse
     {
-        $data = $request->validate(['name' => ['required', 'string', 'max:100', 'unique:branches,name']]);
-        DB::table('branches')->insert(['name' => $data['name'], 'created_at' => now()]);
+        $data = $this->branchData($request);
+        DB::table('branches')->insert(['name' => $data['name'], 'google_spreadsheet_id' => $data['google_spreadsheet_id'], 'created_at' => now()]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Cabang ditambahkan.']);
 
@@ -135,12 +139,23 @@ class DashboardController extends Controller
     public function updateBranch(Request $request, int $branch): RedirectResponse
     {
         $record = DB::table('branches')->where('id', $branch)->first() ?? abort(404);
-        $data = $request->validate(['name' => ['required', 'string', 'max:100', Rule::unique('branches', 'name')->ignore($record->id)]]);
-        DB::table('branches')->where('id', $branch)->update(['name' => $data['name']]);
+        $data = $this->branchData($request, $record->id);
+        DB::table('branches')->where('id', $branch)->update($data);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Cabang diperbarui.']);
 
         return back();
+    }
+
+    /** @return array{name: string, google_spreadsheet_id: string|null} */
+    private function branchData(Request $request, ?int $branchId = null): array
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:100', Rule::unique('branches', 'name')->ignore($branchId)],
+            'google_spreadsheet_id' => ['nullable', 'string', 'max:128', Rule::unique('branches', 'google_spreadsheet_id')->ignore($branchId)],
+        ]);
+
+        return ['name' => (string) $data['name'], 'google_spreadsheet_id' => trim((string) ($data['google_spreadsheet_id'] ?? '')) ?: null];
     }
 
     public function destroyBranch(int $branch): RedirectResponse
@@ -149,9 +164,29 @@ class DashboardController extends Controller
         if (DB::table('users')->where('branch_id', $record->id)->exists()) {
             throw ValidationException::withMessages(['branch' => 'Cabang masih memiliki akun. Pindahkan akun terlebih dahulu.']);
         }
+        if (DB::table('leads')->where('source_branch_id', $record->id)->exists()) {
+            throw ValidationException::withMessages(['branch' => 'Cabang masih menjadi sumber lead. Pertahankan jejak asal data tersebut.']);
+        }
         DB::table('branches')->where('id', $record->id)->delete();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Cabang dihapus.']);
+
+        return back();
+    }
+
+    public function syncBranchGoogleSheet(Request $request, GoogleSheetSyncService $sync, int $branch): RedirectResponse
+    {
+        abort_unless(DB::table('branches')->where('id', $branch)->exists(), 404);
+
+        try {
+            $summary = $sync->sync($request->user()->id, $branch);
+        } catch (\RuntimeException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
+
+            return back();
+        }
+
+        Inertia::flash('toast', ['type' => $summary['failed'] ? 'error' : 'success', 'message' => $summary['failed'] ? 'Sinkronisasi cabang gagal. Periksa konfigurasi atau akun CS.' : "Sinkronisasi cabang selesai: {$summary['inserted']} lead baru."]);
 
         return back();
     }
@@ -235,11 +270,11 @@ class DashboardController extends Controller
         ];
     }
 
-    /** @return array{total: int, unassigned: int, follow_up_due: int, needs_qualification: int} */
+    /** @return array{total: int, unassigned: int, follow_up_due: int, needs_qualification: int, source_conflict: int} */
     private function priorities(Request $request): array
     {
         $counts = (array) $this->activeLeads($request)
-            ->selectRaw('COUNT(*) as total, COALESCE(SUM(CASE WHEN l.assigned_user_id IS NULL THEN 1 ELSE 0 END), 0) as unassigned, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NOT NULL AND l.next_follow_up_at <= ? THEN 1 ELSE 0 END), 0) as follow_up_due, COALESCE(SUM(CASE WHEN l.intent_buying IS NULL OR l.usage_date IS NULL OR l.budget IS NULL THEN 1 ELSE 0 END), 0) as needs_qualification', [now()])
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(CASE WHEN l.assigned_user_id IS NULL THEN 1 ELSE 0 END), 0) as unassigned, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NOT NULL AND l.next_follow_up_at <= ? THEN 1 ELSE 0 END), 0) as follow_up_due, COALESCE(SUM(CASE WHEN l.intent_buying IS NULL OR l.usage_date IS NULL OR l.budget IS NULL THEN 1 ELSE 0 END), 0) as needs_qualification, COALESCE(SUM(CASE WHEN l.source_conflict_at IS NOT NULL THEN 1 ELSE 0 END), 0) as source_conflict', [now()])
             ->first();
 
         return [
@@ -247,6 +282,7 @@ class DashboardController extends Controller
             'unassigned' => $request->user()->role === 'admin' ? (int) ($counts['unassigned'] ?? 0) : 0,
             'follow_up_due' => (int) ($counts['follow_up_due'] ?? 0),
             'needs_qualification' => (int) ($counts['needs_qualification'] ?? 0),
+            'source_conflict' => $request->user()->role === 'admin' ? (int) ($counts['source_conflict'] ?? 0) : 0,
         ];
     }
 

@@ -117,6 +117,7 @@ class LeadController extends Controller
             [
                 'csv_file' => ['required', 'file', 'mimes:csv,txt,xlsx', 'max:10240'],
                 'import_mode' => ['nullable', 'in:all_leads,daily_tabs'],
+                'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
             ],
             ['csv_file.uploaded' => 'File gagal diunggah. Gunakan CSV/XLSX maksimal 10 MB.'],
         );
@@ -125,6 +126,12 @@ class LeadController extends Controller
         $importMode = $data['import_mode'] ?? 'all_leads';
         if ($importMode === 'daily_tabs' && $extension !== 'xlsx') {
             throw ValidationException::withMessages(['csv_file' => 'Tab harian hanya dapat diimpor dari file XLSX.']);
+        }
+        if ($importMode === 'daily_tabs' && empty($data['branch_id'])) {
+            throw ValidationException::withMessages(['branch_id' => 'Pilih cabang pemilik data harian.']);
+        }
+        if ($importMode === 'daily_tabs' && ! DB::table('users')->where('branch_id', $data['branch_id'])->where('role', 'cs')->where('active', true)->exists()) {
+            throw ValidationException::withMessages(['branch_id' => 'Cabang sumber harus memiliki satu akun CS aktif sebelum data harian dapat diimpor.']);
         }
         [$headers, $valueRows] = match (true) {
             $importMode === 'daily_tabs' => $this->readDailyTabsXlsx($request->file('csv_file')->getRealPath()),
@@ -150,7 +157,8 @@ class LeadController extends Controller
                 $rows[] = $normalized;
             }
         }
-        $summary = $this->leadImporter->import($rows, $request->user()->id);
+        $sourceBranchId = $importMode === 'daily_tabs' ? (int) $data['branch_id'] : null;
+        $summary = $this->leadImporter->import($rows, $request->user()->id, null, $sourceBranchId);
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -172,9 +180,14 @@ class LeadController extends Controller
             return to_route('leads.index');
         }
 
+        $message = "Sinkronisasi selesai: {$summary['inserted']} lead baru, {$summary['resurfaced']} muncul kembali.";
+        if ($summary['failed']) {
+            $message .= " {$summary['failed']} cabang gagal disinkronkan; periksa statusnya di menu Cabang.";
+        }
+
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => "Sinkronisasi selesai: {$summary['inserted']} lead baru, {$summary['resurfaced']} muncul kembali.",
+            'message' => $message,
         ]);
 
         return to_route('leads.index');

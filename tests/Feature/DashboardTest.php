@@ -20,6 +20,9 @@ class DashboardTest extends TestCase
         Schema::create('leads', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('assigned_user_id')->nullable();
+            $table->unsignedBigInteger('source_branch_id')->nullable();
+            $table->unsignedBigInteger('source_conflict_branch_id')->nullable();
+            $table->timestamp('source_conflict_at')->nullable();
             $table->string('name')->nullable();
             $table->string('current_stage')->nullable();
             $table->string('intent_buying')->nullable();
@@ -46,6 +49,9 @@ class DashboardTest extends TestCase
         Schema::create('branches', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->string('google_spreadsheet_id')->nullable()->unique();
+            $table->timestamp('google_sheets_synced_at')->nullable();
+            $table->text('google_sheets_sync_error')->nullable();
             $table->timestamp('created_at')->nullable();
         });
     }
@@ -180,7 +186,7 @@ class DashboardTest extends TestCase
         );
     }
 
-    public function test_admin_receives_feedback_after_creating_a_branch()
+    public function test_admin_receives_feedback_after_creating_a_branch(): void
     {
         $admin = User::factory()->create();
         $admin->forceFill(['role' => 'admin'])->save();
@@ -200,6 +206,23 @@ class DashboardTest extends TestCase
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Pusat']);
         $account = User::factory()->create();
         $account->forceFill(['role' => 'cs', 'branch_id' => $branchId])->save();
+
+        $this->actingAs($admin)->delete("/branches/{$branchId}")
+            ->assertSessionHasErrors('branch');
+
+        $this->assertDatabaseHas('branches', ['id' => $branchId]);
+    }
+
+    public function test_admin_cannot_delete_a_branch_that_is_the_source_of_leads(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'admin'])->save();
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        \DB::table('leads')->insert([
+            'source_branch_id' => $branchId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
         $this->actingAs($admin)->delete("/branches/{$branchId}")
             ->assertSessionHasErrors('branch');

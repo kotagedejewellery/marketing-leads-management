@@ -10,5 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('leads:sync-google-sheet')
     ->everyTwoMinutes()
-    ->between('08:00', '21:00')
     ->withoutOverlapping();

@@ -26,7 +26,6 @@ services:
             CACHE_STORE: file
             QUEUE_CONNECTION: sync
             LOG_CHANNEL: stderr
-            GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID}
             GOOGLE_SERVICE_ACCOUNT_JSON: /run/secrets/google-service-account.json
         depends_on:
             db:
@@ -90,7 +89,6 @@ services:
             DB_PASSWORD: ${DB_PASSWORD}
             CACHE_STORE: file
             QUEUE_CONNECTION: sync
-            GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID}
             GOOGLE_SERVICE_ACCOUNT_JSON: /run/secrets/google-service-account.json
         depends_on:
             db:

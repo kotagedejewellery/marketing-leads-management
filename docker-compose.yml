@@ -22,7 +22,6 @@ services:
             SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-false}
             CACHE_STORE: file
             QUEUE_CONNECTION: sync
-            GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-}
             GOOGLE_SERVICE_ACCOUNT_JSON: /run/secrets/google-service-account.json
         depends_on:
             db:
@@ -51,6 +50,8 @@ services:
             - ./database/postgres/006_operational_hardening.sql:/docker-entrypoint-initdb.d/006_operational_hardening.sql:ro
             - ./database/postgres/007_simplify_lead_milestones.sql:/docker-entrypoint-initdb.d/007_simplify_lead_milestones.sql:ro
             - ./database/postgres/008_google_sheet_sync.sql:/docker-entrypoint-initdb.d/008_google_sheet_sync.sql:ro
+            - ./database/postgres/009_branch_sheet_sources.sql:/docker-entrypoint-initdb.d/009_branch_sheet_sources.sql:ro
+            - ./database/postgres/010_branch_sync_conflicts.sql:/docker-entrypoint-initdb.d/010_branch_sync_conflicts.sql:ro
         healthcheck:
             test:
                 [
@@ -76,11 +77,13 @@ services:
             - ./database/postgres/006_operational_hardening.sql:/migrations/006_operational_hardening.sql:ro
             - ./database/postgres/007_simplify_lead_milestones.sql:/migrations/007_simplify_lead_milestones.sql:ro
             - ./database/postgres/008_google_sheet_sync.sql:/migrations/008_google_sheet_sync.sql:ro
+            - ./database/postgres/009_branch_sheet_sources.sql:/migrations/009_branch_sheet_sources.sql:ro
+            - ./database/postgres/010_branch_sync_conflicts.sql:/migrations/010_branch_sync_conflicts.sql:ro
         command:
             [
                 'sh',
                 '-c',
-                'psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/002_lead_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/003_backfill_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/004_crud_lifecycle.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/005_lead_source_date.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/006_operational_hardening.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/007_simplify_lead_milestones.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/008_google_sheet_sync.sql',
+                'psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/002_lead_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/003_backfill_contact_key.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/004_crud_lifecycle.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/005_lead_source_date.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/006_operational_hardening.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/007_simplify_lead_milestones.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/008_google_sheet_sync.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/009_branch_sheet_sources.sql && psql -v ON_ERROR_STOP=1 -h db -U marketing_leads -d marketing_leads -f /migrations/010_branch_sync_conflicts.sql',
             ]
 
 volumes:

@@ -30,10 +30,16 @@ class LeadManagementTest extends TestCase
         Schema::create('branches', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->string('google_spreadsheet_id')->nullable()->unique();
+            $table->timestamp('google_sheets_synced_at')->nullable();
+            $table->text('google_sheets_sync_error')->nullable();
         });
         Schema::create('leads', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('assigned_user_id')->nullable();
+            $table->unsignedBigInteger('source_branch_id')->nullable();
+            $table->unsignedBigInteger('source_conflict_branch_id')->nullable();
+            $table->timestamp('source_conflict_at')->nullable();
             $table->string('import_fingerprint')->nullable()->unique();
             $table->string('contact_key')->nullable()->unique();
             $table->string('source_row_no')->nullable();
@@ -216,6 +222,7 @@ class LeadManagementTest extends TestCase
     public function test_admin_can_import_the_all_leads_shape_from_xlsx(): void
     {
         $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
         $path = tempnam(sys_get_temp_dir(), 'all-leads-').'.xlsx';
         $writer = new Writer;
         $writer->openToFile($path);
@@ -223,16 +230,22 @@ class LeadManagementTest extends TestCase
         $writer->addRow(Row::fromValues(['31', '+62 851-7777-3333', '0', 'Dila', 'klik saja', '', 'halo', '10.38', 'Iklan', 'Bio']));
         $writer->close();
 
-        $response = $this->actingAs($admin)->post('/leads/import', ['csv_file' => new UploadedFile($path, 'all-leads.XLSX', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true)]);
+        $response = $this->actingAs($admin)->post('/leads/import', [
+            'csv_file' => new UploadedFile($path, 'all-leads.XLSX', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+            'import_mode' => 'all_leads',
+            'branch_id' => $branchId,
+        ]);
 
         $response->assertRedirect('/leads');
-        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177773333', 'source_date_raw' => '31', 'imported_definition' => 'Cold']);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177773333', 'source_date_raw' => '31', 'imported_definition' => 'Cold', 'source_branch_id' => null]);
         @unlink($path);
     }
 
     public function test_admin_can_import_leads_from_all_numeric_daily_tabs_in_an_xlsx(): void
     {
         $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta']);
         $path = tempnam(sys_get_temp_dir(), 'daily-leads-').'.xlsx';
         $writer = new Writer;
         $writer->openToFile($path);
@@ -248,13 +261,14 @@ class LeadManagementTest extends TestCase
         $response = $this->actingAs($admin)->post('/leads/import', [
             'csv_file' => new UploadedFile($path, 'daily-leads.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
             'import_mode' => 'daily_tabs',
+            'branch_id' => $branchId,
         ]);
 
         $response->assertRedirect('/leads');
         $this->assertDatabaseCount('leads', 2);
-        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177774444', 'source_date_raw' => '1 November 2026']);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177774444', 'source_date_raw' => '1 November 2026', 'source_branch_id' => $branchId, 'assigned_user_id' => $cs->id]);
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177775555', 'source_date_raw' => '2 November 2026']);
-        $this->assertDatabaseHas('lead_activity', ['action' => 'Diimpor dari tab harian', 'detail' => 'Sumber: tab 1 (1 November 2026). Belum ditugaskan ke CS.']);
+        $this->assertDatabaseHas('lead_activity', ['action' => 'Diimpor dari tab harian', 'detail' => 'Sumber: tab 1 (1 November 2026). Ditugaskan otomatis ke CS Yogyakarta (Yogyakarta).']);
         $this->assertDatabaseMissing('leads', ['contact_key' => 'phone:6285177776666']);
         @unlink($path);
     }
@@ -399,6 +413,92 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('lead_activity', ['action' => 'Lead muncul kembali dari Google Sheets']);
     }
 
+    public function test_import_from_a_branch_assigns_its_active_cs_instead_of_the_source_name(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta']);
+        $rows = [[
+            'source_row_no' => '1',
+            'source_date_raw' => '1 November 2026',
+            'source_tab' => '1',
+            'contact_raw' => '+62 851-7777-1888 Rini',
+            'respond_time' => '0',
+            'imported_cs_name' => 'Nama lama di spreadsheet',
+            'imported_keterangan' => 'tanya-tanya',
+            'raw_kebutuhan' => 'cincin nikah',
+            'greeting' => 'Halo',
+            'chat_time' => '10.38',
+            'source_description' => 'Iklan',
+            'campaign_description' => 'Bio',
+            'imported_definition' => 'Warm',
+        ]];
+
+        app(LeadImportService::class)->import($rows, null, 'sheet-yogyakarta', $branchId);
+
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771888',
+            'source_branch_id' => $branchId,
+            'assigned_user_id' => $cs->id,
+        ]);
+    }
+
+    public function test_same_contact_from_a_different_branch_is_flagged_without_changing_its_owner(): void
+    {
+        $yogyakarta = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $solo = \DB::table('branches')->insertGetId(['name' => 'Solo']);
+        $yogyakartaCs = $this->user('cs', ['branch_id' => $yogyakarta, 'name' => 'CS Yogyakarta']);
+        $this->user('cs', ['branch_id' => $solo, 'name' => 'CS Solo']);
+        $row = [
+            'source_row_no' => '1',
+            'source_date_raw' => '1 November 2026',
+            'source_tab' => '1',
+            'contact_raw' => '+62 851-7777-1998 Rini',
+            'respond_time' => '0',
+            'imported_cs_name' => 'CS lama',
+            'imported_keterangan' => 'tanya-tanya',
+            'raw_kebutuhan' => 'cincin nikah',
+            'greeting' => 'Halo',
+            'chat_time' => '10.38',
+            'source_description' => 'Iklan',
+            'campaign_description' => 'Bio',
+            'imported_definition' => 'Warm',
+        ];
+
+        app(LeadImportService::class)->import([$row], null, 'sheet-yogyakarta', $yogyakarta);
+        $row['source_tab'] = '2';
+        $row['source_date_raw'] = '2 November 2026';
+        $summary = app(LeadImportService::class)->import([$row], null, 'sheet-solo', $solo);
+
+        $this->assertSame(1, $summary['resurfaced']);
+        $this->assertSame(1, $summary['needs_review']);
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771998',
+            'assigned_user_id' => $yogyakartaCs->id,
+            'source_branch_id' => $yogyakarta,
+            'source_conflict_branch_id' => $solo,
+        ]);
+        $this->assertDatabaseHas('lead_activity', ['action' => 'Konflik sumber cabang']);
+    }
+
+    public function test_admin_can_filter_unassigned_leads_by_their_source_branch(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285177771887',
+            'contact_key' => 'phone:6285177771887',
+            'source_branch_id' => $branchId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->get("/leads?branch={$branchId}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('leads.data.0.id', $leadId)
+                ->where('leads.data.0.branch_name', 'Yogyakarta'),
+            );
+    }
+
     public function test_inline_lead_creation_returns_to_the_lead_list(): void
     {
         $cs = $this->user('cs');
@@ -477,7 +577,7 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('leads', [
             'id' => $firstLead,
             'current_stage' => 'closing_repeat',
-            'next_follow_up_at' => '2026-11-12T09:30',
+            'next_follow_up_at' => '2026-11-12 09:30:00',
         ]);
     }
 
@@ -635,10 +735,11 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseMissing('lead_activity', ['lead_id' => $leadId]);
     }
 
-    private function user(string $role): User
+    /** @param array<string, mixed> $attributes */
+    private function user(string $role, array $attributes = []): User
     {
-        $user = User::factory()->create();
-        $user->forceFill(['role' => $role])->save();
+        $user = User::factory()->create($attributes);
+        $user->forceFill(['role' => $role] + $attributes)->save();
 
         return $user;
     }

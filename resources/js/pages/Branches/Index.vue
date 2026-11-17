@@ -16,11 +16,17 @@ type Branch = {
     name: string;
     cs_name: string | null;
     cs_email: string | null;
+    google_spreadsheet_id: string | null;
+    google_sheets_synced_at: string | null;
+    google_sheets_sync_error: string | null;
 };
 defineProps<{ branches: Branch[] }>();
-const form = useForm({ name: '' });
+const form = useForm({ name: '', google_spreadsheet_id: '' });
 const editingId = ref<number | null>(null);
 const branchToDelete = ref<Branch | null>(null);
+const syncingBranchId = ref<number | null>(null);
+const formatSyncTime = (value: string | null) =>
+    value ? new Date(value).toLocaleString('id-ID') : '';
 const save = () => {
     const options = {
         onSuccess: () => {
@@ -34,6 +40,7 @@ const save = () => {
 const edit = (branch: Branch) => {
     editingId.value = branch.id;
     form.name = branch.name;
+    form.google_spreadsheet_id = branch.google_spreadsheet_id || '';
     form.clearErrors();
 };
 const cancel = () => {
@@ -47,6 +54,16 @@ const remove = () => {
         onFinish: () => (branchToDelete.value = null),
     });
 };
+const syncBranch = (branch: Branch) =>
+    router.post(
+        `/branches/${branch.id}/sync-google-sheet`,
+        {},
+        {
+            preserveScroll: true,
+            onStart: () => (syncingBranchId.value = branch.id),
+            onFinish: () => (syncingBranchId.value = null),
+        },
+    );
 </script>
 
 <template>
@@ -58,7 +75,7 @@ const remove = () => {
         </h1>
         <p class="kgj-subtitle">Satu cabang mempunyai satu akun CS aktif.</p>
         <form
-            class="kgj-surface mt-7 flex max-w-xl flex-wrap gap-2 p-4"
+            class="kgj-surface mt-7 grid max-w-2xl gap-3 p-4 sm:grid-cols-[1fr_1.4fr_auto]"
             @submit.prevent="save"
         >
             <label class="sr-only" for="branch-name">Nama cabang</label>
@@ -70,6 +87,17 @@ const remove = () => {
                 required
                 maxlength="100"
                 :aria-invalid="Boolean(form.errors.name)"
+            />
+            <label class="sr-only" for="branch-sheet"
+                >Google Spreadsheet ID</label
+            >
+            <input
+                id="branch-sheet"
+                v-model="form.google_spreadsheet_id"
+                class="kgj-input"
+                placeholder="Google Spreadsheet ID (opsional)"
+                maxlength="128"
+                :aria-invalid="Boolean(form.errors.google_spreadsheet_id)"
             />
             <button class="kgj-button-primary" :disabled="form.processing">
                 {{
@@ -95,6 +123,13 @@ const remove = () => {
             >
                 {{ form.errors.name }}
             </p>
+            <p
+                v-if="form.errors.google_spreadsheet_id"
+                class="text-sm text-[#a23e2b] sm:col-span-3"
+                role="alert"
+            >
+                {{ form.errors.google_spreadsheet_id }}
+            </p>
         </form>
         <div class="mt-6 grid gap-3 md:hidden">
             <article
@@ -109,7 +144,39 @@ const remove = () => {
                 <p class="mt-1 text-sm break-all text-kgj-muted">
                     {{ branch.cs_email || 'Tambahkan akun CS dari menu Akun.' }}
                 </p>
-                <div class="mt-4 flex gap-2">
+                <p class="mt-3 text-xs break-all text-kgj-muted">
+                    {{
+                        branch.google_spreadsheet_id ||
+                        'Belum ada sumber Google Sheets.'
+                    }}
+                </p>
+                <p
+                    v-if="branch.google_sheets_synced_at"
+                    class="mt-1 text-xs text-kgj-muted"
+                >
+                    Sinkron terakhir:
+                    {{ formatSyncTime(branch.google_sheets_synced_at) }}
+                </p>
+                <p
+                    v-if="branch.google_sheets_sync_error"
+                    class="mt-1 text-xs text-kgj-rose"
+                >
+                    Sinkronisasi gagal: {{ branch.google_sheets_sync_error }}
+                </p>
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <button
+                        v-if="branch.google_spreadsheet_id"
+                        class="kgj-button-secondary flex-1"
+                        type="button"
+                        :disabled="syncingBranchId === branch.id"
+                        @click="syncBranch(branch)"
+                    >
+                        {{
+                            syncingBranchId === branch.id
+                                ? 'Menyinkronkan…'
+                                : 'Sinkronkan'
+                        }}
+                    </button>
                     <button
                         class="kgj-button-secondary flex-1"
                         type="button"
@@ -130,11 +197,12 @@ const remove = () => {
             </p>
         </div>
         <div class="kgj-table mt-6 hidden overflow-x-auto md:block">
-            <table class="w-full min-w-[620px] text-sm">
+            <table class="w-full min-w-[820px] text-sm">
                 <thead>
                     <tr class="text-left">
                         <th class="p-4">Cabang</th>
                         <th class="p-4">Akun CS aktif</th>
+                        <th class="p-4">Sumber Google Sheets</th>
                         <th class="p-4 text-right">Aksi</th>
                     </tr>
                 </thead>
@@ -148,9 +216,43 @@ const remove = () => {
                                 'Tambahkan akun CS dari menu Akun.'
                             }}</small>
                         </td>
+                        <td class="p-4 text-xs">
+                            <span class="break-all">{{
+                                branch.google_spreadsheet_id ||
+                                'Belum dikonfigurasi'
+                            }}</span>
+                            <small
+                                v-if="branch.google_sheets_synced_at"
+                                class="mt-1 block text-kgj-muted"
+                                >Sinkron terakhir:
+                                {{
+                                    formatSyncTime(
+                                        branch.google_sheets_synced_at,
+                                    )
+                                }}</small
+                            ><small
+                                v-if="branch.google_sheets_sync_error"
+                                class="mt-1 block text-kgj-rose"
+                                >Gagal:
+                                {{ branch.google_sheets_sync_error }}</small
+                            >
+                        </td>
                         <td class="p-4 text-right">
                             <button
+                                v-if="branch.google_spreadsheet_id"
                                 class="inline-flex min-h-11 items-center text-sm font-semibold text-kgj-gold-deep underline decoration-[#c4a45d] underline-offset-4"
+                                type="button"
+                                :disabled="syncingBranchId === branch.id"
+                                @click="syncBranch(branch)"
+                            >
+                                {{
+                                    syncingBranchId === branch.id
+                                        ? 'Menyinkronkan…'
+                                        : 'Sinkronkan'
+                                }}
+                            </button>
+                            <button
+                                class="ml-3 inline-flex min-h-11 items-center text-sm font-semibold text-kgj-gold-deep underline decoration-[#c4a45d] underline-offset-4"
                                 type="button"
                                 @click="edit(branch)"
                             >
@@ -165,7 +267,7 @@ const remove = () => {
                         </td>
                     </tr>
                     <tr v-if="!branches.length">
-                        <td colspan="3" class="p-10 text-center text-[#62665b]">
+                        <td colspan="4" class="p-10 text-center text-[#62665b]">
                             Belum ada cabang.
                         </td>
                     </tr>
@@ -181,7 +283,8 @@ const remove = () => {
                     ><DialogTitle>Hapus cabang?</DialogTitle
                     ><DialogDescription
                         >Cabang {{ branchToDelete?.name }} hanya dapat dihapus
-                        bila tidak memiliki akun.</DialogDescription
+                        bila tidak memiliki akun atau lead dari sumber cabang
+                        ini.</DialogDescription
                     ></DialogHeader
                 ><DialogFooter
                     ><DialogClose as-child

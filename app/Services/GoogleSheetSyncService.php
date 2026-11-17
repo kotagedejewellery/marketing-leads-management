@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Google\Auth\Credentials\ServiceAccountCredentials;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -14,13 +15,20 @@ class GoogleSheetSyncService
 
     public function __construct(private readonly LeadImportService $leadImporter) {}
 
-    /** @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int} */
-    public function sync(?int $actorId = null): array
+    /** @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, failed: int} */
+    public function sync(?int $actorId = null, ?int $branchId = null): array
     {
-        $spreadsheetId = (string) config('leads.google_sheets.spreadsheet_id');
         $credentialsPath = (string) config('leads.google_sheets.credentials_path');
-        if ($spreadsheetId === '' || $credentialsPath === '' || ! is_readable($credentialsPath)) {
-            throw new RuntimeException('Google Sheets belum dikonfigurasi. Periksa Spreadsheet ID dan file kredensial di server.');
+        if ($credentialsPath === '' || ! is_readable($credentialsPath)) {
+            throw new RuntimeException('File kredensial Google Sheets belum dikonfigurasi di server.');
+        }
+        $sources = DB::table('branches')
+            ->whereNotNull('google_spreadsheet_id')
+            ->when($branchId, fn ($query) => $query->where('id', $branchId))
+            ->orderBy('name')
+            ->get(['id', 'name', 'google_spreadsheet_id']);
+        if ($sources->isEmpty()) {
+            throw new RuntimeException($branchId ? 'Cabang ini belum memiliki Spreadsheet ID.' : 'Belum ada Spreadsheet ID pada konfigurasi cabang.');
         }
 
         try {
@@ -33,27 +41,23 @@ class GoogleSheetSyncService
                 throw new RuntimeException('Token Google Sheets tidak dapat dibuat.');
             }
             $client = Http::withToken($accessToken)->acceptJson()->timeout(25);
-            $metadata = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?fields=sheets.properties")->throw()->json();
-            $sheets = is_array($metadata) && is_array($metadata['sheets'] ?? null)
-                ? $metadata['sheets']
-                : [];
-            $tabs = collect($sheets)
-                ->map(fn (mixed $sheet) => $sheet['properties']['title'] ?? null)
-                ->filter(fn (mixed $title) => is_string($title) && preg_match('/^\d{1,2}$/', $title) === 1)
-                ->sortBy(fn (string $title) => (int) $title)
-                ->values();
-            if ($tabs->isEmpty()) {
-                throw new RuntimeException('Tidak menemukan tab harian bernama angka, misalnya 1 sampai 31.');
+            $summary = ['inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'failed' => 0];
+            foreach ($sources as $source) {
+                try {
+                    $sourceSummary = $this->syncBranch($client, (int) $source->id, (string) $source->google_spreadsheet_id, $actorId);
+                    foreach (['inserted', 'skipped', 'resurfaced', 'unassigned', 'needs_review'] as $key) {
+                        $summary[$key] += $sourceSummary[$key];
+                    }
+                    DB::table('branches')->where('id', $source->id)->update(['google_sheets_synced_at' => now(), 'google_sheets_sync_error' => null]);
+                } catch (Throwable $exception) {
+                    DB::table('branches')->where('id', $source->id)->update(['google_sheets_sync_error' => $exception->getMessage()]);
+                    $summary['failed']++;
+                }
             }
-
-            $rows = [];
-            foreach ($tabs as $tab) {
-                $range = rawurlencode("{$tab}!A1:Y".self::ROW_LIMIT);
-                $values = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$range}")->throw()->json('values', []);
-                $this->appendTabRows($rows, is_array($values) ? $values : [], $tab);
+            if ($summary['failed'] === $sources->count()) {
+                throw new RuntimeException('Tidak ada cabang yang berhasil disinkronkan. Periksa konfigurasi sumber dan akun CS.');
             }
-            $summary = $this->leadImporter->import($rows, $actorId, $spreadsheetId);
-            $this->record('success', $summary);
+            $this->record($summary['failed'] ? 'partial' : 'success', $summary);
 
             return $summary;
         } catch (Throwable $exception) {
@@ -62,6 +66,27 @@ class GoogleSheetSyncService
                 ? $exception
                 : new RuntimeException('Sinkronisasi Google Sheets gagal. Coba lagi atau periksa koneksi dan akses Viewer.', previous: $exception);
         }
+    }
+
+    /** @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int} */
+    private function syncBranch(PendingRequest $client, int $branchId, string $spreadsheetId, ?int $actorId): array
+    {
+        $metadata = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?fields=sheets.properties")->throw()->json();
+        $sheets = is_array($metadata) && is_array($metadata['sheets'] ?? null) ? $metadata['sheets'] : [];
+        $tabs = collect($sheets)->map(fn (mixed $sheet) => $sheet['properties']['title'] ?? null)
+            ->filter(fn (mixed $title) => is_string($title) && preg_match('/^\d{1,2}$/', $title) === 1)
+            ->sortBy(fn (string $title) => (int) $title)->values();
+        if ($tabs->isEmpty()) {
+            throw new RuntimeException('Tidak menemukan tab harian bernama angka, misalnya 1 sampai 31.');
+        }
+        $rows = [];
+        foreach ($tabs as $tab) {
+            $range = rawurlencode("{$tab}!A1:Y".self::ROW_LIMIT);
+            $values = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values/{$range}")->throw()->json('values', []);
+            $this->appendTabRows($rows, is_array($values) ? $values : [], $tab);
+        }
+
+        return $this->leadImporter->import($rows, $actorId, $spreadsheetId, $branchId);
     }
 
     /** @param list<array<string, string|null>> $rows
@@ -117,7 +142,7 @@ class GoogleSheetSyncService
         return $headers;
     }
 
-    /** @param array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int}|null $summary */
+    /** @param array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, failed: int}|null $summary */
     private function record(string $status, ?array $summary = null, ?string $error = null): void
     {
         DB::table('lead_sync_runs')->insert([

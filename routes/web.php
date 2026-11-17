@@ -28,6 +28,7 @@ Route::middleware('auth')->group(function () {
         Route::post('branches', [DashboardController::class, 'storeBranch'])->name('branches.store');
         Route::patch('branches/{branch}', [DashboardController::class, 'updateBranch'])->name('branches.update');
         Route::delete('branches/{branch}', [DashboardController::class, 'destroyBranch'])->name('branches.destroy');
+        Route::post('branches/{branch}/sync-google-sheet', [DashboardController::class, 'syncBranchGoogleSheet'])->name('branches.sync-google-sheet');
         Route::get('accounts', [DashboardController::class, 'accounts'])->name('accounts.index');
         Route::post('accounts', [DashboardController::class, 'storeAccount'])->name('accounts.store');
         Route::patch('accounts/{account}', [DashboardController::class, 'updateAccount'])->name('accounts.update');

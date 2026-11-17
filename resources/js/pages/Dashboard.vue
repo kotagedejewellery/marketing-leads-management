@@ -5,6 +5,7 @@ import {
     CalendarClock,
     ClipboardList,
     FileWarning,
+    GitCompareArrows,
     UserRoundPlus,
 } from '@lucide/vue';
 import { computed } from 'vue';
@@ -15,6 +16,7 @@ const props = defineProps<{
         unassigned: number;
         follow_up_due: number;
         needs_qualification: number;
+        source_conflict: number;
     };
     recent_leads: Array<{
         id: number;
@@ -44,6 +46,13 @@ const priorityRows = computed(() => [
     },
     ...(isAdmin
         ? [
+              {
+                  label: 'Nomor muncul di cabang lain',
+                  detail: 'Periksa pemilik lead sebelum tindak lanjut dilakukan.',
+                  value: props.priorities.source_conflict,
+                  href: '/leads?queue=source_conflict',
+                  icon: GitCompareArrows,
+              },
               {
                   label: 'Lead belum memiliki penanggung jawab',
                   detail: 'Bagikan ke CS agar percakapan dapat ditindaklanjuti.',

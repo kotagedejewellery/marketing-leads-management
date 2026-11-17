@@ -32,7 +32,7 @@ CREATE TABLE leads (
   imported_keterangan TEXT,
   raw_kebutuhan TEXT,
   greeting TEXT,
-  chat_time VARCHAR(30),
+  chat_time TEXT,
   source_description VARCHAR(160),
   campaign_description VARCHAR(160),
   imported_definition VARCHAR(30),

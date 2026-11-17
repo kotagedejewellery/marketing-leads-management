@@ -36,9 +36,9 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1794885705.2840853,
-    "seen": 1794885976.8472378,
-    "ast_hash": "4a773b47b3d828b3280da641dcb0295c",
+    "mtime": 1794888944.1886444,
+    "seen": 1794889235.3344893,
+    "ast_hash": "c5a419cc2e6727511e439583eacbbada",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "database/postgres/001_schema.sql": {
-    "mtime": 1794369215.9540837,
-    "seen": 1794369713.8982894,
-    "ast_hash": "bc2988f628c5c4f33d88a625649077c4",
+    "mtime": 1794888942.521405,
+    "seen": 1794889235.3346188,
+    "ast_hash": "a443ee6054a9a592899bf4ebcebcc51b",
     "semantic_hash": ""
   },
   "database/postgres/002_lead_contact_key.sql": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {
-    "mtime": 1794885709.1473806,
-    "seen": 1794885976.847765,
-    "ast_hash": "ef6fccd8a68e22744a1b06055b62be3b",
+    "mtime": 1794888944.750727,
+    "seen": 1794889235.3352628,
+    "ast_hash": "95d3c00ac6dc95618704217afd95a597",
     "semantic_hash": ""
   },
   "tests/Feature/Settings/ProfileUpdateTest.php": {
@@ -1722,9 +1722,9 @@
     "semantic_hash": ""
   },
   "docker-compose.yml": {
-    "mtime": 1794885361.5296664,
-    "seen": 1794885976.8477964,
-    "ast_hash": "acc3b61d3ce3641a64c23d91434b2669",
+    "mtime": 1794888943.6316144,
+    "seen": 1794889235.3353007,
+    "ast_hash": "91bc442c390991f0781546d076a58197",
     "semantic_hash": ""
   },
   "pnpm-workspace.yaml": {
@@ -1875,6 +1875,12 @@
     "mtime": 1794885228.0418549,
     "seen": 1794885976.8473418,
     "ast_hash": "7a124e5978733cadc1f5d6ed09fe4547",
+    "semantic_hash": ""
+  },
+  "database/postgres/011_expand_chat_time.sql": {
+    "mtime": 1794888943.1129339,
+    "seen": 1794889235.3346405,
+    "ast_hash": "a5b3c6d71debd63ef0ae0b8c532bbd09",
     "semantic_hash": ""
   }
 }

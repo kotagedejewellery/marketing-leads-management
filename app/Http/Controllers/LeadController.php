@@ -46,7 +46,7 @@ class LeadController extends Controller
             'imported_keterangan' => ['nullable', 'string'],
             'raw_kebutuhan' => ['nullable', 'string'],
             'greeting' => ['nullable', 'string'],
-            'chat_time' => ['nullable', 'string', 'max:30'],
+            'chat_time' => ['nullable', 'string', 'max:255'],
             'source_description' => ['nullable', 'string', 'max:160'],
             'campaign_description' => ['nullable', 'string', 'max:160'],
             'intent_buying' => ['nullable', 'in:Tunangan,Lamaran,Nikahan,Anniversary,Lainnya'],

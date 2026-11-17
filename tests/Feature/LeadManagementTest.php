@@ -52,7 +52,7 @@ class LeadManagementTest extends TestCase
             $table->text('imported_keterangan')->nullable();
             $table->text('raw_kebutuhan')->nullable();
             $table->text('greeting')->nullable();
-            $table->string('chat_time')->nullable();
+            $table->text('chat_time')->nullable();
             $table->string('source_description')->nullable();
             $table->string('campaign_description')->nullable();
             $table->string('imported_definition')->nullable();
@@ -141,6 +141,25 @@ class LeadManagementTest extends TestCase
             'imported_keterangan' => 'sampai pl banding',
         ]);
         $this->assertDatabaseHas('lead_milestones', ['milestone' => 'price_list', 'is_active' => true]);
+    }
+
+    public function test_admin_import_preserves_a_long_chat_time_from_the_source(): void
+    {
+        $admin = $this->user('admin');
+        $chatTime = 'Diikuti pada 17 November 2026 pukul 11.13 melalui WhatsApp.';
+        $csv = implode("\n", [
+            'No,Nama/Nomor,Respond Time,Nama CS,Keterangan,Kebutuhan,Greeting*,Waktu Chat,Keterangan Sumber*,Keterangan Campaign*,Definisi Leads',
+            "1,+62 851-7777-1222,0,Dila,tanya-tanya,nikah,halo,{$chatTime},Iklan,Bio,Warm",
+        ]);
+
+        $this->actingAs($admin)->post('/leads/import', [
+            'csv_file' => UploadedFile::fake()->createWithContent('long-chat-time.csv', $csv),
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771222',
+            'chat_time' => $chatTime,
+        ]);
     }
 
     public function test_hot_import_and_inline_update_use_the_combined_closing_repeat_order_stage(): void

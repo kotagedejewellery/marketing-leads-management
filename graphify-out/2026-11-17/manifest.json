@@ -30,15 +30,15 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/DashboardController.php": {
-    "mtime": 1794883023.723063,
-    "seen": 1794883827.5286825,
-    "ast_hash": "0e3171817e1de6b97f1c060c511a78e0",
+    "mtime": 1794885226.343514,
+    "seen": 1794885976.8472357,
+    "ast_hash": "6e9e544c5f5c498ca702bf8c90592f8a",
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1794883360.5617173,
-    "seen": 1794883827.5286853,
-    "ast_hash": "335b280bab90656567b4886d2150bf0c",
+    "mtime": 1794885705.2840853,
+    "seen": 1794885976.8472378,
+    "ast_hash": "4a773b47b3d828b3280da641dcb0295c",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -1428,21 +1428,21 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Branches/Index.vue": {
-    "mtime": 1794883426.7410796,
-    "seen": 1794883827.5291228,
-    "ast_hash": "7b8dca8b16e100b5fb3dff5b1e2b9af3",
+    "mtime": 1794885388.6102176,
+    "seen": 1794885976.8476946,
+    "ast_hash": "0a43a767720c6a5599a63dbda10f6cdf",
     "semantic_hash": ""
   },
   "resources/js/pages/Dashboard.vue": {
-    "mtime": 1794475144.6181512,
-    "seen": 1794475818.6728191,
-    "ast_hash": "25528fabbba55241412e529fcca73a6d",
+    "mtime": 1794885334.214282,
+    "seen": 1794885976.847696,
+    "ast_hash": "95f0d5c90b7b7624371682ba3e5b9fc9",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1794883427.3940487,
-    "seen": 1794883827.529126,
-    "ast_hash": "ede5c1bd07ca49d9b878b93afa921ae4",
+    "mtime": 1794885706.8330154,
+    "seen": 1794885976.8476977,
+    "ast_hash": "5895a8419ded99ca9e86dc3be4edf705",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
@@ -1566,9 +1566,9 @@
     "semantic_hash": ""
   },
   "routes/console.php": {
-    "mtime": 1794877694.9110167,
-    "seen": 1794878588.7759948,
-    "ast_hash": "a9067dc9031e91d65048ae078a2e78f8",
+    "mtime": 1794885227.4934452,
+    "seen": 1794885976.8477364,
+    "ast_hash": "a06eca31c0594e4c3c4fc1db4d190188",
     "semantic_hash": ""
   },
   "routes/settings.php": {
@@ -1578,9 +1578,9 @@
     "semantic_hash": ""
   },
   "routes/web.php": {
-    "mtime": 1794877661.9990134,
-    "seen": 1794878588.7759988,
-    "ast_hash": "04fe43a9fb84608502eecf1b5579a425",
+    "mtime": 1794885226.9855833,
+    "seen": 1794885976.8477397,
+    "ast_hash": "3f8da437776700f95b01f2a9268b522c",
     "semantic_hash": ""
   },
   "tests/Feature/Auth/AuthenticationTest.php": {
@@ -1626,9 +1626,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/DashboardTest.php": {
-    "mtime": 1794883704.9884007,
-    "seen": 1794883827.5291886,
-    "ast_hash": "b4bd80224ad8df01978d9f0701982525",
+    "mtime": 1794885150.5119913,
+    "seen": 1794885976.847761,
+    "ast_hash": "ffa9a647eb247a31582f157f757a1dc3",
     "semantic_hash": ""
   },
   "tests/Feature/ExampleTest.php": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {
-    "mtime": 1794883742.6534045,
-    "seen": 1794883827.5291917,
-    "ast_hash": "bea4caebfb1d92bfecb6a378704e51c9",
+    "mtime": 1794885709.1473806,
+    "seen": 1794885976.847765,
+    "ast_hash": "ef6fccd8a68e22744a1b06055b62be3b",
     "semantic_hash": ""
   },
   "tests/Feature/Settings/ProfileUpdateTest.php": {
@@ -1704,9 +1704,9 @@
     "semantic_hash": ""
   },
   "GLOSSARY.md": {
-    "mtime": 1794882868.7088954,
-    "seen": 1794883827.5292149,
-    "ast_hash": "351ae59446ed1fbc07eab95c7b60cd11",
+    "mtime": 1794885362.509372,
+    "seen": 1794885976.8477893,
+    "ast_hash": "d21181c670c1d0a4b495820b6d5a3c2a",
     "semantic_hash": ""
   },
   "PRODUCT.md": {
@@ -1716,15 +1716,15 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1794532555.3094604,
-    "seen": 1794532617.5655627,
-    "ast_hash": "99a955ad15953a5b58cc10e9fac54254",
+    "mtime": 1794886889.2500331,
+    "seen": 1794886974.848056,
+    "ast_hash": "abce47a78301192ae16025ce87d15996",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
-    "mtime": 1794883361.9420516,
-    "seen": 1794883827.5292218,
-    "ast_hash": "5cc88a4bb4df9307615957dcd6cc91d1",
+    "mtime": 1794885361.5296664,
+    "seen": 1794885976.8477964,
+    "ast_hash": "acc3b61d3ce3641a64c23d91434b2669",
     "semantic_hash": ""
   },
   "pnpm-workspace.yaml": {
@@ -1794,9 +1794,9 @@
     "semantic_hash": ""
   },
   "compose.production.yml": {
-    "mtime": 1794883362.564699,
-    "seen": 1794883827.52922,
-    "ast_hash": "25d021b96fb6df54d66969b4a3109316",
+    "mtime": 1794886887.554462,
+    "seen": 1794886974.848061,
+    "ast_hash": "9eb1b1b1fe4def292b471b415ad800ac",
     "semantic_hash": ""
   },
   "docs/DEPLOYMENT.md": {
@@ -1842,15 +1842,15 @@
     "semantic_hash": ""
   },
   "app/Services/GoogleSheetSyncService.php": {
-    "mtime": 1794883358.8746586,
-    "seen": 1794883827.528716,
-    "ast_hash": "f46aacc6896cf01e77baae29cb9dc3c0",
+    "mtime": 1794885225.7842247,
+    "seen": 1794885976.8472707,
+    "ast_hash": "c4f70f3b475c5e89fbf84832d4ac066e",
     "semantic_hash": ""
   },
   "app/Services/LeadImportService.php": {
-    "mtime": 1794883652.0402179,
-    "seen": 1794883827.5287178,
-    "ast_hash": "0ab8eba409c2736b848120af03966f5c",
+    "mtime": 1794885225.2324586,
+    "seen": 1794885976.8472729,
+    "ast_hash": "df954f61e240bc770d872d87e577e1be",
     "semantic_hash": ""
   },
   "config/leads.php": {
@@ -1869,6 +1869,12 @@
     "mtime": 1794882975.753794,
     "seen": 1794883827.5287817,
     "ast_hash": "ebffec494c2fb50e1a8d99e5d2150aaa",
+    "semantic_hash": ""
+  },
+  "database/postgres/010_branch_sync_conflicts.sql": {
+    "mtime": 1794885228.0418549,
+    "seen": 1794885976.8473418,
+    "ast_hash": "7a124e5978733cadc1f5d6ed09fe4547",
     "semantic_hash": ""
   }
 }

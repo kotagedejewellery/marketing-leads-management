@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import {
     Dialog,
     DialogClose,
@@ -14,17 +14,27 @@ import {
 type Branch = {
     id: number;
     name: string;
-    cs_name: string | null;
-    cs_email: string | null;
+    default_import_user_id: number | null;
+    cs_accounts: { id: number; name: string; email: string }[];
+    import_status: string;
     google_spreadsheet_id: string | null;
     google_sheets_synced_at: string | null;
     google_sheets_sync_error: string | null;
 };
-defineProps<{ branches: Branch[] }>();
-const form = useForm({ name: '', google_spreadsheet_id: '' });
+const props = defineProps<{ branches: Branch[] }>();
+const form = useForm({
+    name: '',
+    google_spreadsheet_id: '',
+    default_import_user_id: '',
+});
 const editingId = ref<number | null>(null);
 const branchToDelete = ref<Branch | null>(null);
 const syncingBranchId = ref<number | null>(null);
+const importCsOptions = computed(
+    () =>
+        props.branches.find((branch) => branch.id === editingId.value)
+            ?.cs_accounts || [],
+);
 const formatSyncTime = (value: string | null) =>
     value ? new Date(value).toLocaleString('id-ID') : '';
 const save = () => {
@@ -41,6 +51,9 @@ const edit = (branch: Branch) => {
     editingId.value = branch.id;
     form.name = branch.name;
     form.google_spreadsheet_id = branch.google_spreadsheet_id || '';
+    form.default_import_user_id = branch.default_import_user_id
+        ? String(branch.default_import_user_id)
+        : '';
     form.clearErrors();
 };
 const cancel = () => {
@@ -73,9 +86,11 @@ const syncBranch = (branch: Branch) =>
         <h1 class="mt-2 text-4xl font-semibold tracking-[-.04em] sm:text-5xl">
             Cabang.
         </h1>
-        <p class="kgj-subtitle">Satu cabang mempunyai satu akun CS aktif.</p>
+        <p class="kgj-subtitle">
+            Kelola sumber lead dan beberapa akun CS aktif per cabang.
+        </p>
         <form
-            class="kgj-surface mt-7 grid max-w-2xl gap-3 p-4 sm:grid-cols-[1fr_1.4fr_auto]"
+            class="kgj-surface mt-7 grid max-w-3xl gap-3 p-4 sm:grid-cols-2"
             @submit.prevent="save"
         >
             <label class="sr-only" for="branch-name">Nama cabang</label>
@@ -99,6 +114,34 @@ const syncBranch = (branch: Branch) =>
                 maxlength="128"
                 :aria-invalid="Boolean(form.errors.google_spreadsheet_id)"
             />
+            <label
+                v-if="editingId"
+                class="grid gap-1 text-sm font-medium sm:col-span-2"
+                >CS default impor
+                <select
+                    v-model="form.default_import_user_id"
+                    class="kgj-input"
+                    :aria-invalid="Boolean(form.errors.default_import_user_id)"
+                >
+                    <option value="">Pilih CS default impor</option>
+                    <option
+                        v-for="account in importCsOptions"
+                        :key="account.id"
+                        :value="String(account.id)"
+                    >
+                        {{ account.name }} · {{ account.email }}
+                    </option>
+                </select>
+                <span class="text-xs font-normal text-kgj-muted"
+                    >Lead baru dari spreadsheet cabang akan menjadi tanggung
+                    jawab CS ini.</span
+                >
+                <span
+                    v-if="form.errors.default_import_user_id"
+                    class="text-[#a23e2b]"
+                    >{{ form.errors.default_import_user_id }}</span
+                >
+            </label>
             <button class="kgj-button-primary" :disabled="form.processing">
                 {{
                     form.processing
@@ -138,17 +181,48 @@ const syncBranch = (branch: Branch) =>
                 class="kgj-surface p-4"
             >
                 <h2 class="font-semibold">{{ branch.name }}</h2>
-                <p class="mt-2 text-sm text-kgj-muted">
-                    {{ branch.cs_name || 'Belum ditetapkan' }}
-                </p>
-                <p class="mt-1 text-sm break-all text-kgj-muted">
-                    {{ branch.cs_email || 'Tambahkan akun CS dari menu Akun.' }}
+                <div v-if="branch.cs_accounts.length" class="mt-3 space-y-2">
+                    <p
+                        class="text-xs font-semibold tracking-[.08em] text-kgj-muted uppercase"
+                    >
+                        CS aktif ({{ branch.cs_accounts.length }})
+                    </p>
+                    <p
+                        v-for="account in branch.cs_accounts"
+                        :key="account.id"
+                        class="text-sm text-kgj-muted"
+                    >
+                        <span class="font-medium text-kgj-ink">{{
+                            account.name
+                        }}</span>
+                        <span
+                            v-if="branch.default_import_user_id === account.id"
+                            class="ml-2 text-xs text-kgj-gold-deep"
+                            >Default impor</span
+                        >
+                        <small class="block break-all">{{
+                            account.email
+                        }}</small>
+                    </p>
+                </div>
+                <p v-else class="mt-2 text-sm text-kgj-muted">
+                    Tambahkan akun CS dari menu Akun.
                 </p>
                 <p class="mt-3 text-xs break-all text-kgj-muted">
                     {{
                         branch.google_spreadsheet_id ||
                         'Belum ada sumber Google Sheets.'
                     }}
+                </p>
+                <p
+                    class="mt-2 text-xs font-semibold"
+                    :class="
+                        branch.import_status === 'Siap impor'
+                            ? 'text-kgj-sage'
+                            : 'text-kgj-rose'
+                    "
+                >
+                    {{ branch.import_status }}
                 </p>
                 <p
                     v-if="branch.google_sheets_synced_at"
@@ -210,17 +284,46 @@ const syncBranch = (branch: Branch) =>
                     <tr v-for="branch in branches" :key="branch.id">
                         <td class="p-4 font-semibold">{{ branch.name }}</td>
                         <td class="p-4">
-                            {{ branch.cs_name || 'Belum ditetapkan'
-                            }}<small class="block text-[#62665b]">{{
-                                branch.cs_email ||
-                                'Tambahkan akun CS dari menu Akun.'
-                            }}</small>
+                            <template v-if="branch.cs_accounts.length">
+                                <div
+                                    v-for="account in branch.cs_accounts"
+                                    :key="account.id"
+                                    class="mb-2 last:mb-0"
+                                >
+                                    <span class="font-medium">{{
+                                        account.name
+                                    }}</span>
+                                    <span
+                                        v-if="
+                                            branch.default_import_user_id ===
+                                            account.id
+                                        "
+                                        class="ml-2 text-xs text-kgj-gold-deep"
+                                        >Default impor</span
+                                    >
+                                    <small class="block text-[#62665b]">{{
+                                        account.email
+                                    }}</small>
+                                </div>
+                            </template>
+                            <small v-else class="block text-[#62665b]"
+                                >Tambahkan akun CS dari menu Akun.</small
+                            >
                         </td>
                         <td class="p-4 text-xs">
                             <span class="break-all">{{
                                 branch.google_spreadsheet_id ||
                                 'Belum dikonfigurasi'
                             }}</span>
+                            <small
+                                class="mt-1 block font-semibold"
+                                :class="
+                                    branch.import_status === 'Siap impor'
+                                        ? 'text-kgj-sage'
+                                        : 'text-kgj-rose'
+                                "
+                                >{{ branch.import_status }}</small
+                            >
                             <small
                                 v-if="branch.google_sheets_synced_at"
                                 class="mt-1 block text-kgj-muted"

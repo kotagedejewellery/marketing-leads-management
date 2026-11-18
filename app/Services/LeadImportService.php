@@ -24,13 +24,19 @@ class LeadImportService
     {
         $known = $this->knownContacts($rows);
         $sourceBranch = $sourceBranchId
-            ? DB::table('branches')->where('id', $sourceBranchId)->first(['id', 'name'])
+            ? DB::table('branches as b')
+                ->leftJoin('users as u', fn ($join) => $join->on('u.id', '=', 'b.default_import_user_id')
+                    ->where('u.branch_id', '=', $sourceBranchId)
+                    ->where('u.role', 'cs')
+                    ->where('u.active', true))
+                ->where('b.id', $sourceBranchId)
+                ->first(['b.id', 'b.name', 'u.id as default_import_user_id', 'u.name as default_import_name'])
             : null;
-        $branchOwner = $sourceBranchId
-            ? DB::table('users')->where('branch_id', $sourceBranchId)->where('role', 'cs')->where('active', true)->first(['id', 'name'])
+        $branchOwner = $sourceBranch?->default_import_user_id
+            ? (object) ['id' => $sourceBranch->default_import_user_id, 'name' => $sourceBranch->default_import_name]
             : null;
         if ($sourceBranchId && (! $sourceBranch || ! $branchOwner)) {
-            throw new \RuntimeException('Cabang sumber harus memiliki satu akun CS aktif sebelum lead dapat disinkronkan.');
+            throw new \RuntimeException('Cabang sumber harus memiliki CS default impor yang aktif sebelum lead dapat disinkronkan.');
         }
         $csByName = DB::table('users')->where('role', 'cs')->where('active', true)->get(['id', 'name'])
             ->groupBy(fn (object $user) => $this->csKey($user->name))

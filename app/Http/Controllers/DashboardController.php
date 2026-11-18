@@ -176,7 +176,31 @@ class DashboardController extends Controller
 
     public function branches(): Response
     {
-        return Inertia::render('Branches/Index', ['branches' => DB::table('branches as b')->leftJoin('users as u', fn ($join) => $join->on('u.branch_id', '=', 'b.id')->where('u.role', 'cs')->where('u.active', true))->orderBy('b.name')->get(['b.id', 'b.name', 'b.google_spreadsheet_id', 'b.google_sheets_synced_at', 'b.google_sheets_sync_error', 'u.name as cs_name', 'u.email as cs_email'])]);
+        $csByBranch = DB::table('users')
+            ->where('role', 'cs')
+            ->where('active', true)
+            ->orderBy('name')
+            ->get(['id', 'branch_id', 'name', 'email'])
+            ->groupBy('branch_id');
+        $branches = DB::table('branches')
+            ->orderBy('name')
+            ->get(['id', 'name', 'default_import_user_id', 'google_spreadsheet_id', 'google_sheets_synced_at', 'google_sheets_sync_error'])
+            ->map(function (object $branch) use ($csByBranch): object {
+                $branch->cs_accounts = array_values($csByBranch->get($branch->id, collect())->all());
+                $hasDefaultImportCs = collect($branch->cs_accounts)->contains(
+                    fn (object $account): bool => (int) $account->id === (int) $branch->default_import_user_id,
+                );
+                $branch->import_status = match (true) {
+                    ! $branch->google_spreadsheet_id => 'Sumber Google Sheets belum diatur',
+                    $branch->cs_accounts === [] => 'Butuh akun CS aktif',
+                    ! $hasDefaultImportCs => 'Pilih CS default impor',
+                    default => 'Siap impor',
+                };
+
+                return $branch;
+            });
+
+        return Inertia::render('Branches/Index', ['branches' => $branches]);
     }
 
     public function accounts(): Response
@@ -200,7 +224,10 @@ class DashboardController extends Controller
         if ($data['password'] === null) {
             throw ValidationException::withMessages(['password' => 'Kata sandi wajib diisi.']);
         }
-        DB::table('users')->insert(['name' => $data['name'], 'email' => $data['email'], 'password_hash' => bcrypt($data['password']), 'role' => $data['role'], 'branch_id' => $data['role'] === 'cs' ? $data['branch_id'] : null, 'created_at' => now()]);
+        DB::transaction(function () use ($data): void {
+            DB::table('users')->insert(['name' => $data['name'], 'email' => $data['email'], 'password_hash' => bcrypt($data['password']), 'role' => $data['role'], 'branch_id' => $data['role'] === 'cs' ? $data['branch_id'] : null, 'created_at' => now()]);
+            $this->ensureBranchDefaultImportCs($data['role'] === 'cs' ? $data['branch_id'] : null);
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Akun ditambahkan.']);
 
@@ -218,15 +245,23 @@ class DashboardController extends Controller
         return back();
     }
 
-    /** @return array{name: string, google_spreadsheet_id: string|null} */
+    /** @return array{name: string, google_spreadsheet_id: string|null, default_import_user_id: int|null} */
     private function branchData(Request $request, ?int $branchId = null): array
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100', Rule::unique('branches', 'name')->ignore($branchId)],
             'google_spreadsheet_id' => ['nullable', 'string', 'max:128', Rule::unique('branches', 'google_spreadsheet_id')->ignore($branchId)],
+            'default_import_user_id' => ['nullable', 'integer'],
         ]);
+        $defaultImportUserId = isset($data['default_import_user_id']) ? (int) $data['default_import_user_id'] : null;
+        if ($branchId && $defaultImportUserId && ! DB::table('users')->where('id', $defaultImportUserId)->where('branch_id', $branchId)->where('role', 'cs')->where('active', true)->exists()) {
+            throw ValidationException::withMessages(['default_import_user_id' => 'Pilih akun CS aktif dari cabang ini.']);
+        }
+        if ($branchId && ! $defaultImportUserId && DB::table('users')->where('branch_id', $branchId)->where('role', 'cs')->where('active', true)->exists()) {
+            throw ValidationException::withMessages(['default_import_user_id' => 'Pilih CS default impor untuk cabang ini.']);
+        }
 
-        return ['name' => (string) $data['name'], 'google_spreadsheet_id' => trim((string) ($data['google_spreadsheet_id'] ?? '')) ?: null];
+        return ['name' => (string) $data['name'], 'google_spreadsheet_id' => trim((string) ($data['google_spreadsheet_id'] ?? '')) ?: null, 'default_import_user_id' => $defaultImportUserId];
     }
 
     public function destroyBranch(int $branch): RedirectResponse
@@ -266,12 +301,22 @@ class DashboardController extends Controller
     {
         $record = DB::table('users')->where('id', $account)->first() ?? abort(404);
         $active = $request->boolean('active', (bool) $record->active);
-        $data = $this->accountData($request, $record->id, false, $active);
+        $data = $this->accountData($request, $record->id);
         if ($record->id === $request->user()->id && ! $active) {
             throw ValidationException::withMessages(['active' => 'Anda tidak dapat menonaktifkan akun sendiri.']);
         }
         if ($record->role === 'admin' && $record->active && ($data['role'] !== 'admin' || ! $active) && DB::table('users')->where('role', 'admin')->where('active', true)->count() <= 1) {
             throw ValidationException::withMessages(['role' => 'Minimal satu admin aktif harus tersedia.']);
+        }
+        $isMovingActiveCs = $record->role === 'cs'
+            && $data['role'] === 'cs'
+            && $active
+            && (int) $record->branch_id !== $data['branch_id'];
+        if ($isMovingActiveCs && (
+            DB::table('leads')->where('assigned_user_id', $record->id)->whereNull('archived_at')->exists()
+            || DB::table('lead_collaborators as c')->join('leads as l', 'l.id', '=', 'c.lead_id')->where('c.user_id', $record->id)->whereNull('c.removed_at')->whereNull('l.archived_at')->exists()
+        )) {
+            throw ValidationException::withMessages(['branch_id' => 'Pindahkan atau lepaskan penugasan lead aktif sebelum memindahkan cabang CS.']);
         }
 
         DB::transaction(function () use ($record, $data, $active, $request): void {
@@ -298,6 +343,8 @@ class DashboardController extends Controller
                     DB::table('lead_activity')->insert($activity);
                 }
             }
+            $this->ensureBranchDefaultImportCs($record->branch_id ? (int) $record->branch_id : null);
+            $this->ensureBranchDefaultImportCs($data['role'] === 'cs' ? $data['branch_id'] : null);
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => $active ? 'Akun diperbarui.' : 'Akun dinonaktifkan dan lead terkait dilepas.']);
@@ -308,7 +355,7 @@ class DashboardController extends Controller
     /**
      * @return array{name: string, email: string, password: string|null, role: 'admin'|'cs', branch_id: int|null}
      */
-    private function accountData(Request $request, ?int $accountId = null, bool $passwordRequired = false, bool $willBeActive = true): array
+    private function accountData(Request $request, ?int $accountId = null, bool $passwordRequired = false): array
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
@@ -321,13 +368,6 @@ class DashboardController extends Controller
             if (! ($data['branch_id'] ?? false)) {
                 throw ValidationException::withMessages(['branch_id' => 'Cabang wajib dipilih untuk akun CS.']);
             }
-            $activeCs = DB::table('users')->where('role', 'cs')->where('active', true)->where('branch_id', $data['branch_id']);
-            if ($accountId) {
-                $activeCs->where('id', '!=', $accountId);
-            }
-            if ($willBeActive && $activeCs->exists()) {
-                throw ValidationException::withMessages(['branch_id' => 'Cabang sudah memiliki akun CS aktif.']);
-            }
         }
 
         return [
@@ -337,6 +377,33 @@ class DashboardController extends Controller
             'role' => $data['role'] === 'admin' ? 'admin' : 'cs',
             'branch_id' => isset($data['branch_id']) ? (int) $data['branch_id'] : null,
         ];
+    }
+
+    private function ensureBranchDefaultImportCs(?int $branchId): void
+    {
+        if (! $branchId) {
+            return;
+        }
+
+        $hasValidDefault = DB::table('branches as b')
+            ->join('users as u', 'u.id', '=', 'b.default_import_user_id')
+            ->where('b.id', $branchId)
+            ->whereColumn('u.branch_id', 'b.id')
+            ->where('u.role', 'cs')
+            ->where('u.active', true)
+            ->exists();
+        if ($hasValidDefault) {
+            return;
+        }
+
+        $nextDefault = DB::table('users')
+            ->where('branch_id', $branchId)
+            ->where('role', 'cs')
+            ->where('active', true)
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->value('id');
+        DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $nextDefault]);
     }
 
     /** @return array{total: int, cold: int, warm: int, hot: int, closing: int, unclassified: int} */

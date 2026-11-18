@@ -31,6 +31,7 @@ class LeadManagementTest extends TestCase
         Schema::create('branches', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->unsignedBigInteger('default_import_user_id')->nullable();
             $table->string('google_spreadsheet_id')->nullable()->unique();
             $table->timestamp('google_sheets_synced_at')->nullable();
             $table->text('google_sheets_sync_error')->nullable();
@@ -278,6 +279,7 @@ class LeadManagementTest extends TestCase
         $admin = $this->user('admin');
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
         $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
         $path = tempnam(sys_get_temp_dir(), 'daily-leads-').'.xlsx';
         $writer = new Writer;
         $writer->openToFile($path);
@@ -309,7 +311,8 @@ class LeadManagementTest extends TestCase
     {
         $admin = $this->user('admin');
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Jakarta']);
-        $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Jakarta']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Jakarta']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
         $path = tempnam(sys_get_temp_dir(), 'daily-leads-id-').'.xlsx';
         $writer = new Writer;
         $writer->openToFile($path);
@@ -612,10 +615,12 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('lead_activity', ['action' => 'Lead muncul kembali dari Google Sheets']);
     }
 
-    public function test_import_from_a_branch_assigns_its_active_cs_instead_of_the_source_name(): void
+    public function test_import_from_a_branch_assigns_its_default_import_cs_instead_of_the_source_name(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
-        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta']);
+        $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta 1']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta 2']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
         $rows = [[
             'source_row_no' => '1',
             'source_date_raw' => '1 November 2026',
@@ -646,7 +651,9 @@ class LeadManagementTest extends TestCase
         $yogyakarta = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
         $solo = \DB::table('branches')->insertGetId(['name' => 'Solo']);
         $yogyakartaCs = $this->user('cs', ['branch_id' => $yogyakarta, 'name' => 'CS Yogyakarta']);
-        $this->user('cs', ['branch_id' => $solo, 'name' => 'CS Solo']);
+        $soloCs = $this->user('cs', ['branch_id' => $solo, 'name' => 'CS Solo']);
+        \DB::table('branches')->where('id', $yogyakarta)->update(['default_import_user_id' => $yogyakartaCs->id]);
+        \DB::table('branches')->where('id', $solo)->update(['default_import_user_id' => $soloCs->id]);
         $row = [
             'source_row_no' => '1',
             'source_date_raw' => '1 November 2026',

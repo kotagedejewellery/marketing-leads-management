@@ -25,7 +25,7 @@ CS melihat lead yang menjadi tanggung jawab utama atau yang ditangani bersama se
 
 1. CS mengisi spreadsheet harian cabangnya pada tab tanggal `1` sampai `31`.
 2. Sistem membaca spreadsheet setiap dua menit dan menyimpan lead baru ke cabang sumbernya.
-3. Lead baru langsung ditugaskan ke akun CS aktif pada cabang tersebut.
+3. Lead baru langsung ditugaskan ke CS default impor pada cabang tersebut.
 4. CS memperbarui status, kebutuhan, catatan, dan follow-up dari sistem.
 5. Bila batas follow-up terlewati tanpa aktivitas lanjutan, sistem memberi penanda pengambilalihan CRM tanpa mengganti CS utama.
 6. Admin memantau antrean follow-up, pengambilalihan CRM, kualitas data, konflik nomor lintas cabang, serta sinkronisasi tiap cabang.
@@ -58,7 +58,9 @@ Admin dapat mengimpor file CSV atau XLSX sebagai cadangan atau data historis. Pi
 
 ## Sumber Google Sheets per cabang
 
-Admin mengisi **Google Spreadsheet ID** pada menu Cabang dan memastikan cabang tersebut memiliki satu akun CS aktif. Spreadsheet dibagikan sebagai Viewer kepada Service Account sistem. Simpan kredensial Service Account sebagai `secrets/google-service-account.json` di server (file ini tidak masuk Git). Tombol **Sinkronkan** pada cabang digunakan saat ingin mengecek satu sumber sekarang juga; sinkronisasi rutin tetap berjalan otomatis.
+Admin mengisi **Google Spreadsheet ID** pada menu Cabang, menambahkan satu atau beberapa akun CS aktif, lalu memilih satu **CS default impor**. Setiap lead baru dari spreadsheet cabang tersebut ditugaskan ke CS default ini; akun CS lain tetap dapat masuk dan ditambahkan sebagai pendamping pada lead bila diperlukan. Spreadsheet dibagikan sebagai Viewer kepada Service Account sistem. Simpan kredensial Service Account sebagai `secrets/google-service-account.json` di server (file ini tidak masuk Git). Tombol **Sinkronkan** pada cabang digunakan saat ingin mengecek satu sumber sekarang juga; sinkronisasi rutin tetap berjalan otomatis.
+
+Sebelum memindahkan akun CS ke cabang lain, pindahkan atau lepaskan dulu seluruh penugasan lead aktifnya. Aturan ini menjaga lead tidak terlihat seolah-olah berpindah cabang hanya karena akun CS dipindahkan.
 
 Jika nomor yang sama muncul pada spreadsheet cabang lain, sistem tidak memindahkan pemiliknya secara otomatis. Lead diberi tanda nomor lintas cabang agar Admin dapat meninjaunya.
 

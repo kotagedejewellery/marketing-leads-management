@@ -134,8 +134,14 @@ class LeadController extends Controller
         if ($importMode === 'daily_tabs' && empty($data['branch_id'])) {
             throw ValidationException::withMessages(['branch_id' => 'Pilih cabang pemilik data harian.']);
         }
-        if ($importMode === 'daily_tabs' && ! DB::table('users')->where('branch_id', $data['branch_id'])->where('role', 'cs')->where('active', true)->exists()) {
-            throw ValidationException::withMessages(['branch_id' => 'Cabang sumber harus memiliki satu akun CS aktif sebelum data harian dapat diimpor.']);
+        if ($importMode === 'daily_tabs' && ! DB::table('branches as b')
+            ->join('users as u', 'u.id', '=', 'b.default_import_user_id')
+            ->where('b.id', $data['branch_id'])
+            ->whereColumn('u.branch_id', 'b.id')
+            ->where('u.role', 'cs')
+            ->where('u.active', true)
+            ->exists()) {
+            throw ValidationException::withMessages(['branch_id' => 'Cabang sumber harus memiliki CS default impor yang aktif sebelum data harian dapat diimpor.']);
         }
         [$headers, $valueRows] = match (true) {
             $importMode === 'daily_tabs' => $this->readDailyTabsXlsx($request->file('csv_file')->getRealPath()),

@@ -60,6 +60,7 @@ class DashboardTest extends TestCase
         });
 
         Schema::table('users', function (Blueprint $table) {
+            $table->string('password')->nullable()->change();
             $table->unsignedBigInteger('branch_id')->nullable();
             $table->string('password_hash')->nullable();
             $table->string('role')->default('cs');
@@ -68,6 +69,7 @@ class DashboardTest extends TestCase
         Schema::create('branches', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->unsignedBigInteger('default_import_user_id')->nullable();
             $table->string('google_spreadsheet_id')->nullable()->unique();
             $table->timestamp('google_sheets_synced_at')->nullable();
             $table->text('google_sheets_sync_error')->nullable();
@@ -218,6 +220,85 @@ class DashboardTest extends TestCase
 
     }
 
+    public function test_admin_can_add_multiple_active_cs_to_one_branch(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'admin'])->save();
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+
+        $this->actingAs($admin)->post('/accounts', [
+            'name' => 'CS Palagan 1',
+            'email' => 'cs-palagan-1@example.test',
+            'password' => 'password-yang-aman',
+            'role' => 'cs',
+            'branch_id' => $branchId,
+        ])->assertRedirect();
+        $firstCsId = (int) \DB::table('users')->where('email', 'cs-palagan-1@example.test')->value('id');
+
+        $this->actingAs($admin)->post('/accounts', [
+            'name' => 'CS Palagan 2',
+            'email' => 'cs-palagan-2@example.test',
+            'password' => 'password-yang-aman',
+            'role' => 'cs',
+            'branch_id' => $branchId,
+        ])->assertRedirect();
+
+        $this->assertDatabaseCount('users', 3);
+        $this->assertDatabaseHas('branches', [
+            'id' => $branchId,
+            'default_import_user_id' => $firstCsId,
+        ]);
+
+        $this->post(route('logout'));
+        $this->post(route('login.store'), [
+            'email' => 'cs-palagan-2@example.test',
+            'password' => 'password-yang-aman',
+        ])->assertRedirect(route('dashboard', absolute: false));
+        $this->assertAuthenticated();
+    }
+
+    public function test_admin_cannot_move_an_active_cs_to_another_branch_while_they_handle_active_leads(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'admin'])->save();
+        $palaganId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $bandungId = \DB::table('branches')->insertGetId(['name' => 'Bandung']);
+        $cs = User::factory()->create(['name' => 'CS Palagan']);
+        $cs->forceFill(['role' => 'cs', 'branch_id' => $palaganId, 'active' => true])->save();
+        \DB::table('leads')->insert([
+            'assigned_user_id' => $cs->id,
+            'name' => 'Lead aktif',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->patch("/accounts/{$cs->id}", [
+            'name' => $cs->name,
+            'email' => $cs->email,
+            'role' => 'cs',
+            'branch_id' => $bandungId,
+            'active' => true,
+        ])->assertSessionHasErrors('branch_id');
+
+        $this->assertDatabaseHas('users', ['id' => $cs->id, 'branch_id' => $palaganId]);
+    }
+
+    public function test_branch_index_shows_when_a_sheet_source_is_not_ready_to_import(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'admin'])->save();
+        \DB::table('branches')->insert([
+            'name' => 'Palagan',
+            'google_spreadsheet_id' => 'sheet-palagan',
+        ]);
+
+        $this->actingAs($admin)->get('/branches')->assertInertia(
+            fn (Assert $page) => $page
+                ->component('Branches/Index')
+                ->where('branches.0.import_status', 'Butuh akun CS aktif'),
+        );
+    }
+
     public function test_admin_cannot_delete_a_branch_that_still_has_an_account(): void
     {
         $admin = User::factory()->create();
@@ -256,6 +337,9 @@ class DashboardTest extends TestCase
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Pusat']);
         $cs = User::factory()->create(['name' => 'CS Pusat']);
         $cs->forceFill(['role' => 'cs', 'branch_id' => $branchId, 'active' => true])->save();
+        $replacement = User::factory()->create(['name' => 'CS Pusat Cadangan']);
+        $replacement->forceFill(['role' => 'cs', 'branch_id' => $branchId, 'active' => true])->save();
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
         $leadId = \DB::table('leads')->insertGetId([
             'assigned_user_id' => $cs->id,
             'name' => 'Lead kerja sama',
@@ -282,5 +366,6 @@ class DashboardTest extends TestCase
         $this->assertDatabaseMissing('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $cs->id, 'removed_at' => null]);
         $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'CS utama dilepas']);
         $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'CS pendamping dilepas']);
+        $this->assertDatabaseHas('branches', ['id' => $branchId, 'default_import_user_id' => $replacement->id]);
     }
 }

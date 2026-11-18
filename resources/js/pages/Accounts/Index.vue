@@ -76,7 +76,7 @@ const setActive = (account: Account, active: boolean) => {
             Akun.
         </h1>
         <p class="kgj-subtitle">
-            Buat akun admin atau satu akun CS aktif untuk setiap cabang.
+            Satu cabang dapat memiliki beberapa akun CS aktif.
         </p>
         <form
             class="kgj-surface mt-7 grid gap-4 p-4 sm:p-5 md:grid-cols-2"

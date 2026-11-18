@@ -16,7 +16,9 @@ CREATE TABLE users (
   CHECK ((role = 'admin' AND branch_id IS NULL) OR (role = 'cs' AND branch_id IS NOT NULL))
 );
 
-CREATE UNIQUE INDEX users_one_active_cs_per_branch ON users (branch_id) WHERE role = 'cs' AND active = TRUE;
+ALTER TABLE branches ADD COLUMN default_import_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL;
+
+CREATE INDEX users_active_cs_by_branch_idx ON users (branch_id) WHERE role = 'cs' AND active = TRUE;
 
 CREATE TABLE leads (
   id BIGSERIAL PRIMARY KEY,

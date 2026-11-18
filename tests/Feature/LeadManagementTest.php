@@ -342,6 +342,7 @@ class LeadManagementTest extends TestCase
     {
         $cs = $this->user('cs');
         $otherCs = $this->user('cs');
+        $admin = $this->user('admin');
         \DB::table('leads')->insert([
             [
                 'assigned_user_id' => $cs->id,
@@ -394,6 +395,29 @@ class LeadManagementTest extends TestCase
                 ->component('Leads/Index')
                 ->where('leads.total', 1)
                 ->where('leads.data.0.contact_raw', '+6285200000002'),
+        );
+
+        $sharedLeadId = (int) \DB::table('leads')->where('contact_key', 'phone:6285200000001')->value('id');
+        \DB::table('lead_collaborators')->insert([
+            'lead_id' => $sharedLeadId,
+            'user_id' => $otherCs->id,
+            'added_at' => now(),
+        ]);
+        \DB::table('leads')->where('id', $sharedLeadId)->update(['updated_at' => now()->addSecond()]);
+        $this->actingAs($cs)->get("/leads?cs_user_id={$otherCs->id}")->assertInertia(
+            fn (Assert $page) => $page
+                ->component('Leads/Index')
+                ->where('leads.total', 1)
+                ->where('leads.data.0.contact_raw', '+6285200000001')
+                ->where('leads.data.0.cs_filter_match', 'CS pendamping'),
+        );
+
+        $this->actingAs($admin)->get("/leads?cs_user_id={$otherCs->id}")->assertInertia(
+            fn (Assert $page) => $page
+                ->component('Leads/Index')
+                ->where('leads.total', 2)
+                ->where('leads.data.0.cs_filter_match', 'CS pendamping')
+                ->where('leads.data.1.cs_filter_match', 'CS utama'),
         );
     }
 
@@ -462,10 +486,14 @@ class LeadManagementTest extends TestCase
     public function test_cs_can_view_the_five_latest_activity_entries_for_an_assigned_lead(): void
     {
         $cs = $this->user('cs');
+        $crmTakenOverAt = now()->subMinute()->startOfSecond();
         $leadId = \DB::table('leads')->insertGetId([
             'assigned_user_id' => $cs->id,
             'contact_raw' => '+6285100000998',
             'contact_key' => 'phone:6285100000998',
+            'lead_created_on' => '2026-11-15',
+            'next_follow_up_at' => now()->addHour(),
+            'crm_taken_over_at' => $crmTakenOverAt,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -483,7 +511,10 @@ class LeadManagementTest extends TestCase
             ->assertOk()
             ->assertJsonCount(5, 'data')
             ->assertJsonPath('data.0.action', 'Riwayat 6')
-            ->assertJsonPath('data.4.action', 'Riwayat 2');
+            ->assertJsonPath('data.4.action', 'Riwayat 2')
+            ->assertJsonPath('meta.lead_created_on', '2026-11-15')
+            ->assertJsonPath('meta.crm_taken_over_at', $crmTakenOverAt->toDateTimeString())
+            ->assertJsonStructure(['meta' => ['last_activity_at', 'next_follow_up_at', 'crm_taken_over_at']]);
     }
 
     public function test_cs_cannot_view_activity_entries_for_an_unassigned_lead(): void
@@ -974,6 +1005,12 @@ class LeadManagementTest extends TestCase
             'created_at' => now()->subHours(2),
             'updated_at' => now(),
         ]);
+        $unscheduledLead = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285100000017',
+            'contact_key' => 'phone:6285100000017',
+            'created_at' => now()->subHours(2),
+            'updated_at' => now()->subHours(2),
+        ]);
         \DB::table('lead_activity')->insert([
             'lead_id' => $activeLead,
             'action' => 'Lead diperbarui',
@@ -985,6 +1022,7 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseMissing('leads', ['id' => $overdueLead, 'crm_taken_over_at' => null]);
         $this->assertDatabaseHas('lead_activity', ['lead_id' => $overdueLead, 'action' => 'Lead ditandai CRM otomatis']);
         $this->assertDatabaseHas('leads', ['id' => $activeLead, 'crm_taken_over_at' => null]);
+        $this->assertDatabaseHas('leads', ['id' => $unscheduledLead, 'crm_taken_over_at' => null]);
     }
 
     public function test_admin_can_add_a_cs_pendamping_to_selected_leads(): void

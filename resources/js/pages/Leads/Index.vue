@@ -34,6 +34,7 @@ type Lead = {
     latest_activity_at: string | null;
     owner_name: string | null;
     branch_name: string | null;
+    cs_filter_match: string | null;
     collaborators: { id: number; name: string }[];
     source_conflict_at: string | null;
     source_conflict_branch_name: string | null;
@@ -69,6 +70,7 @@ const props = defineProps<{
         follow_up?: string;
         handling?: string;
         crm?: string;
+        cs_user_id?: string;
         archived?: string;
     };
     branches: { id: number; name: string }[];
@@ -90,6 +92,7 @@ const leadDateStatus = ref(props.filters.lead_date_status || '');
 const followUp = ref(props.filters.follow_up || '');
 const handling = ref(props.filters.handling || '');
 const crm = ref(props.filters.crm || '');
+const csUserId = ref(props.filters.cs_user_id || '');
 const showAdvancedFilters = ref(
     Boolean(
         intent.value ||
@@ -99,7 +102,8 @@ const showAdvancedFilters = ref(
         leadDateStatus.value ||
         followUp.value ||
         handling.value ||
-        crm.value,
+        crm.value ||
+        csUserId.value,
     ),
 );
 const isFiltering = ref(false);
@@ -175,7 +179,8 @@ const hasFilters = computed(() =>
         leadDateStatus.value ||
         followUp.value ||
         handling.value ||
-        crm.value,
+        crm.value ||
+        csUserId.value,
     ),
 );
 const selectedFile = computed(() => {
@@ -207,6 +212,9 @@ const activeFilterText = computed(() =>
         followUp.value ? 'Follow-up dipilih' : '',
         handling.value ? 'Peran penanganan dipilih' : '',
         crm.value ? 'Status CRM dipilih' : '',
+        csUserId.value
+            ? `CS: ${props.csAccounts.find((account) => String(account.id) === csUserId.value)?.name || 'dipilih'}`
+            : '',
     ]
         .filter(Boolean)
         .join(' · '),
@@ -278,6 +286,7 @@ const applyFiltersNow = () =>
             follow_up: followUp.value || undefined,
             handling: handling.value || undefined,
             crm: crm.value || undefined,
+            cs_user_id: csUserId.value || undefined,
             archived: props.archiveMode ? '1' : undefined,
         },
         {
@@ -306,6 +315,7 @@ const clearFilters = () =>
         followUp.value = '';
         handling.value = '';
         crm.value = '';
+        csUserId.value = '';
         showAdvancedFilters.value = false;
         applyFiltersNow();
     });
@@ -971,6 +981,24 @@ onBeforeUnmount(() => {
                 </select>
             </label>
             <label class="grid gap-2 text-sm font-semibold"
+                >Nama CS
+                <select
+                    v-model="csUserId"
+                    class="kgj-input"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                >
+                    <option value="">Semua CS</option>
+                    <option
+                        v-for="account in csAccounts"
+                        :key="account.id"
+                        :value="String(account.id)"
+                    >
+                        {{ account.name }} — {{ account.branch_name }}
+                    </option>
+                </select>
+            </label>
+            <label class="grid gap-2 text-sm font-semibold"
                 >Status CRM
                 <select
                     v-model="crm"
@@ -1180,6 +1208,11 @@ onBeforeUnmount(() => {
                         lead.branch_name || '—'
                     }}</span
                     ><span
+                        v-if="lead.cs_filter_match"
+                        class="mt-2 block text-xs font-semibold text-kgj-gold-deep"
+                        >Cocok sebagai: {{ lead.cs_filter_match }}</span
+                    >
+                    ><span
                         class="mt-1 block text-xs tracking-wide text-[#8a6b2d] uppercase"
                         >{{
                             stageLabel(lead.current_stage) ||
@@ -1358,6 +1391,11 @@ onBeforeUnmount(() => {
                                     :title="lead.branch_name || '—'"
                                     >{{ lead.branch_name || '—' }}</small
                                 ><small
+                                    v-if="lead.cs_filter_match"
+                                    class="mt-1 block truncate font-semibold text-kgj-gold-deep"
+                                    >Cocok sebagai:
+                                    {{ lead.cs_filter_match }}</small
+                                ><small
                                     v-if="lead.source_conflict_at"
                                     class="mt-1 block truncate font-semibold text-kgj-rose"
                                     :title="`Nomor juga masuk dari ${lead.source_conflict_branch_name || 'cabang lain'}`"
@@ -1371,8 +1409,8 @@ onBeforeUnmount(() => {
                                     v-if="lead.collaborators.length"
                                     class="mt-1 block truncate font-semibold text-[#665a43]"
                                     :title="`CS pendamping: ${lead.collaborators.map((item) => item.name).join(', ')}`"
-                                    >+{{ lead.collaborators.length }} CS
-                                    pendamping</small
+                                    >Pendamping:
+                                    {{ lead.collaborators.length }} CS</small
                                 >
                                 <small
                                     v-if="lead.crm_taken_over_at"

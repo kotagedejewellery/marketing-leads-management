@@ -227,7 +227,7 @@ class LeadController extends Controller
 
     public function historyPreview(Request $request, int $lead): JsonResponse
     {
-        $this->visibleLead($request, $lead, null);
+        $record = $this->visibleLead($request, $lead, null);
 
         $history = DB::table('lead_activity as a')
             ->leftJoin('users as u', 'u.id', '=', 'a.actor_id')
@@ -245,7 +245,16 @@ class LeadController extends Controller
             ->values()
             ->all();
 
-        return response()->json(['data' => $history]);
+        return response()->json([
+            'data' => $history,
+            'meta' => [
+                'lead_created_on' => $record->lead_created_on === null ? null : (string) $record->lead_created_on,
+                'created_at' => $record->created_at === null ? null : (string) $record->created_at,
+                'last_activity_at' => $history[0]['created_at'] ?? ($record->created_at === null ? null : (string) $record->created_at),
+                'next_follow_up_at' => $record->next_follow_up_at === null ? null : (string) $record->next_follow_up_at,
+                'crm_taken_over_at' => $record->crm_taken_over_at === null ? null : (string) $record->crm_taken_over_at,
+            ],
+        ]);
     }
 
     public function assign(Request $request): RedirectResponse
@@ -556,7 +565,7 @@ class LeadController extends Controller
     }
 
     /**
-     * @return object{id: int, assigned_user_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null}
+     * @return object{id: int, assigned_user_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null, lead_created_on: string|null, created_at: string|null}
      */
     private function visibleLead(Request $request, int $lead, ?bool $archived = false): object
     {
@@ -568,7 +577,7 @@ class LeadController extends Controller
 
         $record = $query->first() ?? abort(404);
 
-        /** @var object{id: int, assigned_user_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null} $record */
+        /** @var object{id: int, assigned_user_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null, lead_created_on: string|null, created_at: string|null} $record */
         return $record;
     }
 

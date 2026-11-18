@@ -26,12 +26,15 @@ class DashboardController extends Controller
     public function leads(Request $request): Response
     {
         $this->validateLeadFilters($request);
+        $filteredCsUserId = $request->filled('cs_user_id')
+            ? $request->integer('cs_user_id')
+            : null;
         $query = DB::table('leads as l')
             ->leftJoin('users as u', 'u.id', '=', 'l.assigned_user_id')
             ->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')
             ->leftJoin('branches as source_b', 'source_b.id', '=', 'l.source_branch_id')
             ->leftJoin('branches as conflict_b', 'conflict_b.id', '=', 'l.source_conflict_branch_id')
-            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
+            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.assigned_user_id', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
             ->orderByDesc('l.updated_at');
 
         $showArchived = $request->boolean('archived');
@@ -97,6 +100,17 @@ class DashboardController extends Controller
                 default => null,
             };
         }
+        if ($filteredCsUserId !== null) {
+            $query->where(function (Builder $handlingCs) use ($filteredCsUserId): void {
+                $handlingCs->where('l.assigned_user_id', $filteredCsUserId)->orWhereExists(function (Builder $collaborator) use ($filteredCsUserId): void {
+                    $collaborator->selectRaw('1')
+                        ->from('lead_collaborators as c')
+                        ->whereColumn('c.lead_id', 'l.id')
+                        ->where('c.user_id', $filteredCsUserId)
+                        ->whereNull('c.removed_at');
+                });
+            });
+        }
         if ($request->filled('queue')) {
             match ($request->string('queue')->toString()) {
                 'unassigned' => $request->user()->role === 'admin' ? $query->whereNull('l.assigned_user_id') : null,
@@ -130,6 +144,9 @@ class DashboardController extends Controller
         foreach ($leads->items() as $lead) {
             $lead->milestones = $milestonesByLead[$lead->id] ?? [];
             $lead->collaborators = $collaboratorsByLead[$lead->id] ?? [];
+            $lead->cs_filter_match = $filteredCsUserId === null
+                ? null
+                : ((int) $lead->assigned_user_id === $filteredCsUserId ? 'CS utama' : 'CS pendamping');
             $activity = $latestActivityByLead[$lead->id] ?? null;
             $lead->latest_activity = $activity->action ?? null;
             $lead->latest_activity_detail = $activity->detail ?? null;
@@ -138,12 +155,10 @@ class DashboardController extends Controller
 
         return Inertia::render('Leads/Index', [
             'leads' => $leads,
-            'filters' => $request->only('q', 'branch', 'stage', 'queue', 'intent', 'budget', 'lead_date_from', 'lead_date_to', 'lead_date_status', 'follow_up', 'handling', 'crm', 'archived'),
+            'filters' => $request->only('q', 'branch', 'stage', 'queue', 'intent', 'budget', 'lead_date_from', 'lead_date_to', 'lead_date_status', 'follow_up', 'handling', 'crm', 'cs_user_id', 'archived'),
             'archiveMode' => $showArchived,
             'branches' => $request->user()->role === 'admin' ? DB::table('branches')->orderBy('name')->get(['id', 'name']) : [],
-            'csAccounts' => $request->user()->role === 'admin'
-                ? DB::table('users as u')->join('branches as b', 'b.id', '=', 'u.branch_id')->where('u.role', 'cs')->where('u.active', true)->orderBy('b.name')->get(['u.id', 'u.name', 'b.name as branch_name'])
-                : [],
+            'csAccounts' => DB::table('users as u')->join('branches as b', 'b.id', '=', 'u.branch_id')->where('u.role', 'cs')->where('u.active', true)->orderBy('b.name')->get(['u.id', 'u.name', 'b.name as branch_name']),
             'sheetSync' => $request->user()->role === 'admin'
                 ? DB::table('lead_sync_runs')->where('source', 'google_sheets')->orderByDesc('completed_at')->first(['status', 'completed_at'])
                 : null,
@@ -436,6 +451,7 @@ class DashboardController extends Controller
             'follow_up' => ['nullable', Rule::in(['scheduled', 'none', 'today', 'tomorrow', 'overdue'])],
             'handling' => ['nullable', Rule::in(['primary', 'collaborator'])],
             'crm' => ['nullable', Rule::in(['taken_over', 'not_taken_over'])],
+            'cs_user_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'cs')->where('active', true)],
             'archived' => ['nullable', 'boolean'],
         ]);
     }

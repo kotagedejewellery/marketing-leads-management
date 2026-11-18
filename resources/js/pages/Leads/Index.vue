@@ -34,7 +34,9 @@ type Lead = {
     latest_activity_at: string | null;
     owner_name: string | null;
     branch_name: string | null;
+    source_branch_id: number | null;
     cs_filter_match: string | null;
+    handling_role: 'admin' | 'primary' | 'collaborator' | 'team';
     collaborators: { id: number; name: string }[];
     source_conflict_at: string | null;
     source_conflict_branch_name: string | null;
@@ -74,7 +76,12 @@ const props = defineProps<{
         archived?: string;
     };
     branches: { id: number; name: string }[];
-    csAccounts: { id: number; name: string; branch_name: string }[];
+    csAccounts: {
+        id: number;
+        name: string;
+        branch_id: number;
+        branch_name: string;
+    }[];
     archiveMode: boolean;
     sheetSync: { status: string; completed_at: string | null } | null;
 }>();
@@ -107,7 +114,46 @@ const showAdvancedFilters = ref(
     ),
 );
 const isFiltering = ref(false);
+const assistingLeadId = ref<number | null>(null);
 const selectedLeadIds = ref<number[]>([]);
+const selectedSourceBranchIds = computed(() =>
+    Array.from(
+        new Set(
+            props.leads.data
+                .filter((lead) => selectedLeadIds.value.includes(lead.id))
+                .map((lead) => lead.source_branch_id)
+                .filter((branchId): branchId is number => branchId !== null),
+        ),
+    ),
+);
+const bulkCsAccounts = computed(() => {
+    const [sourceBranchId] = selectedSourceBranchIds.value;
+
+    return selectedSourceBranchIds.value.length === 1
+        ? props.csAccounts.filter(
+              (account) => account.branch_id === sourceBranchId,
+          )
+        : selectedSourceBranchIds.value.length > 1
+          ? []
+          : props.csAccounts;
+});
+const bulkSelectionMessage = computed(() => {
+    if (selectedSourceBranchIds.value.length > 1) {
+        return 'Pilih lead dari satu cabang sumber untuk menugaskan CS.';
+    }
+
+    if (
+        selectedLeadIds.value.some(
+            (id) =>
+                props.leads.data.find((lead) => lead.id === id)
+                    ?.source_branch_id === null,
+        )
+    ) {
+        return 'Lead tanpa cabang sumber dapat ditugaskan ke CS utama terlebih dahulu.';
+    }
+
+    return '';
+});
 const visibleLeadIds = computed(() => props.leads.data.map((lead) => lead.id));
 const allVisibleSelected = computed(
     () =>
@@ -359,6 +405,29 @@ const createLeadNow = () =>
         },
     });
 const createLead = () => guardUnsavedChanges(createLeadNow);
+const startAssistingNow = (leadId: number) =>
+    router.post(
+        `/leads/${leadId}/start-assisting`,
+        { return_to: `${window.location.pathname}${window.location.search}` },
+        {
+            preserveScroll: true,
+            onStart: () => (assistingLeadId.value = leadId),
+            onFinish: () => (assistingLeadId.value = null),
+        },
+    );
+const startAssisting = (leadId: number) =>
+    guardUnsavedChanges(() => startAssistingNow(leadId));
+const stopAssistingNow = (leadId: number) =>
+    router.delete(`/leads/${leadId}/stop-assisting`, {
+        data: {
+            return_to: `${window.location.pathname}${window.location.search}`,
+        },
+        preserveScroll: true,
+        onStart: () => (assistingLeadId.value = leadId),
+        onFinish: () => (assistingLeadId.value = null),
+    });
+const stopAssisting = (leadId: number) =>
+    guardUnsavedChanges(() => stopAssistingNow(leadId));
 const stageLabel = (value: string | null) =>
     ({
         clicked: 'Klik saja',
@@ -368,6 +437,13 @@ const stageLabel = (value: string | null) =>
         online: 'Diskusi Online',
         closing_repeat: 'Closing / Repeat Order',
     })[value || ''];
+const handlingLabel = (role: Lead['handling_role']) =>
+    ({
+        admin: 'Admin',
+        primary: 'Milik Anda',
+        collaborator: 'Anda membantu',
+        team: 'Antrean cabang',
+    })[role];
 const formatLeadDate = (value: string | null) =>
     value
         ? new Intl.DateTimeFormat('id-ID', {
@@ -976,8 +1052,9 @@ onBeforeUnmount(() => {
                     @change="applyFilters"
                 >
                     <option value="">Semua lead saya</option>
-                    <option value="primary">CS utama</option>
-                    <option value="collaborator">CS pendamping</option>
+                    <option value="primary">Milik saya</option>
+                    <option value="collaborator">Saya bantu</option>
+                    <option value="team">Tim cabang</option>
                 </select>
             </label>
             <label class="grid gap-2 text-sm font-semibold"
@@ -1084,7 +1161,7 @@ onBeforeUnmount(() => {
                 >
                     <option value="">Pilih CS penanggung jawab</option>
                     <option
-                        v-for="account in csAccounts"
+                        v-for="account in bulkCsAccounts"
                         :key="account.id"
                         :value="String(account.id)"
                     >
@@ -1096,7 +1173,9 @@ onBeforeUnmount(() => {
                     class="kgj-button-gold"
                     type="button"
                     :disabled="
-                        bulkForm.processing || !bulkForm.assigned_user_id
+                        bulkForm.processing ||
+                        !bulkForm.assigned_user_id ||
+                        bulkCsAccounts.length === 0
                     "
                     @click="assignSelected"
                 >
@@ -1112,7 +1191,7 @@ onBeforeUnmount(() => {
                 >
                     <option value="">Pilih CS pendamping</option>
                     <option
-                        v-for="account in csAccounts"
+                        v-for="account in bulkCsAccounts"
                         :key="account.id"
                         :value="String(account.id)"
                     >
@@ -1125,7 +1204,9 @@ onBeforeUnmount(() => {
                     type="button"
                     :disabled="
                         collaboratorBulkForm.processing ||
-                        !collaboratorBulkForm.user_id
+                        !collaboratorBulkForm.user_id ||
+                        bulkCsAccounts.length === 0 ||
+                        Boolean(bulkSelectionMessage)
                     "
                     @click="addCollaboratorSelected"
                 >
@@ -1169,6 +1250,13 @@ onBeforeUnmount(() => {
             >
                 Batal
             </button>
+            <p
+                v-if="isAdmin && bulkSelectionMessage"
+                class="basis-full text-sm text-[#865124]"
+                role="status"
+            >
+                {{ bulkSelectionMessage }}
+            </p>
         </form>
 
         <div v-if="!isDesktopWorkspace" class="mt-6 grid gap-3">
@@ -1211,6 +1299,11 @@ onBeforeUnmount(() => {
                         v-if="lead.cs_filter_match"
                         class="mt-2 block text-xs font-semibold text-kgj-gold-deep"
                         >Cocok sebagai: {{ lead.cs_filter_match }}</span
+                    >
+                    <span
+                        v-if="!isAdmin"
+                        class="mt-2 block text-xs font-semibold text-[#665a43]"
+                        >{{ handlingLabel(lead.handling_role) }}</span
                     >
                     ><span
                         class="mt-1 block text-xs tracking-wide text-[#8a6b2d] uppercase"
@@ -1258,8 +1351,53 @@ onBeforeUnmount(() => {
                     @retry="retryLeadSave(lead.id)"
                     @resolve-conflict="resolveLeadConflict(lead.id)"
                 />
+                <div
+                    v-if="
+                        !archiveMode &&
+                        !isAdmin &&
+                        lead.handling_role === 'team'
+                    "
+                    class="mt-4 rounded-xl border border-[#dccd9f] bg-[#fbf6e8] p-3 text-sm text-[#665a43]"
+                >
+                    <p>
+                        Lead antrean cabang. Mulai bantu untuk dapat
+                        memperbarui.
+                    </p>
+                    <button
+                        class="kgj-button-gold mt-3"
+                        type="button"
+                        :disabled="assistingLeadId === lead.id"
+                        @click="startAssisting(lead.id)"
+                    >
+                        {{
+                            assistingLeadId === lead.id
+                                ? 'Memulai…'
+                                : 'Mulai bantu'
+                        }}
+                    </button>
+                </div>
+                <button
+                    v-else-if="
+                        !archiveMode &&
+                        !isAdmin &&
+                        lead.handling_role === 'collaborator'
+                    "
+                    class="kgj-button-secondary mt-4"
+                    type="button"
+                    :disabled="assistingLeadId === lead.id"
+                    @click="stopAssisting(lead.id)"
+                >
+                    {{
+                        assistingLeadId === lead.id
+                            ? 'Memproses…'
+                            : 'Selesai membantu'
+                    }}
+                </button>
                 <LeadQuickUpdate
-                    v-if="!archiveMode"
+                    v-if="
+                        !archiveMode &&
+                        (isAdmin || lead.handling_role !== 'team')
+                    "
                     class="mt-5"
                     :lead="lead"
                     :can-mark-crm="isAdmin"
@@ -1396,6 +1534,12 @@ onBeforeUnmount(() => {
                                     >Cocok sebagai:
                                     {{ lead.cs_filter_match }}</small
                                 ><small
+                                    v-if="!isAdmin"
+                                    class="mt-1 block font-semibold text-[#665a43]"
+                                    >{{
+                                        handlingLabel(lead.handling_role)
+                                    }}</small
+                                ><small
                                     v-if="lead.source_conflict_at"
                                     class="mt-1 block truncate font-semibold text-kgj-rose"
                                     :title="`Nomor juga masuk dari ${lead.source_conflict_branch_name || 'cabang lain'}`"
@@ -1417,6 +1561,40 @@ onBeforeUnmount(() => {
                                     class="mt-1 block font-semibold text-[#8a6b2d]"
                                     >Diambil alih CRM</small
                                 >
+                                <button
+                                    v-if="
+                                        !archiveMode &&
+                                        !isAdmin &&
+                                        lead.handling_role === 'team'
+                                    "
+                                    class="mt-3 min-h-11 text-sm font-semibold text-kgj-gold-deep underline underline-offset-4"
+                                    type="button"
+                                    :disabled="assistingLeadId === lead.id"
+                                    @click="startAssisting(lead.id)"
+                                >
+                                    {{
+                                        assistingLeadId === lead.id
+                                            ? 'Memulai…'
+                                            : 'Mulai bantu'
+                                    }}
+                                </button>
+                                <button
+                                    v-else-if="
+                                        !archiveMode &&
+                                        !isAdmin &&
+                                        lead.handling_role === 'collaborator'
+                                    "
+                                    class="mt-3 min-h-11 text-sm font-semibold text-[#62665b] underline underline-offset-4"
+                                    type="button"
+                                    :disabled="assistingLeadId === lead.id"
+                                    @click="stopAssisting(lead.id)"
+                                >
+                                    {{
+                                        assistingLeadId === lead.id
+                                            ? 'Memproses…'
+                                            : 'Selesai membantu'
+                                    }}
+                                </button>
                             </td>
                             <td
                                 class="w-40 min-w-40 p-4 text-sm text-[#4f514a]"
@@ -1430,7 +1608,10 @@ onBeforeUnmount(() => {
                                 <span v-else>—</span>
                             </td>
                             <LeadQuickUpdate
-                                v-if="!archiveMode"
+                                v-if="
+                                    !archiveMode &&
+                                    (isAdmin || lead.handling_role !== 'team')
+                                "
                                 variant="table"
                                 :lead="lead"
                                 :can-mark-crm="isAdmin"

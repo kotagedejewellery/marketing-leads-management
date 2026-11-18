@@ -73,7 +73,10 @@ class LeadController extends Controller
             throw ValidationException::withMessages(['assigned_user_id' => 'CS aktif tidak valid.']);
         }
 
-        $id = DB::transaction(function () use ($data, $key, $request, $assignedUserId, $isAdmin): int {
+        $sourceBranchId = $isAdmin
+            ? ($assignedUserId ? DB::table('users')->where('id', $assignedUserId)->value('branch_id') : null)
+            : $request->user()->branch_id;
+        $id = DB::transaction(function () use ($data, $key, $request, $assignedUserId, $isAdmin, $sourceBranchId): int {
             $milestone = $data['milestone'] ?? null;
             $id = DB::table('leads')->insertGetId([
                 'contact_key' => $key,
@@ -81,6 +84,7 @@ class LeadController extends Controller
                 'name' => $data['name'] ?? null,
                 'phone' => $data['phone'] ?? null,
                 'assigned_user_id' => $assignedUserId,
+                'source_branch_id' => $sourceBranchId,
                 'source_date_raw' => $data['source_date_raw'] ?? null,
                 'lead_created_on' => LeadSourceDate::parse($data['source_date_raw'] ?? null) ?? now()->toDateString(),
                 'respond_time' => $data['respond_time'] ?? null,
@@ -218,7 +222,7 @@ class LeadController extends Controller
             ->paginate(30, ['a.action', 'a.detail', 'a.created_at', 'u.name as actor_name'], 'history_page')
             ->withQueryString();
         $csAccounts = $request->user()->role === 'admin'
-            ? DB::table('users as u')->join('branches as b', 'b.id', '=', 'u.branch_id')->where('u.role', 'cs')->where('u.active', true)->orderBy('b.name')->get(['u.id', 'u.name', 'b.name as branch_name'])
+            ? DB::table('users as u')->join('branches as b', 'b.id', '=', 'u.branch_id')->where('u.role', 'cs')->where('u.active', true)->when($record->source_branch_id !== null, fn (Builder $query) => $query->where('u.branch_id', $record->source_branch_id))->orderBy('b.name')->get(['u.id', 'u.name', 'u.branch_id', 'b.name as branch_name'])
             : [];
         $collaborators = DB::table('lead_collaborators as c')
             ->join('users as u', 'u.id', '=', 'c.user_id')
@@ -228,7 +232,7 @@ class LeadController extends Controller
             ->orderBy('b.name')
             ->get(['u.id', 'u.name', 'b.name as branch_name']);
 
-        return Inertia::render('Leads/Show', ['lead' => $record, 'milestones' => $milestones, 'history' => $history, 'csAccounts' => $csAccounts, 'collaborators' => $collaborators]);
+        return Inertia::render('Leads/Show', ['lead' => $record, 'milestones' => $milestones, 'history' => $history, 'csAccounts' => $csAccounts, 'collaborators' => $collaborators, 'handlingRole' => $this->handlingRole($request, $record)]);
     }
 
     public function historyPreview(Request $request, int $lead): JsonResponse
@@ -271,23 +275,30 @@ class LeadController extends Controller
             'lead_ids.*' => ['integer', 'distinct', 'exists:leads,id'],
             'assigned_user_id' => ['required', 'integer', 'exists:users,id'],
         ]);
-        $owner = DB::table('users')->where('id', $data['assigned_user_id'])->where('role', 'cs')->where('active', true)->first();
+        $owner = DB::table('users')->where('id', $data['assigned_user_id'])->where('role', 'cs')->where('active', true)->first(['id', 'name', 'branch_id']);
         if (! $owner) {
             throw ValidationException::withMessages(['assigned_user_id' => 'CS aktif tidak valid.']);
         }
 
         $assigned = DB::transaction(function () use ($data, $request, $owner): int {
-            $ids = DB::table('leads')->whereIn('id', $data['lead_ids'])->whereNull('archived_at')->pluck('id')->all();
-            if ($ids === []) {
+            $leads = DB::table('leads')->whereIn('id', $data['lead_ids'])->whereNull('archived_at')->get(['id', 'source_branch_id']);
+            if ($leads->isEmpty()) {
                 return 0;
             }
-            DB::table('leads')->whereIn('id', $ids)->update(['assigned_user_id' => $owner->id, 'updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
+            foreach ($leads as $lead) {
+                $this->assertCsMatchesSourceBranch($lead->source_branch_id === null ? null : (int) $lead->source_branch_id, $owner->branch_id === null ? null : (int) $owner->branch_id, 'assigned_user_id');
+            }
+
+            $ids = $leads->pluck('id')->all();
+            $now = now();
+            DB::table('leads')->whereIn('id', $ids)->update(['assigned_user_id' => $owner->id, 'updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+            DB::table('leads')->whereIn('id', $ids)->whereNull('source_branch_id')->update(['source_branch_id' => $owner->branch_id]);
             DB::table('lead_activity')->insert(array_map(fn ($id) => [
                 'lead_id' => $id,
                 'actor_id' => $request->user()->id,
                 'action' => 'Lead ditugaskan massal',
-                'detail' => "Ditugaskan ke {$owner->name}.",
-                'created_at' => now(),
+                'detail' => "Ditugaskan ke {$owner->name}. Sumber cabang dilengkapi bila belum ada.",
+                'created_at' => $now,
             ], $ids));
 
             return count($ids);
@@ -306,14 +317,20 @@ class LeadController extends Controller
             'lead_ids.*' => ['integer', 'distinct', 'exists:leads,id'],
             'user_id' => ['required', 'integer', 'exists:users,id'],
         ]);
-        $user = DB::table('users')->where('id', $data['user_id'])->where('role', 'cs')->where('active', true)->first(['id', 'name']);
+        $user = DB::table('users')->where('id', $data['user_id'])->where('role', 'cs')->where('active', true)->first(['id', 'name', 'branch_id']);
         if (! $user) {
             throw ValidationException::withMessages(['user_id' => 'Pilih akun CS aktif.']);
         }
 
         $summary = DB::transaction(function () use ($data, $request, $user): array {
-            $leads = DB::table('leads')->whereIn('id', $data['lead_ids'])->whereNull('archived_at')->get(['id', 'assigned_user_id']);
+            $leads = DB::table('leads')->whereIn('id', $data['lead_ids'])->whereNull('archived_at')->get(['id', 'assigned_user_id', 'source_branch_id']);
             abort_unless($leads->count() === count($data['lead_ids']), 404);
+            foreach ($leads as $lead) {
+                if ($lead->source_branch_id === null) {
+                    throw ValidationException::withMessages(['user_id' => 'Tetapkan CS utama terlebih dahulu agar sumber cabang lead diketahui.']);
+                }
+                $this->assertCsMatchesSourceBranch((int) $lead->source_branch_id, $user->branch_id === null ? null : (int) $user->branch_id, 'user_id');
+            }
             $leadIds = $leads->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all();
             $existing = DB::table('lead_collaborators')->whereIn('lead_id', $leadIds)->where('user_id', $user->id)->whereNull('removed_at')->pluck('lead_id')->map(static fn (mixed $id): int => (int) $id)->all();
             $eligible = $leads->filter(static fn (object $lead): bool => (int) $lead->assigned_user_id !== (int) $user->id && ! in_array((int) $lead->id, $existing, true))->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all();
@@ -351,7 +368,7 @@ class LeadController extends Controller
     public function updateCollaborators(Request $request, int $lead): RedirectResponse
     {
         abort_unless($request->user()->role === 'admin', 403);
-        $record = $this->visibleLead($request, $lead, false);
+        $record = $this->visibleLead($request, $lead, false, true);
         $data = $request->validate([
             'user_ids' => ['present', 'array', 'max:10'],
             'user_ids.*' => ['integer', 'distinct', 'exists:users,id'],
@@ -360,9 +377,15 @@ class LeadController extends Controller
         if ($record->assigned_user_id !== null && in_array((int) $record->assigned_user_id, $userIds, true)) {
             throw ValidationException::withMessages(['user_ids' => 'CS utama tidak perlu ditambahkan sebagai CS pendamping.']);
         }
-        $users = DB::table('users')->whereIn('id', $userIds)->where('role', 'cs')->where('active', true)->get(['id', 'name']);
+        if ($record->source_branch_id === null) {
+            throw ValidationException::withMessages(['user_ids' => 'Tetapkan CS utama terlebih dahulu agar sumber cabang lead diketahui.']);
+        }
+        $users = DB::table('users')->whereIn('id', $userIds)->where('role', 'cs')->where('active', true)->get(['id', 'name', 'branch_id']);
         if ($users->count() !== count($userIds)) {
             throw ValidationException::withMessages(['user_ids' => 'Pilih hanya akun CS aktif.']);
+        }
+        foreach ($users as $user) {
+            $this->assertCsMatchesSourceBranch((int) $record->source_branch_id, $user->branch_id === null ? null : (int) $user->branch_id, 'user_ids');
         }
 
         DB::transaction(function () use ($lead, $request, $userIds): void {
@@ -401,9 +424,84 @@ class LeadController extends Controller
         return back();
     }
 
+    public function startAssisting(Request $request, int $lead): RedirectResponse
+    {
+        abort_unless($request->user()->role === 'cs', 403);
+        $record = $this->visibleLead($request, $lead, false);
+        $userId = (int) $request->user()->id;
+        $branchId = (int) ($request->user()->branch_id ?? 0);
+        abort_unless($branchId > 0 && (int) $record->source_branch_id === $branchId, 403);
+        if ((int) $record->assigned_user_id === $userId) {
+            Inertia::flash('toast', ['type' => 'info', 'message' => 'Anda sudah menjadi CS utama lead ini.']);
+
+            return redirect()->to($this->leadReturnPath($request));
+        }
+
+        $started = DB::transaction(function () use ($lead, $userId): bool {
+            DB::table('leads')->where('id', $lead)->lockForUpdate()->value('id');
+            if (DB::table('lead_collaborators')->where('lead_id', $lead)->where('user_id', $userId)->whereNull('removed_at')->exists()) {
+                return false;
+            }
+
+            $now = now();
+            DB::table('lead_collaborators')->updateOrInsert(
+                ['lead_id' => $lead, 'user_id' => $userId],
+                ['added_by' => $userId, 'added_at' => $now, 'removed_at' => null],
+            );
+            DB::table('leads')->where('id', $lead)->update(['updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+            DB::table('lead_activity')->insert([
+                'lead_id' => $lead,
+                'actor_id' => $userId,
+                'action' => 'CS mulai membantu',
+                'detail' => 'CS pendamping mulai menangani lead dari antrean cabang.',
+                'created_at' => $now,
+            ]);
+
+            return true;
+        });
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => $started ? 'Anda mulai membantu lead ini.' : 'Anda sudah tercatat sebagai CS pendamping.']);
+
+        return redirect()->to($this->leadReturnPath($request));
+    }
+
+    public function stopAssisting(Request $request, int $lead): RedirectResponse
+    {
+        abort_unless($request->user()->role === 'cs', 403);
+        $this->visibleLead($request, $lead, false, true);
+        $userId = (int) $request->user()->id;
+        $removed = DB::transaction(function () use ($lead, $userId): bool {
+            $now = now();
+            $removed = DB::table('lead_collaborators')
+                ->where('lead_id', $lead)
+                ->where('user_id', $userId)
+                ->whereNull('removed_at')
+                ->update(['removed_at' => $now]);
+            if ($removed !== 1) {
+                return false;
+            }
+
+            DB::table('leads')->where('id', $lead)->update(['updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+            DB::table('lead_activity')->insert([
+                'lead_id' => $lead,
+                'actor_id' => $userId,
+                'action' => 'CS selesai membantu',
+                'detail' => 'CS pendamping selesai menangani lead.',
+                'created_at' => $now,
+            ]);
+
+            return true;
+        });
+        abort_unless($removed, 403);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Anda selesai membantu lead ini.']);
+
+        return redirect()->to($this->leadReturnPath($request));
+    }
+
     public function update(UpdateLeadRequest $request, int $lead): RedirectResponse
     {
-        $record = $this->visibleLead($request, $lead);
+        $record = $this->visibleLead($request, $lead, false, true);
         abort_if($record->archived_at !== null, 404);
         $data = $request->validated();
         $selected = array_key_exists('milestones', $data)
@@ -411,16 +509,19 @@ class LeadController extends Controller
             : DB::table('lead_milestones')->where('lead_id', $lead)->where('is_active', true)->pluck('milestone')->all();
         $isAdmin = $request->user()->role === 'admin';
 
+        $assignedOwner = null;
         if ($isAdmin && array_key_exists('assigned_user_id', $data) && $data['assigned_user_id']) {
-            if (! DB::table('users')->where('id', $data['assigned_user_id'])->where('role', 'cs')->where('active', true)->exists()) {
+            $assignedOwner = DB::table('users')->where('id', $data['assigned_user_id'])->where('role', 'cs')->where('active', true)->first(['id', 'branch_id']);
+            if (! $assignedOwner) {
                 throw ValidationException::withMessages(['assigned_user_id' => 'CS tidak valid.']);
             }
+            $this->assertCsMatchesSourceBranch($record->source_branch_id === null ? null : (int) $record->source_branch_id, $assignedOwner->branch_id === null ? null : (int) $assignedOwner->branch_id, 'assigned_user_id');
         }
         if (! $isAdmin && array_key_exists('crm_taken_over', $data)) {
             abort(403);
         }
 
-        DB::transaction(function () use ($request, $lead, $record, $data, $selected, $isAdmin): void {
+        DB::transaction(function () use ($request, $lead, $record, $data, $selected, $isAdmin, $assignedOwner): void {
             if (array_key_exists('revision', $data)) {
                 $revision = (int) DB::table('leads')->where('id', $lead)->lockForUpdate()->value('revision');
                 if ($revision !== (int) $data['revision']) {
@@ -445,6 +546,10 @@ class LeadController extends Controller
                 $updates['assigned_user_id'] = $data['assigned_user_id'] ?: null;
                 if ($data['assigned_user_id']) {
                     DB::table('lead_collaborators')->where('lead_id', $lead)->where('user_id', $data['assigned_user_id'])->whereNull('removed_at')->update(['removed_at' => now()]);
+                }
+                if ($assignedOwner && $record->source_branch_id === null) {
+                    $updates['source_branch_id'] = $assignedOwner->branch_id;
+                    $changes[] = 'Sumber cabang ditetapkan';
                 }
                 $changes[] = $data['assigned_user_id'] ? 'CS penanggung jawab diperbarui' : 'Lead belum ditugaskan';
             }
@@ -490,7 +595,7 @@ class LeadController extends Controller
 
     public function archive(Request $request, int $lead): RedirectResponse
     {
-        $record = $this->visibleLead($request, $lead, false);
+        $record = $this->visibleLead($request, $lead, false, true);
         DB::transaction(function () use ($record, $request): void {
             DB::table('leads')->where('id', $record->id)->update(['archived_at' => now(), 'updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
             DB::table('lead_activity')->insert(['lead_id' => $record->id, 'actor_id' => $request->user()->id, 'action' => 'Lead diarsipkan', 'detail' => 'Lead disembunyikan dari daftar kerja aktif.', 'created_at' => now()]);
@@ -502,7 +607,7 @@ class LeadController extends Controller
 
     public function restore(Request $request, int $lead): RedirectResponse
     {
-        $record = $this->visibleLead($request, $lead, true);
+        $record = $this->visibleLead($request, $lead, true, true);
         DB::transaction(function () use ($record, $request): void {
             DB::table('leads')->where('id', $record->id)->update(['archived_at' => null, 'updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
             DB::table('lead_activity')->insert(['lead_id' => $record->id, 'actor_id' => $request->user()->id, 'action' => 'Lead dipulihkan', 'detail' => 'Lead kembali ke daftar kerja aktif.', 'created_at' => now()]);
@@ -552,7 +657,7 @@ class LeadController extends Controller
 
     public function destroy(Request $request, int $lead): RedirectResponse
     {
-        $record = $this->visibleLead($request, $lead, true);
+        $record = $this->visibleLead($request, $lead, true, true);
         $this->deleteLeadRecords([$record->id]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Lead dihapus permanen.']);
@@ -571,20 +676,55 @@ class LeadController extends Controller
     }
 
     /**
-     * @return object{id: int, assigned_user_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null, lead_created_on: string|null, created_at: string|null}
+     * @return object{id: int, assigned_user_id: int|null, source_branch_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null, lead_created_on: string|null, created_at: string|null}
      */
-    private function visibleLead(Request $request, int $lead, ?bool $archived = false): object
+    private function visibleLead(Request $request, int $lead, ?bool $archived = false, bool $requiresHandling = false): object
     {
         $query = DB::table('leads')->where('id', $lead);
-        $this->restrictToVisibleLeads($query, $request);
+        $this->restrictToVisibleLeads($query, $request, $requiresHandling);
         if ($archived !== null) {
             $query->{$archived ? 'whereNotNull' : 'whereNull'}('archived_at');
         }
 
         $record = $query->first() ?? abort(404);
 
-        /** @var object{id: int, assigned_user_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null, lead_created_on: string|null, created_at: string|null} $record */
+        /** @var object{id: int, assigned_user_id: int|null, source_branch_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null, lead_created_on: string|null, created_at: string|null} $record */
         return $record;
+    }
+
+    /** @param object{id: int, assigned_user_id: int|null, source_branch_id: int|null} $lead */
+    private function handlingRole(Request $request, object $lead): string
+    {
+        if ($request->user()->role === 'admin') {
+            return 'admin';
+        }
+
+        $userId = (int) $request->user()->id;
+        if ((int) $lead->assigned_user_id === $userId) {
+            return 'primary';
+        }
+
+        return DB::table('lead_collaborators')
+            ->where('lead_id', $lead->id)
+            ->where('user_id', $userId)
+            ->whereNull('removed_at')
+            ->exists() ? 'collaborator' : 'team';
+    }
+
+    private function assertCsMatchesSourceBranch(?int $sourceBranchId, ?int $csBranchId, string $field): void
+    {
+        if ($sourceBranchId !== null && $csBranchId !== $sourceBranchId) {
+            throw ValidationException::withMessages([$field => 'CS harus berasal dari cabang sumber lead.']);
+        }
+    }
+
+    private function leadReturnPath(Request $request): string
+    {
+        $returnTo = $request->input('return_to');
+
+        return is_string($returnTo) && preg_match('#^/leads(?:[/?].*)?$#', $returnTo) === 1
+            ? $returnTo
+            : route('leads.index', [], false);
     }
 
     /** @return list<int> */
@@ -596,7 +736,7 @@ class LeadController extends Controller
         ]);
         $query = DB::table('leads')->whereIn('id', $data['lead_ids']);
         $query->{$archived ? 'whereNotNull' : 'whereNull'}('archived_at');
-        $this->restrictToVisibleLeads($query, $request);
+        $this->restrictToVisibleLeads($query, $request, true);
         $ids = array_values($query->pluck('id')->map(fn ($id) => (int) $id)->all());
         abort_unless(count($ids) === count($data['lead_ids']), 404);
 
@@ -614,14 +754,15 @@ class LeadController extends Controller
         });
     }
 
-    private function restrictToVisibleLeads(Builder $query, Request $request): void
+    private function restrictToVisibleLeads(Builder $query, Request $request, bool $requiresHandling = false): void
     {
         if ($request->user()->role === 'admin') {
             return;
         }
 
         $userId = $request->user()->id;
-        $query->where(function (Builder $visible) use ($userId): void {
+        $branchId = (int) ($request->user()->branch_id ?? 0);
+        $query->where(function (Builder $visible) use ($userId, $branchId, $requiresHandling): void {
             $visible->where('assigned_user_id', $userId)->orWhereExists(function (Builder $collaborator) use ($userId): void {
                 $collaborator->selectRaw('1')
                     ->from('lead_collaborators')
@@ -629,6 +770,9 @@ class LeadController extends Controller
                     ->where('lead_collaborators.user_id', $userId)
                     ->whereNull('lead_collaborators.removed_at');
             });
+            if (! $requiresHandling && $branchId > 0) {
+                $visible->orWhere('source_branch_id', $branchId);
+            }
         });
     }
 

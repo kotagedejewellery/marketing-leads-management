@@ -10,7 +10,8 @@
 - **Sumber cabang**: cabang pemilik spreadsheet asal sebuah lead. Lead dari sumber cabang otomatis ditugaskan ke CS default impor cabang tersebut.
 - **Konflik sumber cabang**: nomor yang sama muncul di spreadsheet cabang lain. Lead tetap dimiliki cabang asal dan admin perlu meninjau sebelum memindahkan penanggung jawab.
 - **CS utama**: CS penanggung jawab utama sebuah lead. Hanya ada satu CS utama pada satu waktu.
-- **CS pendamping**: CS tambahan yang sementara ikut menangani lead tanpa mengganti CS utama.
+- **Akses tim cabang**: hak baca antrean lead dari sumber cabang yang sama. Akses ini tidak memberi hak mengubah lead sebelum CS memilih mulai membantu.
+- **CS pendamping**: CS yang secara eksplisit memilih mulai membantu atau ditambahkan admin untuk ikut menangani lead tanpa mengganti CS utama. CS pendamping dapat memperbarui lead dan dapat memilih selesai membantu saat tugasnya selesai.
 - **CS default impor**: salah satu CS aktif pada cabang yang menerima penugasan utama untuk lead baru dari spreadsheet cabang tersebut.
 - **Batas tindak lanjut**: waktu follow-up berikutnya yang ditetapkan CS pada sebuah lead. Lead yang melewati waktu ini tanpa aktivitas lanjutan akan ditandai CRM.
 - **Pengambilalihan CRM**: penanda otomatis bahwa lead melewati batas tindak lanjut tanpa aktivitas lanjutan. Penanda ini tidak mengganti CS utama dan dapat dibatalkan bila dibuat keliru.

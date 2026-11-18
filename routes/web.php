@@ -16,6 +16,8 @@ Route::middleware('auth')->group(function () {
     Route::post('leads/assign', [LeadController::class, 'assign'])->middleware(EnsureAdmin::class)->name('leads.assign');
     Route::post('leads/collaborators', [LeadController::class, 'addCollaboratorSelected'])->middleware(EnsureAdmin::class)->name('leads.collaborators.add-selected');
     Route::patch('leads/{lead}/collaborators', [LeadController::class, 'updateCollaborators'])->middleware(EnsureAdmin::class)->name('leads.collaborators.update');
+    Route::post('leads/{lead}/start-assisting', [LeadController::class, 'startAssisting'])->name('leads.start-assisting');
+    Route::delete('leads/{lead}/stop-assisting', [LeadController::class, 'stopAssisting'])->name('leads.stop-assisting');
     Route::post('leads/archive', [LeadController::class, 'archiveSelected'])->name('leads.archive-selected');
     Route::post('leads/restore', [LeadController::class, 'restoreSelected'])->name('leads.restore-selected');
     Route::delete('leads', [LeadController::class, 'destroySelected'])->name('leads.destroy-selected');

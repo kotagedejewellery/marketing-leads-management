@@ -34,7 +34,7 @@ class DashboardController extends Controller
             ->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')
             ->leftJoin('branches as source_b', 'source_b.id', '=', 'l.source_branch_id')
             ->leftJoin('branches as conflict_b', 'conflict_b.id', '=', 'l.source_conflict_branch_id')
-            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.assigned_user_id', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
+            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.assigned_user_id', 'l.source_branch_id', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
             ->orderByDesc('l.updated_at');
 
         $showArchived = $request->boolean('archived');
@@ -81,6 +81,7 @@ class DashboardController extends Controller
         }
         if ($request->user()->role === 'cs' && $request->filled('handling')) {
             $userId = $request->user()->id;
+            $branchId = (int) ($request->user()->branch_id ?? 0);
             match ($request->string('handling')->toString()) {
                 'primary' => $query->where('l.assigned_user_id', $userId),
                 'collaborator' => $query->whereExists(function (Builder $collaborator) use ($userId): void {
@@ -90,6 +91,15 @@ class DashboardController extends Controller
                         ->where('c.user_id', $userId)
                         ->whereNull('c.removed_at');
                 }),
+                'team' => $query->where('l.source_branch_id', $branchId)
+                    ->where('l.assigned_user_id', '!=', $userId)
+                    ->whereNotExists(function (Builder $collaborator) use ($userId): void {
+                        $collaborator->selectRaw('1')
+                            ->from('lead_collaborators as c')
+                            ->whereColumn('c.lead_id', 'l.id')
+                            ->where('c.user_id', $userId)
+                            ->whereNull('c.removed_at');
+                    }),
                 default => null,
             };
         }
@@ -141,6 +151,7 @@ class DashboardController extends Controller
         foreach (DB::table('lead_collaborators as c')->join('users as u', 'u.id', '=', 'c.user_id')->whereIn('c.lead_id', $leadIds)->whereNull('c.removed_at')->orderBy('u.name')->get(['c.lead_id', 'u.id', 'u.name']) as $collaborator) {
             $collaboratorsByLead[$collaborator->lead_id][] = ['id' => (int) $collaborator->id, 'name' => (string) $collaborator->name];
         }
+        $currentUserId = (int) $request->user()->id;
         foreach ($leads->items() as $lead) {
             $lead->milestones = $milestonesByLead[$lead->id] ?? [];
             $lead->collaborators = $collaboratorsByLead[$lead->id] ?? [];
@@ -151,14 +162,29 @@ class DashboardController extends Controller
             $lead->latest_activity = $activity->action ?? null;
             $lead->latest_activity_detail = $activity->detail ?? null;
             $lead->latest_activity_at = $activity->created_at ?? null;
+            $lead->handling_role = $request->user()->role === 'admin'
+                ? 'admin'
+                : ((int) $lead->assigned_user_id === $currentUserId
+                    ? 'primary'
+                    : (in_array($currentUserId, array_column($lead->collaborators, 'id'), true)
+                        ? 'collaborator'
+                        : 'team'));
         }
+
+        $csAccounts = DB::table('users as u')
+            ->join('branches as b', 'b.id', '=', 'u.branch_id')
+            ->where('u.role', 'cs')
+            ->where('u.active', true)
+            ->when($request->user()->role === 'cs', fn (Builder $builder) => $builder->where('u.branch_id', $request->user()->branch_id))
+            ->orderBy('b.name')
+            ->get(['u.id', 'u.name', 'u.branch_id', 'b.name as branch_name']);
 
         return Inertia::render('Leads/Index', [
             'leads' => $leads,
             'filters' => $request->only('q', 'branch', 'stage', 'queue', 'intent', 'budget', 'lead_date_from', 'lead_date_to', 'lead_date_status', 'follow_up', 'handling', 'crm', 'cs_user_id', 'archived'),
             'archiveMode' => $showArchived,
             'branches' => $request->user()->role === 'admin' ? DB::table('branches')->orderBy('name')->get(['id', 'name']) : [],
-            'csAccounts' => DB::table('users as u')->join('branches as b', 'b.id', '=', 'u.branch_id')->where('u.role', 'cs')->where('u.active', true)->orderBy('b.name')->get(['u.id', 'u.name', 'b.name as branch_name']),
+            'csAccounts' => $csAccounts,
             'sheetSync' => $request->user()->role === 'admin'
                 ? DB::table('lead_sync_runs')->where('source', 'google_sheets')->orderByDesc('completed_at')->first(['status', 'completed_at'])
                 : null,
@@ -492,7 +518,8 @@ class DashboardController extends Controller
         }
 
         $userId = $request->user()->id;
-        $query->where(function (Builder $visible) use ($alias, $userId): void {
+        $branchId = (int) ($request->user()->branch_id ?? 0);
+        $query->where(function (Builder $visible) use ($alias, $userId, $branchId): void {
             $visible->where("{$alias}.assigned_user_id", $userId)->orWhereExists(function (Builder $collaborator) use ($alias, $userId): void {
                 $collaborator->selectRaw('1')
                     ->from('lead_collaborators as c')
@@ -500,6 +527,9 @@ class DashboardController extends Controller
                     ->where('c.user_id', $userId)
                     ->whereNull('c.removed_at');
             });
+            if ($branchId > 0) {
+                $visible->orWhere("{$alias}.source_branch_id", $branchId);
+            }
         });
     }
 
@@ -516,7 +546,7 @@ class DashboardController extends Controller
             'lead_date_to' => ['nullable', 'date', 'after_or_equal:lead_date_from'],
             'lead_date_status' => ['nullable', Rule::in(['known', 'missing'])],
             'follow_up' => ['nullable', Rule::in(['scheduled', 'none', 'today', 'tomorrow', 'overdue'])],
-            'handling' => ['nullable', Rule::in(['primary', 'collaborator'])],
+            'handling' => ['nullable', Rule::in(['primary', 'collaborator', 'team'])],
             'crm' => ['nullable', Rule::in(['taken_over', 'not_taken_over'])],
             'cs_user_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'cs')->where('active', true)],
             'archived' => ['nullable', 'boolean'],

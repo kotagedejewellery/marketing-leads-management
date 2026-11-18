@@ -10,6 +10,12 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 type Branch = {
     id: number;
@@ -30,6 +36,11 @@ const form = useForm({
 const editingId = ref<number | null>(null);
 const branchToDelete = ref<Branch | null>(null);
 const syncingBranchId = ref<number | null>(null);
+const readyBranches = computed(
+    () =>
+        props.branches.filter((branch) => branch.import_status === 'Siap impor')
+            .length,
+);
 const importCsOptions = computed(
     () =>
         props.branches.find((branch) => branch.id === editingId.value)
@@ -37,6 +48,9 @@ const importCsOptions = computed(
 );
 const formatSyncTime = (value: string | null) =>
     value ? new Date(value).toLocaleString('id-ID') : '';
+const canSync = (branch: Branch) => branch.import_status === 'Siap impor';
+const statusClass = (branch: Branch) =>
+    canSync(branch) ? 'text-kgj-sage' : 'text-kgj-rose';
 const save = () => {
     const options = {
         onSuccess: () => {
@@ -82,41 +96,94 @@ const syncBranch = (branch: Branch) =>
 <template>
     <Head title="Cabang" />
     <section class="kgj-page">
-        <p class="kgj-eyebrow">Konfigurasi tim</p>
-        <h1 class="mt-2 text-4xl font-semibold tracking-[-.04em] sm:text-5xl">
-            Cabang.
-        </h1>
+        <h1 class="kgj-title">Cabang.</h1>
         <p class="kgj-subtitle">
             Kelola sumber lead dan beberapa akun CS aktif per cabang.
         </p>
+        <p class="mt-4 text-sm text-kgj-muted">
+            <span class="font-semibold text-kgj-ink tabular-nums">{{
+                branches.length
+            }}</span>
+            cabang
+            <span class="mx-2 text-kgj-line">/</span>
+            <span class="font-semibold text-kgj-sage tabular-nums">{{
+                readyBranches
+            }}</span>
+            siap impor
+        </p>
         <form
-            class="kgj-surface mt-7 grid max-w-3xl gap-3 p-4 sm:grid-cols-2"
+            class="kgj-surface mt-7 max-w-4xl p-5 sm:p-6"
             @submit.prevent="save"
         >
-            <label class="sr-only" for="branch-name">Nama cabang</label>
-            <input
-                id="branch-name"
-                v-model="form.name"
-                class="kgj-input grow"
-                placeholder="Nama cabang"
-                required
-                maxlength="100"
-                :aria-invalid="Boolean(form.errors.name)"
-            />
-            <label class="sr-only" for="branch-sheet"
-                >Google Spreadsheet ID</label
-            >
-            <input
-                id="branch-sheet"
-                v-model="form.google_spreadsheet_id"
-                class="kgj-input"
-                placeholder="Google Spreadsheet ID (opsional)"
-                maxlength="128"
-                :aria-invalid="Boolean(form.errors.google_spreadsheet_id)"
-            />
+            <div class="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <h2 class="text-base font-semibold text-kgj-ink">
+                        {{ editingId ? 'Perbarui cabang' : 'Tambah cabang' }}
+                    </h2>
+                    <p class="mt-1 text-sm text-kgj-muted">
+                        Hubungkan spreadsheet ketika cabang siap disinkronkan.
+                    </p>
+                </div>
+                <button
+                    v-if="editingId"
+                    class="text-sm font-semibold text-kgj-gold-deep underline decoration-[#c4a45d] underline-offset-4"
+                    type="button"
+                    @click="cancel"
+                >
+                    Batal ubah
+                </button>
+            </div>
+            <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                <label
+                    class="grid gap-1.5 text-sm font-medium"
+                    for="branch-name"
+                    >Nama cabang
+                    <input
+                        id="branch-name"
+                        v-model="form.name"
+                        class="kgj-input"
+                        placeholder="Contoh: Palagan"
+                        required
+                        maxlength="100"
+                        :aria-invalid="Boolean(form.errors.name)"
+                    />
+                    <span
+                        v-if="form.errors.name"
+                        class="text-sm font-normal text-[#a23e2b]"
+                        role="alert"
+                        >{{ form.errors.name }}</span
+                    >
+                </label>
+                <label
+                    class="grid gap-1.5 text-sm font-medium"
+                    for="branch-sheet"
+                    ><span
+                        >ID Google Spreadsheet
+                        <span class="font-normal text-kgj-muted"
+                            >(opsional)</span
+                        ></span
+                    >
+                    <input
+                        id="branch-sheet"
+                        v-model="form.google_spreadsheet_id"
+                        class="kgj-input"
+                        placeholder="Tempel ID dari URL spreadsheet"
+                        maxlength="128"
+                        :aria-invalid="
+                            Boolean(form.errors.google_spreadsheet_id)
+                        "
+                    />
+                    <span
+                        v-if="form.errors.google_spreadsheet_id"
+                        class="text-sm font-normal text-[#a23e2b]"
+                        role="alert"
+                        >{{ form.errors.google_spreadsheet_id }}</span
+                    >
+                </label>
+            </div>
             <label
                 v-if="editingId"
-                class="grid gap-1 text-sm font-medium sm:col-span-2"
+                class="mt-4 grid gap-1.5 text-sm font-medium"
                 >CS default impor
                 <select
                     v-model="form.default_import_user_id"
@@ -138,41 +205,30 @@ const syncBranch = (branch: Branch) =>
                 >
                 <span
                     v-if="form.errors.default_import_user_id"
-                    class="text-[#a23e2b]"
+                    class="text-sm font-normal text-[#a23e2b]"
+                    role="alert"
                     >{{ form.errors.default_import_user_id }}</span
                 >
             </label>
-            <button class="kgj-button-primary" :disabled="form.processing">
-                {{
-                    form.processing
-                        ? 'Menyimpan…'
-                        : editingId
-                          ? 'Simpan'
-                          : 'Tambah'
-                }}
-            </button>
-            <button
-                v-if="editingId"
-                class="kgj-button-secondary"
-                type="button"
-                @click="cancel"
+            <div
+                class="mt-5 flex flex-wrap items-center gap-3 border-t border-kgj-line pt-4"
             >
-                Batal
-            </button>
-            <p
-                v-if="form.errors.name"
-                class="basis-full text-sm text-[#a23e2b]"
-                role="alert"
-            >
-                {{ form.errors.name }}
-            </p>
-            <p
-                v-if="form.errors.google_spreadsheet_id"
-                class="text-sm text-[#a23e2b] sm:col-span-3"
-                role="alert"
-            >
-                {{ form.errors.google_spreadsheet_id }}
-            </p>
+                <button
+                    class="kgj-button-primary min-w-40"
+                    :disabled="form.processing"
+                >
+                    {{
+                        form.processing
+                            ? 'Menyimpan…'
+                            : editingId
+                              ? 'Simpan perubahan'
+                              : 'Tambah cabang'
+                    }}
+                </button>
+                <p class="text-xs text-kgj-muted">
+                    Pengaturan dapat diubah kembali kapan saja.
+                </p>
+            </div>
         </form>
         <div class="mt-6 grid gap-3 md:hidden">
             <article
@@ -180,7 +236,15 @@ const syncBranch = (branch: Branch) =>
                 :key="branch.id"
                 class="kgj-surface p-4"
             >
-                <h2 class="font-semibold">{{ branch.name }}</h2>
+                <div class="flex items-start justify-between gap-3">
+                    <h2 class="font-semibold">{{ branch.name }}</h2>
+                    <span
+                        class="kgj-status max-w-48 shrink-0 text-right leading-4 whitespace-normal"
+                        :class="statusClass(branch)"
+                    >
+                        {{ branch.import_status }}
+                    </span>
+                </div>
                 <div v-if="branch.cs_accounts.length" class="mt-3 space-y-2">
                     <p
                         class="text-xs font-semibold tracking-[.08em] text-kgj-muted uppercase"
@@ -197,7 +261,7 @@ const syncBranch = (branch: Branch) =>
                         }}</span>
                         <span
                             v-if="branch.default_import_user_id === account.id"
-                            class="ml-2 text-xs text-kgj-gold-deep"
+                            class="ml-2 rounded-full bg-[#f3ead1] px-2 py-0.5 text-xs font-semibold text-kgj-gold-deep"
                             >Default impor</span
                         >
                         <small class="block break-all">{{
@@ -208,22 +272,31 @@ const syncBranch = (branch: Branch) =>
                 <p v-else class="mt-2 text-sm text-kgj-muted">
                     Tambahkan akun CS dari menu Akun.
                 </p>
-                <p class="mt-3 text-xs break-all text-kgj-muted">
-                    {{
-                        branch.google_spreadsheet_id ||
-                        'Belum ada sumber Google Sheets.'
-                    }}
-                </p>
-                <p
-                    class="mt-2 text-xs font-semibold"
-                    :class="
-                        branch.import_status === 'Siap impor'
-                            ? 'text-kgj-sage'
-                            : 'text-kgj-rose'
-                    "
-                >
-                    {{ branch.import_status }}
-                </p>
+                <div class="mt-4 border-t border-kgj-line pt-3">
+                    <p class="text-sm font-medium text-kgj-ink">
+                        {{
+                            branch.google_spreadsheet_id
+                                ? 'Google Sheets terhubung'
+                                : 'Google Sheets belum terhubung'
+                        }}
+                    </p>
+                    <details
+                        v-if="branch.google_spreadsheet_id"
+                        class="mt-1 text-xs text-kgj-muted"
+                    >
+                        <summary
+                            class="cursor-pointer font-semibold text-kgj-gold-deep"
+                        >
+                            Lihat ID spreadsheet
+                        </summary>
+                        <p class="mt-1 break-all">
+                            {{ branch.google_spreadsheet_id }}
+                        </p>
+                    </details>
+                    <p v-else class="mt-1 text-xs text-kgj-muted">
+                        Ubah cabang untuk menyambungkan sumber lead.
+                    </p>
+                </div>
                 <p
                     v-if="branch.google_sheets_synced_at"
                     class="mt-1 text-xs text-kgj-muted"
@@ -233,22 +306,27 @@ const syncBranch = (branch: Branch) =>
                 </p>
                 <p
                     v-if="branch.google_sheets_sync_error"
-                    class="mt-1 text-xs text-kgj-rose"
+                    class="mt-2 text-xs text-kgj-rose"
+                    :title="branch.google_sheets_sync_error"
                 >
-                    Sinkronisasi gagal: {{ branch.google_sheets_sync_error }}
+                    Sinkronisasi terakhir gagal. Periksa kembali konfigurasi.
                 </p>
                 <div class="mt-4 flex flex-wrap gap-2">
                     <button
                         v-if="branch.google_spreadsheet_id"
-                        class="kgj-button-secondary flex-1"
+                        class="kgj-button-gold flex-1"
                         type="button"
-                        :disabled="syncingBranchId === branch.id"
+                        :disabled="
+                            !canSync(branch) || syncingBranchId === branch.id
+                        "
                         @click="syncBranch(branch)"
                     >
                         {{
                             syncingBranchId === branch.id
                                 ? 'Menyinkronkan…'
-                                : 'Sinkronkan'
+                                : canSync(branch)
+                                  ? 'Sinkronkan'
+                                  : 'Belum siap impor'
                         }}
                     </button>
                     <button
@@ -257,13 +335,24 @@ const syncBranch = (branch: Branch) =>
                         @click="edit(branch)"
                     >
                         Ubah</button
-                    ><button
-                        class="kgj-button-secondary flex-1 text-kgj-rose"
-                        type="button"
-                        @click="branchToDelete = branch"
+                    ><DropdownMenu
+                        ><DropdownMenuTrigger as-child
+                            ><button
+                                class="kgj-button-secondary flex-1"
+                                type="button"
+                            >
+                                Lainnya
+                            </button></DropdownMenuTrigger
+                        ><DropdownMenuContent
+                            align="end"
+                            class="border-kgj-line bg-kgj-paper text-kgj-ink"
+                            ><DropdownMenuItem
+                                variant="destructive"
+                                @select="branchToDelete = branch"
+                                >Hapus cabang</DropdownMenuItem
+                            ></DropdownMenuContent
+                        ></DropdownMenu
                     >
-                        Hapus
-                    </button>
                 </div>
             </article>
             <p v-if="!branches.length" class="py-10 text-center text-kgj-muted">
@@ -271,20 +360,39 @@ const syncBranch = (branch: Branch) =>
             </p>
         </div>
         <div class="kgj-table mt-6 hidden overflow-x-auto md:block">
-            <table class="w-full min-w-[820px] text-sm">
+            <table class="w-full min-w-[900px] text-sm">
+                <colgroup>
+                    <col class="w-[13%]" />
+                    <col class="w-[28%]" />
+                    <col class="w-[34%]" />
+                    <col class="w-[25%]" />
+                </colgroup>
                 <thead>
                     <tr class="text-left">
-                        <th class="p-4">Cabang</th>
-                        <th class="p-4">Akun CS aktif</th>
-                        <th class="p-4">Sumber Google Sheets</th>
-                        <th class="p-4 text-right">Aksi</th>
+                        <th class="px-4 py-3">Cabang</th>
+                        <th class="px-4 py-3">Tim CS</th>
+                        <th class="px-4 py-3">Sumber lead</th>
+                        <th class="px-4 py-3 text-right">Tindakan</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr v-for="branch in branches" :key="branch.id">
-                        <td class="p-4 font-semibold">{{ branch.name }}</td>
-                        <td class="p-4">
+                        <td class="px-4 py-3 align-top">
+                            <p class="font-semibold">{{ branch.name }}</p>
+                            <span
+                                class="kgj-status mt-2"
+                                :class="statusClass(branch)"
+                            >
+                                {{ branch.import_status }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 align-top">
                             <template v-if="branch.cs_accounts.length">
+                                <p
+                                    class="mb-2 text-xs font-semibold tracking-[.08em] text-kgj-muted uppercase"
+                                >
+                                    {{ branch.cs_accounts.length }} CS aktif
+                                </p>
                                 <div
                                     v-for="account in branch.cs_accounts"
                                     :key="account.id"
@@ -298,32 +406,27 @@ const syncBranch = (branch: Branch) =>
                                             branch.default_import_user_id ===
                                             account.id
                                         "
-                                        class="ml-2 text-xs text-kgj-gold-deep"
+                                        class="ml-2 rounded-full bg-[#f3ead1] px-2 py-0.5 text-xs font-semibold text-kgj-gold-deep"
                                         >Default impor</span
                                     >
-                                    <small class="block text-[#62665b]">{{
-                                        account.email
-                                    }}</small>
+                                    <small
+                                        class="mt-0.5 block text-kgj-muted"
+                                        >{{ account.email }}</small
+                                    >
                                 </div>
                             </template>
-                            <small v-else class="block text-[#62665b]"
+                            <small v-else class="block text-kgj-muted"
                                 >Tambahkan akun CS dari menu Akun.</small
                             >
                         </td>
-                        <td class="p-4 text-xs">
-                            <span class="break-all">{{
-                                branch.google_spreadsheet_id ||
-                                'Belum dikonfigurasi'
-                            }}</span>
-                            <small
-                                class="mt-1 block font-semibold"
-                                :class="
-                                    branch.import_status === 'Siap impor'
-                                        ? 'text-kgj-sage'
-                                        : 'text-kgj-rose'
-                                "
-                                >{{ branch.import_status }}</small
-                            >
+                        <td class="px-4 py-3 align-top">
+                            <p class="font-medium text-kgj-ink">
+                                {{
+                                    branch.google_spreadsheet_id
+                                        ? 'Google Sheets terhubung'
+                                        : 'Belum ada sumber Google Sheets'
+                                }}
+                            </p>
                             <small
                                 v-if="branch.google_sheets_synced_at"
                                 class="mt-1 block text-kgj-muted"
@@ -333,45 +436,83 @@ const syncBranch = (branch: Branch) =>
                                         branch.google_sheets_synced_at,
                                     )
                                 }}</small
-                            ><small
+                            >
+                            <details
+                                v-if="branch.google_spreadsheet_id"
+                                class="mt-2 text-xs text-kgj-muted"
+                            >
+                                <summary
+                                    class="cursor-pointer font-semibold text-kgj-gold-deep"
+                                >
+                                    Lihat ID spreadsheet
+                                </summary>
+                                <p class="mt-1 break-all">
+                                    {{ branch.google_spreadsheet_id }}
+                                </p>
+                            </details>
+                            <small
                                 v-if="branch.google_sheets_sync_error"
-                                class="mt-1 block text-kgj-rose"
-                                >Gagal:
-                                {{ branch.google_sheets_sync_error }}</small
+                                class="mt-2 block text-kgj-rose"
+                                :title="branch.google_sheets_sync_error"
+                                >Sinkronisasi terakhir gagal. Periksa kembali
+                                konfigurasi.</small
                             >
                         </td>
-                        <td class="p-4 text-right">
-                            <button
-                                v-if="branch.google_spreadsheet_id"
-                                class="inline-flex min-h-11 items-center text-sm font-semibold text-kgj-gold-deep underline decoration-[#c4a45d] underline-offset-4"
-                                type="button"
-                                :disabled="syncingBranchId === branch.id"
-                                @click="syncBranch(branch)"
-                            >
-                                {{
-                                    syncingBranchId === branch.id
-                                        ? 'Menyinkronkan…'
-                                        : 'Sinkronkan'
-                                }}
-                            </button>
-                            <button
-                                class="ml-3 inline-flex min-h-11 items-center text-sm font-semibold text-kgj-gold-deep underline decoration-[#c4a45d] underline-offset-4"
-                                type="button"
-                                @click="edit(branch)"
-                            >
-                                Ubah</button
-                            ><button
-                                class="ml-3 inline-flex min-h-11 items-center text-sm font-semibold text-kgj-rose underline decoration-[#dfafa8] underline-offset-4"
-                                type="button"
-                                @click="branchToDelete = branch"
-                            >
-                                Hapus
-                            </button>
+                        <td class="px-4 py-3 text-right align-middle">
+                            <div class="flex flex-wrap justify-end gap-2">
+                                <button
+                                    v-if="branch.google_spreadsheet_id"
+                                    class="kgj-button-gold"
+                                    type="button"
+                                    :disabled="
+                                        !canSync(branch) ||
+                                        syncingBranchId === branch.id
+                                    "
+                                    @click="syncBranch(branch)"
+                                >
+                                    {{
+                                        syncingBranchId === branch.id
+                                            ? 'Menyinkronkan…'
+                                            : canSync(branch)
+                                              ? 'Sinkronkan'
+                                              : 'Belum siap impor'
+                                    }}
+                                </button>
+                                <button
+                                    class="kgj-button-secondary"
+                                    type="button"
+                                    @click="edit(branch)"
+                                >
+                                    Ubah
+                                </button>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger as-child>
+                                        <button
+                                            class="kgj-button-secondary"
+                                            type="button"
+                                        >
+                                            Lainnya
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="end"
+                                        class="border-kgj-line bg-kgj-paper text-kgj-ink"
+                                    >
+                                        <DropdownMenuItem
+                                            variant="destructive"
+                                            @select="branchToDelete = branch"
+                                        >
+                                            Hapus cabang
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
                         </td>
                     </tr>
                     <tr v-if="!branches.length">
-                        <td colspan="4" class="p-10 text-center text-[#62665b]">
-                            Belum ada cabang.
+                        <td colspan="4" class="p-10 text-center text-kgj-muted">
+                            Belum ada cabang. Tambahkan cabang pertama untuk
+                            memulai.
                         </td>
                     </tr>
                 </tbody>

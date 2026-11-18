@@ -188,7 +188,7 @@ class DashboardController extends Controller
             ->map(function (object $branch) use ($csByBranch): object {
                 $branch->cs_accounts = array_values($csByBranch->get($branch->id, collect())->all());
                 $hasDefaultImportCs = collect($branch->cs_accounts)->contains(
-                    fn (object $account): bool => (int) $account->id === (int) $branch->default_import_user_id,
+                    fn (object $account): bool => (int) data_get($account, 'id') === (int) $branch->default_import_user_id,
                 );
                 $branch->import_status = match (true) {
                     ! $branch->google_spreadsheet_id => 'Sumber Google Sheets belum diatur',

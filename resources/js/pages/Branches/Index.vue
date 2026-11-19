@@ -26,6 +26,12 @@ type Branch = {
     google_spreadsheet_id: string | null;
     google_sheets_synced_at: string | null;
     google_sheets_sync_error: string | null;
+    last_sync: {
+        status: 'success' | 'partial' | 'failed';
+        completed_at: string | null;
+        summary: { inserted?: number; enriched?: number } | null;
+        error: string | null;
+    } | null;
 };
 const props = defineProps<{ branches: Branch[] }>();
 const form = useForm({
@@ -51,6 +57,30 @@ const formatSyncTime = (value: string | null) =>
 const canSync = (branch: Branch) => branch.import_status === 'Siap impor';
 const statusClass = (branch: Branch) =>
     canSync(branch) ? 'text-kgj-sage' : 'text-kgj-rose';
+const syncAttemptLabel = (branch: Branch) =>
+    ({
+        success: 'Percobaan terakhir berhasil',
+        partial: 'Percobaan terakhir selesai sebagian',
+        failed: 'Percobaan terakhir gagal',
+    })[branch.last_sync?.status || ''] || '';
+const syncAttemptClass = (branch: Branch) =>
+    branch.last_sync?.status === 'failed'
+        ? 'text-kgj-rose'
+        : branch.last_sync?.status === 'partial'
+          ? 'text-kgj-gold-deep'
+          : 'text-kgj-sage';
+const syncSummary = (branch: Branch) => {
+    const summary = branch.last_sync?.summary;
+    if (!summary) return '';
+
+    return `${summary.inserted || 0} lead baru · ${summary.enriched || 0} data diperbarui`;
+};
+const syncFailureDetail = (branch: Branch) =>
+    branch.last_sync?.status === 'failed'
+        ? branch.last_sync.error
+        : !branch.last_sync
+          ? branch.google_sheets_sync_error
+          : null;
 const save = () => {
     const options = {
         onSuccess: () => {
@@ -301,16 +331,37 @@ const syncBranch = (branch: Branch) =>
                     v-if="branch.google_sheets_synced_at"
                     class="mt-1 text-xs text-kgj-muted"
                 >
-                    Sinkron terakhir:
+                    Berhasil terakhir:
                     {{ formatSyncTime(branch.google_sheets_synced_at) }}
                 </p>
                 <p
-                    v-if="branch.google_sheets_sync_error"
-                    class="mt-2 text-xs text-kgj-rose"
-                    :title="branch.google_sheets_sync_error"
+                    v-if="branch.last_sync"
+                    class="mt-2 text-xs font-medium"
+                    :class="syncAttemptClass(branch)"
                 >
-                    Sinkronisasi terakhir gagal. Periksa kembali konfigurasi.
+                    {{ syncAttemptLabel(branch) }}:
+                    {{ formatSyncTime(branch.last_sync.completed_at) }}
                 </p>
+                <p
+                    v-if="
+                        branch.last_sync?.status !== 'failed' &&
+                        syncSummary(branch)
+                    "
+                    class="mt-1 text-xs text-kgj-muted"
+                >
+                    {{ syncSummary(branch) }}
+                </p>
+                <details
+                    v-if="syncFailureDetail(branch)"
+                    class="mt-2 text-xs text-kgj-rose"
+                >
+                    <summary class="cursor-pointer font-semibold">
+                        Lihat alasan kegagalan
+                    </summary>
+                    <p class="mt-1 leading-relaxed break-words">
+                        {{ syncFailureDetail(branch) }}
+                    </p>
+                </details>
                 <div class="mt-4 flex flex-wrap gap-2">
                     <button
                         v-if="branch.google_spreadsheet_id"
@@ -430,13 +481,34 @@ const syncBranch = (branch: Branch) =>
                             <small
                                 v-if="branch.google_sheets_synced_at"
                                 class="mt-1 block text-kgj-muted"
-                                >Sinkron terakhir:
+                                >Berhasil terakhir:
                                 {{
                                     formatSyncTime(
                                         branch.google_sheets_synced_at,
                                     )
                                 }}</small
                             >
+                            <small
+                                v-if="branch.last_sync"
+                                class="mt-2 block font-semibold"
+                                :class="syncAttemptClass(branch)"
+                            >
+                                {{ syncAttemptLabel(branch) }}:
+                                {{
+                                    formatSyncTime(
+                                        branch.last_sync.completed_at,
+                                    )
+                                }}
+                            </small>
+                            <small
+                                v-if="
+                                    branch.last_sync?.status !== 'failed' &&
+                                    syncSummary(branch)
+                                "
+                                class="mt-1 block text-kgj-muted"
+                            >
+                                {{ syncSummary(branch) }}
+                            </small>
                             <details
                                 v-if="branch.google_spreadsheet_id"
                                 class="mt-2 text-xs text-kgj-muted"
@@ -450,13 +522,17 @@ const syncBranch = (branch: Branch) =>
                                     {{ branch.google_spreadsheet_id }}
                                 </p>
                             </details>
-                            <small
-                                v-if="branch.google_sheets_sync_error"
-                                class="mt-2 block text-kgj-rose"
-                                :title="branch.google_sheets_sync_error"
-                                >Sinkronisasi terakhir gagal. Periksa kembali
-                                konfigurasi.</small
+                            <details
+                                v-if="syncFailureDetail(branch)"
+                                class="mt-2 text-xs text-kgj-rose"
                             >
+                                <summary class="cursor-pointer font-semibold">
+                                    Lihat alasan kegagalan
+                                </summary>
+                                <p class="mt-1 leading-relaxed break-words">
+                                    {{ syncFailureDetail(branch) }}
+                                </p>
+                            </details>
                         </td>
                         <td class="px-4 py-3 text-right align-middle">
                             <div class="flex flex-wrap justify-end gap-2">

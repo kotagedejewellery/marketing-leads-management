@@ -79,6 +79,16 @@ class DashboardTest extends TestCase
             $table->text('google_sheets_sync_error')->nullable();
             $table->timestamp('created_at')->nullable();
         });
+        Schema::create('lead_sync_runs', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('branch_id')->nullable();
+            $table->string('source');
+            $table->string('status');
+            $table->json('summary')->nullable();
+            $table->text('error')->nullable();
+            $table->timestamp('created_at')->nullable();
+            $table->timestamp('completed_at')->nullable();
+        });
     }
 
     public function test_guests_are_redirected_to_the_login_page()
@@ -94,6 +104,32 @@ class DashboardTest extends TestCase
 
         $response = $this->get(route('dashboard'));
         $response->assertOk();
+    }
+
+    public function test_branch_page_distinguishes_a_failed_attempt_from_the_last_successful_sync(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $branchId = \DB::table('branches')->insertGetId([
+            'name' => 'Palagan',
+            'google_spreadsheet_id' => 'sheet-palagan',
+            'google_sheets_synced_at' => now()->subMinutes(5),
+        ]);
+        \DB::table('lead_sync_runs')->insert([
+            'branch_id' => $branchId,
+            'source' => 'google_sheets',
+            'status' => 'failed',
+            'error' => 'Tidak menemukan tab harian bernama angka, misalnya 1 sampai 31.',
+            'created_at' => now(),
+            'completed_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->get('/branches')->assertInertia(
+            fn (Assert $page) => $page
+                ->component('Branches/Index')
+                ->where('branches.0.google_sheets_synced_at', fn ($value) => $value !== null)
+                ->where('branches.0.last_sync.status', 'failed')
+                ->where('branches.0.last_sync.error', 'Tidak menemukan tab harian bernama angka, misalnya 1 sampai 31.'),
+        );
     }
 
     public function test_admin_dashboard_prioritizes_work_and_statistics_reports_data_quality(): void

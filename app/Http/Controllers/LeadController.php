@@ -199,19 +199,17 @@ class LeadController extends Controller
             return to_route('leads.index');
         }
 
-        $message = "Sinkronisasi selesai: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui, {$summary['resurfaced']} muncul kembali.";
+        $message = $summary['failed']
+            ? "Sinkronisasi selesai sebagian: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui, {$summary['resurfaced']} muncul kembali. {$summary['failed']} cabang gagal; lihat detailnya di menu Cabang."
+            : "Sinkronisasi selesai: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui, {$summary['resurfaced']} muncul kembali.";
         if ($summary['missing_dates']) {
             $message .= " {$summary['missing_dates']} lead baru tanpa tanggal lead; periksa format tanggal sumber.";
         }
         if ($summary['missing_source_fields']) {
             $message .= " {$summary['missing_source_fields']} kolom sumber kosong perlu dilengkapi di Google Sheets.";
         }
-        if ($summary['failed']) {
-            $message .= " {$summary['failed']} cabang gagal disinkronkan; periksa statusnya di menu Cabang.";
-        }
-
         Inertia::flash('toast', [
-            'type' => 'success',
+            'type' => $summary['failed'] ? 'error' : 'success',
             'message' => $message,
         ]);
 

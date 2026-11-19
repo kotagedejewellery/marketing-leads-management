@@ -9,6 +9,7 @@ import {
 } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import LeadSaveFeedback from '@/components/LeadSaveFeedback.vue';
+import LeadHistoryPopover from '@/components/LeadHistoryPopover.vue';
 import LeadQuickUpdate from '@/components/LeadQuickUpdate.vue';
 import { budgetOptions } from '@/lib/lead-options';
 import { outcomeLabel } from '@/lib/lead-outcomes';
@@ -349,6 +350,26 @@ const trackLeadSaveState = (
     }
 };
 const leadSaveState = (leadId: number) => leadSaveStates.value.get(leadId);
+const mobileSaveFeedback = computed(() => {
+    const state = mobileEditorLead.value
+        ? leadSaveState(mobileEditorLead.value.id)
+        : undefined;
+
+    if (state?.state === 'saving') {
+        return { message: 'Menyimpan perubahan…', tone: 'text-kgj-gold-deep' };
+    }
+    if (state?.state === 'saved') {
+        return { message: 'Tersimpan otomatis', tone: 'text-[#49654e]' };
+    }
+    if (state?.state === 'error' || state?.state === 'conflict') {
+        return {
+            message: 'Gagal menyimpan. Periksa isian.',
+            tone: 'text-kgj-rose',
+        };
+    }
+
+    return { message: 'Perubahan tersimpan otomatis', tone: 'text-kgj-muted' };
+});
 const leadRetryVersion = (leadId: number) =>
     leadRetryVersions.value.get(leadId) || 0;
 const retryLeadSave = (leadId: number) => {
@@ -1608,10 +1629,10 @@ onBeforeUnmount(() => {
             <SheetContent
                 side="bottom"
                 :show-close-button="false"
-                class="z-[60] max-h-[calc(100dvh-4rem-env(safe-area-inset-bottom))] gap-0 overflow-y-auto rounded-t-2xl bg-kgj-paper p-0"
+                class="z-[60] h-[44rem] max-h-[calc(100dvh_-_1rem_-_env(safe-area-inset-bottom))] gap-0 overflow-hidden rounded-t-2xl bg-kgj-paper p-0"
             >
                 <div
-                    class="sticky top-0 z-20 rounded-t-2xl border-b border-kgj-line bg-kgj-paper px-5 pt-5 pb-3 shadow-[0_3px_10px_rgba(58,48,31,0.06)]"
+                    class="relative shrink-0 rounded-t-2xl border-b border-kgj-line bg-kgj-paper px-5 pt-5 pb-3 shadow-[0_3px_10px_rgba(58,48,31,0.06)]"
                 >
                     <SheetHeader class="pr-10 text-left">
                         <SheetTitle>Update lead</SheetTitle>
@@ -1620,8 +1641,23 @@ onBeforeUnmount(() => {
                                 mobileEditorLead?.name ||
                                 mobileEditorLead?.contact_raw
                             }}
-                            — perubahan tersimpan otomatis.
                         </SheetDescription>
+                        <div class="mt-2 flex min-h-11 items-center gap-3">
+                            <p
+                                class="min-w-0 truncate text-xs font-medium"
+                                :class="mobileSaveFeedback.tone"
+                                role="status"
+                            >
+                                {{ mobileSaveFeedback.message }}
+                            </p>
+                            <LeadHistoryPopover
+                                :lead-id="mobileEditorLead!.id"
+                                label="Riwayat"
+                                align="start"
+                                content-class="z-[70]"
+                                trigger-class="ml-auto inline-flex min-h-11 shrink-0 cursor-pointer items-center gap-1 text-xs font-semibold text-[#4f514a] underline underline-offset-4 hover:text-kgj-gold-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kgj-gold"
+                            />
+                        </div>
                     </SheetHeader>
                     <button
                         class="absolute top-4 right-5 flex size-11 items-center justify-center rounded-lg text-kgj-muted transition hover:bg-[#f3f0e8] hover:text-kgj-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kgj-gold"
@@ -1632,18 +1668,23 @@ onBeforeUnmount(() => {
                         <X class="size-4" aria-hidden="true" />
                     </button>
                 </div>
-                <LeadQuickUpdate
-                    v-if="mobileEditorLead"
-                    :key="mobileEditorLead.id"
-                    ref="mobileQuickUpdate"
-                    class="px-5 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
-                    :lead="mobileEditorLead"
-                    :outcome-factors="outcomeFactors"
-                    :can-mark-crm="isAdmin"
-                    :retry-save-version="leadRetryVersion(mobileEditorLead.id)"
-                    @dirty-change="trackDirtyLead"
-                    @save-state="trackLeadSaveState"
-                />
+                <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                    <LeadQuickUpdate
+                        v-if="mobileEditorLead"
+                        :key="mobileEditorLead.id"
+                        ref="mobileQuickUpdate"
+                        class="px-5 pt-5 pb-[calc(1.5rem_+_env(safe-area-inset-bottom))]"
+                        :lead="mobileEditorLead"
+                        :outcome-factors="outcomeFactors"
+                        :can-mark-crm="isAdmin"
+                        :show-save-feedback="false"
+                        :retry-save-version="
+                            leadRetryVersion(mobileEditorLead.id)
+                        "
+                        @dirty-change="trackDirtyLead"
+                        @save-state="trackLeadSaveState"
+                    />
+                </div>
             </SheetContent>
         </Sheet>
 

@@ -111,6 +111,7 @@ class LeadManagementTest extends TestCase
         });
         Schema::create('lead_sync_runs', function (Blueprint $table) {
             $table->id();
+            $table->unsignedBigInteger('branch_id')->nullable();
             $table->string('source');
             $table->string('status');
             $table->json('summary')->nullable();

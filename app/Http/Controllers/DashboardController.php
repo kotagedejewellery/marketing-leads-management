@@ -193,7 +193,7 @@ class DashboardController extends Controller
             ->get(['u.id', 'u.name', 'u.branch_id', 'b.name as branch_name']);
 
         $sheetSync = $request->user()->role === 'admin'
-            ? DB::table('lead_sync_runs')->where('source', 'google_sheets')->orderByDesc('completed_at')->first(['status', 'completed_at', 'summary'])
+            ? DB::table('lead_sync_runs')->where('source', 'google_sheets')->whereNull('branch_id')->orderByDesc('completed_at')->first(['status', 'completed_at', 'summary'])
             : null;
         if ($sheetSync && $sheetSync->summary) {
             $sheetSync->summary = json_decode((string) $sheetSync->summary, true) ?: null;
@@ -240,10 +240,22 @@ class DashboardController extends Controller
             ->orderBy('name')
             ->get(['id', 'branch_id', 'name', 'email'])
             ->groupBy('branch_id');
+        $lastRunsByBranch = [];
+        foreach (DB::table('lead_sync_runs')
+            ->where('source', 'google_sheets')
+            ->whereNotNull('branch_id')
+            ->orderByDesc('completed_at')
+            ->get(['branch_id', 'status', 'summary', 'error', 'completed_at']) as $run) {
+            /** @var object{branch_id: int, status: string, summary: string|null, error: string|null, completed_at: string|null} $run */
+            $branchId = (int) $run->branch_id;
+            if (! isset($lastRunsByBranch[$branchId])) {
+                $lastRunsByBranch[$branchId] = $run;
+            }
+        }
         $branches = DB::table('branches')
             ->orderBy('name')
             ->get(['id', 'name', 'default_import_user_id', 'google_spreadsheet_id', 'google_sheets_synced_at', 'google_sheets_sync_error'])
-            ->map(function (object $branch) use ($csByBranch): object {
+            ->map(function (object $branch) use ($csByBranch, $lastRunsByBranch): object {
                 $branch->cs_accounts = array_values($csByBranch->get($branch->id, collect())->all());
                 $hasDefaultImportCs = collect($branch->cs_accounts)->contains(
                     fn (object $account): bool => (int) data_get($account, 'id') === (int) $branch->default_import_user_id,
@@ -254,6 +266,18 @@ class DashboardController extends Controller
                     ! $hasDefaultImportCs => 'Pilih CS default impor',
                     default => 'Siap impor',
                 };
+                $lastRun = $lastRunsByBranch[(int) $branch->id] ?? null;
+                $lastRunSummary = is_string($lastRun?->summary)
+                    ? json_decode($lastRun->summary, true)
+                    : null;
+                $branch->last_sync = $lastRun
+                    ? [
+                        'status' => $lastRun->status,
+                        'completed_at' => $lastRun->completed_at,
+                        'summary' => is_array($lastRunSummary) ? $lastRunSummary : null,
+                        'error' => $lastRun->error,
+                    ]
+                    : null;
 
                 return $branch;
             });

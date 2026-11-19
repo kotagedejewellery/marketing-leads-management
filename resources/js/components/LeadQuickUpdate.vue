@@ -41,8 +41,14 @@ const props = withDefaults(
         variant?: 'card' | 'table';
         retrySaveVersion?: number;
         canMarkCrm?: boolean;
+        showSaveFeedback?: boolean;
     }>(),
-    { variant: 'card', retrySaveVersion: 0, canMarkCrm: false },
+    {
+        variant: 'card',
+        retrySaveVersion: 0,
+        canMarkCrm: false,
+        showSaveFeedback: true,
+    },
 );
 const emit = defineEmits<{
     'dirty-change': [leadId: number, isDirty: boolean];
@@ -498,8 +504,12 @@ onBeforeUnmount(() => {
             </fieldset>
         </div>
 
-        <fieldset class="mt-4 grid gap-3 rounded-xl border border-kgj-line p-4">
-            <legend class="px-1 text-sm font-semibold">Hasil akhir</legend>
+        <div
+            class="mt-4 grid gap-3"
+            :class="
+                values.outcome ? 'rounded-xl border border-kgj-line p-4' : ''
+            "
+        >
             <label class="grid gap-2 text-sm font-semibold"
                 >Status hasil
                 <select
@@ -550,7 +560,7 @@ onBeforeUnmount(() => {
                     @blur="saveOutcome"
                 />
             </label>
-        </fieldset>
+        </div>
 
         <div class="mt-4 grid gap-4 sm:grid-cols-2">
             <label class="grid gap-2 text-sm font-semibold"
@@ -622,6 +632,7 @@ onBeforeUnmount(() => {
         </label>
 
         <p
+            v-if="showSaveFeedback"
             class="mt-4 text-sm"
             :class="{
                 'text-kgj-muted': saveState === 'idle',

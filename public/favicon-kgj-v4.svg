@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Kotagede Jewellery">
+    <defs>
+        <clipPath id="kgj-circle">
+            <circle cx="256" cy="256" r="248" />
+        </clipPath>
+        <filter id="remove-white" color-interpolation-filters="sRGB">
+            <feColorMatrix
+                type="matrix"
+                values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 -4 4 0"
+            />
+        </filter>
+    </defs>
+    <g clip-path="url(#kgj-circle)">
+        <rect width="512" height="512" fill="#201f1c" />
+        <image
+            href="/brand/kotagede-jewellery.png"
+            x="48"
+            y="84"
+            width="416"
+            height="344"
+            preserveAspectRatio="xMidYMid meet"
+            filter="url(#remove-white)"
+        />
+    </g>
+</svg>

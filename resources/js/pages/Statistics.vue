@@ -240,12 +240,13 @@ const applyOutcomePeriod = () =>
                                 stage.note
                             }}</span>
                         </span>
-                        <span class="text-sm text-kgj-muted tabular-nums">{{
-                            percentage(stage.value)
-                        }}</span>
                         <strong
-                            class="min-w-9 text-right text-lg tabular-nums"
-                            >{{ stage.value }}</strong
+                            class="min-w-12 text-right text-2xl font-bold tabular-nums"
+                            >{{ percentage(stage.value) }}</strong
+                        >
+                        <span
+                            class="min-w-12 text-right text-xs font-medium text-kgj-muted tabular-nums"
+                            >{{ stage.value }} lead</span
                         >
                     </div>
                 </div>
@@ -420,9 +421,16 @@ const applyOutcomePeriod = () =>
                                     daftar</span
                                 >
                             </span>
-                            <strong class="shrink-0 text-sm tabular-nums">
-                                {{ factor.count }}
-                            </strong>
+                            <span
+                                class="flex shrink-0 items-baseline gap-2 tabular-nums"
+                            >
+                                <strong class="text-sm">
+                                    {{ percentage(factor.count, report.total) }}
+                                </strong>
+                                <span class="text-xs text-kgj-muted">
+                                    {{ factor.count }} lead
+                                </span>
+                            </span>
                         </Link>
                         <div
                             v-else
@@ -431,9 +439,16 @@ const applyOutcomePeriod = () =>
                             <span class="text-sm leading-5">{{
                                 factor.label
                             }}</span>
-                            <strong class="shrink-0 text-sm tabular-nums">
-                                {{ factor.count }}
-                            </strong>
+                            <span
+                                class="flex shrink-0 items-baseline gap-2 tabular-nums"
+                            >
+                                <strong class="text-sm">
+                                    {{ percentage(factor.count, report.total) }}
+                                </strong>
+                                <span class="text-xs text-kgj-muted">
+                                    {{ factor.count }} lead
+                                </span>
+                            </span>
                         </div>
                     </template>
                 </dl>

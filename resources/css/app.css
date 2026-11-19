@@ -234,7 +234,7 @@
         @apply border border-kgj-line bg-kgj-paper;
     }
     .kgj-input {
-        @apply min-h-11 rounded-lg border border-kgj-line bg-white px-3 text-sm text-kgj-ink transition placeholder:text-kgj-muted/70 hover:border-[#beb29d] focus:border-kgj-gold focus:ring-2 focus:ring-[#dbc79e] focus:outline-none;
+        @apply min-h-11 w-full rounded-lg border border-kgj-line bg-white px-3 text-sm text-kgj-ink transition placeholder:text-kgj-muted/70 hover:border-[#beb29d] focus:border-kgj-gold focus:ring-2 focus:ring-[#dbc79e] focus:outline-none;
     }
     .kgj-input:-webkit-autofill,
     .kgj-input:-webkit-autofill:hover,

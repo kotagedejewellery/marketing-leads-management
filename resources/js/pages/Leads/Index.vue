@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { ChevronDown, ChevronUp, Pencil, SlidersHorizontal } from '@lucide/vue';
+import {
+    ChevronDown,
+    ChevronUp,
+    Pencil,
+    SlidersHorizontal,
+    X,
+} from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import LeadSaveFeedback from '@/components/LeadSaveFeedback.vue';
 import LeadQuickUpdate from '@/components/LeadQuickUpdate.vue';
@@ -1215,11 +1221,14 @@ onBeforeUnmount(() => {
             {{ importForm.errors.branch_id }}
         </p>
         <div
-            v-if="visibleLeadIds.length"
-            class="mt-4 flex flex-wrap items-center gap-3"
+            v-if="visibleLeadIds.length && !isDesktopWorkspace"
+            class="mt-5 flex flex-wrap items-center justify-between gap-3"
         >
+            <p class="text-sm text-kgj-muted">
+                <strong class="text-kgj-ink">{{ leads.data.length }}</strong>
+                lead di halaman ini
+            </p>
             <button
-                v-if="!isDesktopWorkspace"
                 class="kgj-button-secondary"
                 type="button"
                 @click="toggleMobileSelectionMode"
@@ -1231,7 +1240,31 @@ onBeforeUnmount(() => {
                 }}
             </button>
             <label
-                v-if="isDesktopWorkspace || mobileSelectionMode"
+                v-if="mobileSelectionMode"
+                class="flex min-h-11 basis-full items-center gap-2 text-sm font-semibold text-[#4f514a]"
+            >
+                <input
+                    :checked="allVisibleSelected"
+                    :indeterminate="someVisibleSelected"
+                    class="size-4 accent-kgj-gold"
+                    type="checkbox"
+                    @change="toggleVisibleSelection"
+                />
+                Pilih semua {{ visibleLeadIds.length }} lead pada halaman ini
+            </label>
+            <p
+                v-if="mobileSelectionMode"
+                class="basis-full text-sm text-kgj-muted"
+                role="status"
+            >
+                Mode pilih aktif. Pilih lead lalu gunakan aksi massal.
+            </p>
+        </div>
+        <div
+            v-if="visibleLeadIds.length && isDesktopWorkspace"
+            class="mt-4 flex flex-wrap items-center gap-3"
+        >
+            <label
                 class="flex min-h-11 items-center gap-2 text-sm font-semibold text-[#4f514a]"
             >
                 <input
@@ -1362,7 +1395,7 @@ onBeforeUnmount(() => {
             </p>
         </form>
 
-        <div v-if="!isDesktopWorkspace" class="mt-6 grid gap-3">
+        <div v-if="!isDesktopWorkspace" class="mt-3 grid gap-3">
             <article
                 v-for="lead in leads.data"
                 :key="lead.id"
@@ -1568,18 +1601,31 @@ onBeforeUnmount(() => {
         >
             <SheetContent
                 side="bottom"
-                class="z-[60] max-h-[calc(100dvh-env(safe-area-inset-bottom))] overflow-y-auto rounded-t-2xl bg-kgj-paper px-5 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+                :show-close-button="false"
+                class="z-[60] max-h-[calc(100dvh-4rem-env(safe-area-inset-bottom))] overflow-y-auto rounded-t-2xl bg-kgj-paper px-5 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
             >
-                <SheetHeader class="pr-10 text-left">
-                    <SheetTitle>Update lead</SheetTitle>
-                    <SheetDescription>
-                        {{
-                            mobileEditorLead?.name ||
-                            mobileEditorLead?.contact_raw
-                        }}
-                        — perubahan tersimpan otomatis.
-                    </SheetDescription>
-                </SheetHeader>
+                <div
+                    class="sticky top-0 z-10 -mx-5 -mt-6 border-b border-kgj-line bg-kgj-paper px-5 pt-6 pb-4"
+                >
+                    <SheetHeader class="pr-10 text-left">
+                        <SheetTitle>Update lead</SheetTitle>
+                        <SheetDescription>
+                            {{
+                                mobileEditorLead?.name ||
+                                mobileEditorLead?.contact_raw
+                            }}
+                            — perubahan tersimpan otomatis.
+                        </SheetDescription>
+                    </SheetHeader>
+                    <button
+                        class="absolute top-4 right-5 flex size-11 items-center justify-center rounded-lg text-kgj-muted transition hover:bg-[#f3f0e8] hover:text-kgj-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kgj-gold"
+                        type="button"
+                        aria-label="Tutup update lead"
+                        @click="setMobileEditorOpen(false)"
+                    >
+                        <X class="size-4" aria-hidden="true" />
+                    </button>
+                </div>
                 <LeadQuickUpdate
                     v-if="mobileEditorLead"
                     :key="mobileEditorLead.id"

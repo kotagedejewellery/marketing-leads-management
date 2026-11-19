@@ -92,6 +92,14 @@ const groups = {
     ],
 };
 const milestoneCount = computed(() => form.milestones.length);
+const displayName = computed(() => props.lead.name?.trim() || null);
+const displayContact = computed(
+    () => props.lead.phone?.trim() || props.lead.contact_raw,
+);
+const leadTitle = computed(() => displayName.value || displayContact.value);
+const leadSubtitle = computed(() =>
+    displayName.value ? displayContact.value : null,
+);
 const formFields = [
     'intent_buying',
     'usage_date',
@@ -196,7 +204,7 @@ function stopAssisting() {
 </script>
 
 <template>
-    <Head :title="lead.name || lead.contact_raw" />
+    <Head :title="leadTitle" />
     <section class="kgj-page">
         <Link
             href="/leads"
@@ -209,15 +217,15 @@ function stopAssisting() {
             <div>
                 <p class="kgj-eyebrow">Profil lead</p>
                 <h1
-                    class="mt-2 text-4xl font-semibold tracking-[-.04em] sm:text-5xl"
+                    class="mt-2 max-w-full text-3xl font-semibold tracking-[-.04em] break-words sm:text-5xl"
                 >
-                    {{ lead.name || lead.contact_raw }}
+                    {{ leadTitle }}
                 </h1>
-                <p class="mt-2 text-[#62665b]">
-                    {{ lead.phone || lead.contact_raw }}
+                <p v-if="leadSubtitle" class="mt-2 text-[#62665b]">
+                    {{ leadSubtitle }}
                 </p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 <button
                     v-if="
                         !lead.archived_at &&

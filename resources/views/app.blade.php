@@ -11,7 +11,7 @@
         </style>
 
         <meta name="theme-color" content="#201f1c">
-        <link rel="icon" href="/favicon-kgj-v3.png" type="image/png" sizes="any">
+        <link rel="icon" href="/favicon-kgj-v4.svg?v=2" type="image/svg+xml" sizes="any">
         <link rel="apple-touch-icon" href="/brand/kotagede-jewellery.png">
 
         @fonts

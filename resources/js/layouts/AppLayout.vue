@@ -64,14 +64,16 @@ const logout = () =>
 <template>
     <div class="min-h-screen bg-kgj-canvas text-kgj-ink">
         <header
-            class="border-b border-black/10 bg-kgj-ink px-5 py-3 text-[#fffdf8] lg:px-10 xl:px-12 2xl:px-16"
+            class="min-h-16 border-b border-black/10 bg-kgj-ink px-5 py-3 text-[#fffdf8] lg:px-10 xl:px-12 2xl:px-16"
         >
             <div class="flex w-full items-center justify-between gap-3">
-                <Link href="/dashboard" class="group flex items-center gap-3"
+                <Link
+                    href="/dashboard"
+                    class="group flex shrink-0 items-center gap-3"
                     ><img
                         src="/brand/kotagede-jewellery.png"
                         alt="Kotagede Jewellery"
-                        class="h-12 w-[68px] rounded-lg object-contain transition group-hover:brightness-105 lg:h-14 lg:w-[72px]"
+                        class="h-12 w-20 shrink-0 rounded-lg object-contain transition group-hover:brightness-105 lg:h-14 lg:w-[72px]"
                     /><span
                         class="hidden text-sm font-semibold tracking-tight text-white/65 sm:block"
                         >Leads Workspace</span
@@ -98,10 +100,12 @@ const logout = () =>
                         }}</Link
                     >
                 </nav>
-                <div class="flex items-center gap-3 text-sm text-white/65">
+                <div
+                    class="flex min-w-0 items-center gap-3 text-sm text-white/65"
+                >
                     <span
                         v-if="user.branch?.name"
-                        class="rounded-full bg-[#dce7dd] px-2 py-1 text-xs font-bold text-[#36503a]"
+                        class="max-w-24 truncate rounded-full bg-[#dce7dd] px-2 py-1 text-xs font-bold text-[#36503a]"
                         >{{ user.branch.name }}</span
                     ><span class="hidden sm:inline"
                         >{{ user.name }} · {{ user.role.toUpperCase() }}</span

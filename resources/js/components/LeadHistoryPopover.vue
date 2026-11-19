@@ -28,6 +28,7 @@ const props = withDefaults(
         label: string;
         align?: 'start' | 'center' | 'end';
         triggerClass?: string;
+        contentClass?: string;
     }>(),
     {
         align: 'end',
@@ -123,7 +124,10 @@ onBeforeUnmount(() => {
         </PopoverTrigger>
         <PopoverContent
             :align="align"
-            class="w-[min(20rem,calc(100vw-2rem))] border-[#ded5c3] bg-kgj-paper p-3 text-[#31332f]"
+            :class="[
+                'w-[min(20rem,calc(100vw-2rem))] border-[#ded5c3] bg-kgj-paper p-3 text-[#31332f]',
+                contentClass,
+            ]"
         >
             <div class="flex items-center justify-between gap-3">
                 <p class="text-sm font-semibold">Riwayat terbaru</p>

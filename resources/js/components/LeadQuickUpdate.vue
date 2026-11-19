@@ -648,6 +648,7 @@ onBeforeUnmount(() => {
                 :lead-id="lead.id"
                 label="Lihat riwayat"
                 align="start"
+                content-class="z-[70]"
                 trigger-class="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold text-[#4f514a] hover:text-kgj-gold-deep focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-kgj-gold"
             />
             <label

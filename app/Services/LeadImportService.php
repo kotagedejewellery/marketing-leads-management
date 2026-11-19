@@ -53,20 +53,23 @@ class LeadImportService
 
                 $key = $this->contactKey($contact);
                 $sourceHash = $spreadsheetId ? $this->sourceHash($spreadsheetId, $row, $key) : null;
-                $sourceOccurrence = $sourceHash
-                    ? DB::table('lead_source_occurrences')->where('source_hash', $sourceHash)->first(['lead_id'])
+                $sourceOccurrenceLeadId = $sourceHash
+                    ? DB::table('lead_source_occurrences')->where('source_hash', $sourceHash)->value('lead_id')
                     : null;
-                if (! $sourceOccurrence && $spreadsheetId && $sourceHash && ($row['source_tab'] ?? null)) {
-                    $sourceOccurrence = $this->sourceOccurrenceForMovedRow($spreadsheetId, $row, $contact);
-                    if ($sourceOccurrence) {
-                        $this->recordSourceOccurrence((int) $sourceOccurrence->lead_id, $spreadsheetId, $row, $sourceHash);
+                if ($sourceOccurrenceLeadId !== null) {
+                    $sourceOccurrenceLeadId = (int) $sourceOccurrenceLeadId;
+                }
+                if ($sourceOccurrenceLeadId === null && $spreadsheetId && $sourceHash && ($row['source_tab'] ?? null)) {
+                    $sourceOccurrenceLeadId = $this->sourceOccurrenceLeadIdForMovedRow($spreadsheetId, $row, $contact);
+                    if ($sourceOccurrenceLeadId !== null) {
+                        $this->recordSourceOccurrence($sourceOccurrenceLeadId, $spreadsheetId, $row, $sourceHash);
                     }
                 }
-                if ($sourceOccurrence) {
-                    if ($this->refreshSourceData((int) $sourceOccurrence->lead_id, $row)) {
+                if ($sourceOccurrenceLeadId !== null) {
+                    if ($this->refreshSourceData((int) $sourceOccurrenceLeadId, $row)) {
                         $summary['enriched']++;
                         DB::table('lead_activity')->insert([
-                            'lead_id' => $sourceOccurrence->lead_id,
+                            'lead_id' => $sourceOccurrenceLeadId,
                             'actor_id' => $actorId,
                             'action' => 'Data sumber diperbarui dari Google Sheets',
                             'detail' => "Sumber: tab {$row['source_tab']} ({$row['source_date_raw']}). Data kerja CS tidak diubah.",
@@ -221,15 +224,17 @@ class LeadImportService
     }
 
     /** @param array<string, string|null> $row */
-    private function sourceOccurrenceForMovedRow(string $spreadsheetId, array $row, string $contact): ?object
+    private function sourceOccurrenceLeadIdForMovedRow(string $spreadsheetId, array $row, string $contact): ?int
     {
-        return DB::table('lead_source_occurrences as occurrence')
+        $leadId = DB::table('lead_source_occurrences as occurrence')
             ->join('leads as lead', 'lead.id', '=', 'occurrence.lead_id')
             ->where('occurrence.spreadsheet_id', $spreadsheetId)
             ->where('occurrence.source_tab', $row['source_tab'])
             ->whereIn('lead.contact_key', $this->contactKeys($contact))
             ->orderByDesc('occurrence.created_at')
-            ->first(['occurrence.lead_id']);
+            ->value('occurrence.lead_id');
+
+        return $leadId === null ? null : (int) $leadId;
     }
 
     /** @param array<string, string|null> $row */

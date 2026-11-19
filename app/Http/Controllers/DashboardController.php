@@ -527,14 +527,16 @@ class DashboardController extends Controller
             ->whereNotNull('l.outcome')
             ->whereNotNull('l.outcome_factor')
             ->groupBy('l.outcome', 'l.outcome_factor')
-            ->pluck(DB::raw('COUNT(*)'), DB::raw("l.outcome || ':' || l.outcome_factor"))
+            ->selectRaw("l.outcome || ':' || l.outcome_factor as outcome_factor_key, COUNT(*) as total")
+            ->pluck('total', 'outcome_factor_key')
             ->all();
         $activeCounts = $this->outcomeLeads($request)
             ->whereNull('l.archived_at')
             ->whereNotNull('l.outcome')
             ->whereNotNull('l.outcome_factor')
             ->groupBy('l.outcome', 'l.outcome_factor')
-            ->pluck(DB::raw('COUNT(*)'), DB::raw("l.outcome || ':' || l.outcome_factor"))
+            ->selectRaw("l.outcome || ':' || l.outcome_factor as outcome_factor_key, COUNT(*) as total")
+            ->pluck('total', 'outcome_factor_key')
             ->all();
 
         $report = [];

@@ -70,8 +70,12 @@ final class DailyLeadTabParser
             $cells = is_array($valueRow) ? $valueRow : [];
             $candidateHeaders = $this->headers($cells);
             if (in_array('contact_raw', $candidateHeaders, true)) {
-                $this->ensureCompleteHeaders($candidateHeaders, $tab, $index + 1);
-                $headers = $candidateHeaders;
+                if ($headers === []) {
+                    $this->ensureCompleteHeaders($candidateHeaders, $tab, $index + 1);
+                    $headers = $candidateHeaders;
+                } elseif (count($candidateHeaders) === count(self::FIELDS)) {
+                    $headers = $candidateHeaders;
+                }
 
                 continue;
             }

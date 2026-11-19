@@ -100,6 +100,22 @@ class DailyLeadTabParserTest extends TestCase
         $this->assertSame([], $result['errors']);
     }
 
+    public function test_it_ignores_a_partial_repeated_header_after_a_complete_header(): void
+    {
+        $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];
+
+        $result = (new DailyLeadTabParser)->parse('1', [
+            [],
+            ['', '1 November 2026'],
+            $this->dailyRow($headers),
+            $this->dailyRow(['1', '+62 851-0000-0001 Rini', '0', 'Sisil', 'Tanya-Tanya', 'Cincin nikah', 'Halo Rini', '10.46', 'Organik', 'Other', 'Warm']),
+            $this->dailyRow(['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', '', '', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads']),
+            $this->dailyRow(['2', '+62 851-0000-0002 Dita', '0', 'Sisil', 'Klik saja', '', 'Halo Dita', '10.48', 'Iklan', 'Bio', 'Cold']),
+        ]);
+
+        $this->assertSame(['1 November 2026 #1', '1 November 2026 #2'], array_column($result['rows'], 'source_row_no'));
+    }
+
     /** @param list<string> $values
      *  @return list<string> */
     private function dailyRow(array $values): array

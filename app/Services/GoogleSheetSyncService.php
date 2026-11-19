@@ -20,7 +20,7 @@ class GoogleSheetSyncService
         private readonly DailyLeadTabParser $dailyLeadTabParser,
     ) {}
 
-    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int} */
+    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
     public function sync(?int $actorId = null, ?int $branchId = null): array
     {
         $sources = DB::table('branches')
@@ -59,7 +59,7 @@ class GoogleSheetSyncService
         }
 
         $client = Http::withToken($accessToken)->acceptJson()->timeout(25);
-        $summary = ['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0, 'missing_source_fields' => 0, 'failed' => 0];
+        $summary = ['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0, 'missing_source_fields' => 0, 'failed' => 0, 'partial' => 0];
         $failures = [];
         foreach ($sources as $source) {
             try {
@@ -71,19 +71,21 @@ class GoogleSheetSyncService
                         (string) $source->google_spreadsheet_id,
                         (int) $source->id,
                     );
-                    $branchSummary = [...$importSummary, 'missing_source_fields' => $sourceData['missing_source_fields']];
+                    $partialError = $sourceData['errors'] === [] ? null : implode(' ', $sourceData['errors']);
+                    $branchSummary = [...$importSummary, 'missing_source_fields' => $sourceData['missing_source_fields'], 'failed_tabs' => count($sourceData['errors'])];
 
                     DB::table('branches')->where('id', $source->id)->update([
                         'google_sheets_synced_at' => now(),
-                        'google_sheets_sync_error' => null,
+                        'google_sheets_sync_error' => $partialError,
                     ]);
-                    $this->record('success', $branchSummary, null, (int) $source->id);
+                    $this->record($partialError === null ? 'success' : 'partial', $branchSummary, $partialError, (int) $source->id);
 
                     return $branchSummary;
                 });
                 foreach (['enriched', 'inserted', 'skipped', 'resurfaced', 'unassigned', 'needs_review', 'missing_dates', 'missing_source_fields'] as $key) {
                     $summary[$key] += $sourceSummary[$key];
                 }
+                $summary['partial'] += $sourceSummary['failed_tabs'] > 0 ? 1 : 0;
             } catch (Throwable $exception) {
                 $message = $this->failureMessage($exception);
                 $this->recordFailure((int) $source->id, $message);
@@ -100,12 +102,12 @@ class GoogleSheetSyncService
 
             throw new RuntimeException($message);
         }
-        $this->record($summary['failed'] ? 'partial' : 'success', $summary);
+        $this->record($summary['failed'] || $summary['partial'] ? 'partial' : 'success', $summary);
 
         return $summary;
     }
 
-    /** @return array{rows: list<array<string, string|null>>, missing_source_fields: int} */
+    /** @return array{rows: list<array<string, string|null>>, missing_source_fields: int, errors: list<string>} */
     private function readBranch(PendingRequest $client, string $spreadsheetId): array
     {
         $metadata = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?fields=sheets.properties")->throw()->json();
@@ -121,21 +123,19 @@ class GoogleSheetSyncService
         $query = implode('&', array_map(fn (string $range) => 'ranges='.rawurlencode($range), $ranges));
         $response = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values:batchGet?{$query}")->throw()->json('valueRanges', []);
         $valueRanges = is_array($response) ? $response : [];
-        $rows = [];
-        $missingSourceFields = 0;
+        $tabValues = [];
         foreach ($tabs as $index => $tab) {
-            $parsed = $this->dailyLeadTabParser->parse(
-                $tab,
-                is_array($valueRanges[$index]['values'] ?? null) ? $valueRanges[$index]['values'] : [],
-            );
-            $rows = [...$rows, ...$parsed['rows']];
-            $missingSourceFields += $parsed['missing_source_fields'];
-            if (count($rows) > self::ROW_LIMIT) {
-                throw new RuntimeException('Maksimal 5.000 lead total dari seluruh tab harian.');
-            }
+            $tabValues[$tab] = is_array($valueRanges[$index]['values'] ?? null) ? $valueRanges[$index]['values'] : [];
+        }
+        $parsed = $this->dailyLeadTabParser->parseAll($tabValues);
+        if ($parsed['rows'] === [] && $parsed['errors'] !== []) {
+            throw new RuntimeException(implode(' ', $parsed['errors']));
+        }
+        if (count($parsed['rows']) > self::ROW_LIMIT) {
+            throw new RuntimeException('Maksimal 5.000 lead total dari seluruh tab harian.');
         }
 
-        return ['rows' => $rows, 'missing_source_fields' => $missingSourceFields];
+        return $parsed;
     }
 
     /** @param array<int, int> $branchIds */

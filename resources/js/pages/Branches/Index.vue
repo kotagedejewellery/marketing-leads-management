@@ -29,7 +29,11 @@ type Branch = {
     last_sync: {
         status: 'success' | 'partial' | 'failed';
         completed_at: string | null;
-        summary: { inserted?: number; enriched?: number } | null;
+        summary: {
+            inserted?: number;
+            enriched?: number;
+            failed_tabs?: number;
+        } | null;
         error: string | null;
     } | null;
 };
@@ -76,10 +80,15 @@ const syncSummary = (branch: Branch) => {
     const summary = branch.last_sync?.summary;
     if (!summary) return '';
 
-    return `${summary.inserted || 0} lead baru · ${summary.enriched || 0} data diperbarui`;
+    const detail = `${summary.inserted || 0} lead baru · ${summary.enriched || 0} data diperbarui`;
+
+    return summary.failed_tabs
+        ? `${detail} · ${summary.failed_tabs} tab perlu diperbaiki`
+        : detail;
 };
 const syncFailureDetail = (branch: Branch) =>
-    branch.last_sync?.status === 'failed'
+    branch.last_sync?.status === 'failed' ||
+    branch.last_sync?.status === 'partial'
         ? branch.last_sync.error
         : !branch.last_sync
           ? branch.google_sheets_sync_error
@@ -356,10 +365,19 @@ const syncBranch = (branch: Branch) =>
                 </p>
                 <details
                     v-if="syncFailureDetail(branch)"
-                    class="mt-2 text-xs text-kgj-rose"
+                    class="mt-2 text-xs"
+                    :class="
+                        branch.last_sync?.status === 'partial'
+                            ? 'text-kgj-gold-deep'
+                            : 'text-kgj-rose'
+                    "
                 >
                     <summary class="cursor-pointer font-semibold">
-                        Lihat alasan kegagalan
+                        {{
+                            branch.last_sync?.status === 'partial'
+                                ? 'Lihat tab yang perlu diperbaiki'
+                                : 'Lihat alasan kegagalan'
+                        }}
                     </summary>
                     <p class="mt-1 leading-relaxed break-words">
                         {{ syncFailureDetail(branch) }}
@@ -527,10 +545,19 @@ const syncBranch = (branch: Branch) =>
                             </details>
                             <details
                                 v-if="syncFailureDetail(branch)"
-                                class="mt-2 text-xs text-kgj-rose"
+                                class="mt-2 text-xs"
+                                :class="
+                                    branch.last_sync?.status === 'partial'
+                                        ? 'text-kgj-gold-deep'
+                                        : 'text-kgj-rose'
+                                "
                             >
                                 <summary class="cursor-pointer font-semibold">
-                                    Lihat alasan kegagalan
+                                    {{
+                                        branch.last_sync?.status === 'partial'
+                                            ? 'Lihat tab yang perlu diperbaiki'
+                                            : 'Lihat alasan kegagalan'
+                                    }}
                                 </summary>
                                 <p class="mt-1 leading-relaxed break-words">
                                     {{ syncFailureDetail(branch) }}

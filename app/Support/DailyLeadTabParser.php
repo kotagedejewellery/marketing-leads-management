@@ -9,7 +9,7 @@ final class DailyLeadTabParser
     /** @var array<string, string> */
     private const FIELDS = [
         'no' => 'source_sequence',
-        'nama/nomor' => 'contact_raw',
+        'nama nomor' => 'contact_raw',
         'respond time' => 'respond_time',
         'nama cs' => 'imported_cs_name',
         'keterangan' => 'imported_keterangan',
@@ -19,6 +19,21 @@ final class DailyLeadTabParser
         'keterangan sumber' => 'source_description',
         'keterangan campaign' => 'campaign_description',
         'definisi leads' => 'imported_definition',
+    ];
+
+    /** @var array<string, string> */
+    private const FIELD_LABELS = [
+        'source_sequence' => 'No',
+        'contact_raw' => 'Nama/Nomor',
+        'respond_time' => 'Respond Time',
+        'imported_cs_name' => 'Nama CS',
+        'imported_keterangan' => 'Keterangan',
+        'raw_kebutuhan' => 'Kebutuhan',
+        'greeting' => 'Greeting',
+        'chat_time' => 'Waktu Chat',
+        'source_description' => 'Keterangan Sumber',
+        'campaign_description' => 'Keterangan Campaign',
+        'imported_definition' => 'Definisi Leads',
     ];
 
     /** @var list<string> */
@@ -49,24 +64,30 @@ final class DailyLeadTabParser
 
         foreach ($values as $index => $valueRow) {
             $cells = is_array($valueRow) ? $valueRow : [];
-            $dailyValues = array_slice($cells, 15, 11);
             $candidateHeaders = $this->headers($cells);
-            if (isset($candidateHeaders[1]) && $candidateHeaders[1] === 'contact_raw') {
-                $this->ensureCompleteHeaders($candidateHeaders, $tab);
+            if (in_array('contact_raw', $candidateHeaders, true)) {
+                $this->ensureCompleteHeaders($candidateHeaders, $tab, $index + 1);
                 $headers = $candidateHeaders;
 
                 continue;
             }
-            $firstCell = $this->value($dailyValues[0] ?? null);
-            if ($firstCell !== null && ! ctype_digit($firstCell) && $this->value($dailyValues[1] ?? null) === null) {
+            if ($headers === []) {
+                $block = $this->singleValue($cells) ?? $block;
+
+                continue;
+            }
+            $contactColumn = array_search('contact_raw', $headers, true);
+            $sequenceColumn = array_search('source_sequence', $headers, true);
+            if ($contactColumn === false || $sequenceColumn === false) {
+                continue;
+            }
+            $firstCell = $this->value($cells[$sequenceColumn] ?? null);
+            if ($firstCell !== null && ! ctype_digit($firstCell) && $this->value($cells[$contactColumn] ?? null) === null) {
                 $block = $firstCell;
 
                 continue;
             }
-            if ($headers === []) {
-                continue;
-            }
-            $contact = $this->value($dailyValues[1] ?? null);
+            $contact = $this->value($cells[$contactColumn] ?? null);
             if ($contact === null) {
                 continue;
             }
@@ -76,7 +97,7 @@ final class DailyLeadTabParser
             ], null);
             $sequence = null;
             foreach ($headers as $column => $field) {
-                $value = $this->value($dailyValues[$column] ?? null);
+                $value = $this->value($cells[$column] ?? null);
                 if ($field === 'source_sequence') {
                     $sequence = $value;
 
@@ -99,13 +120,38 @@ final class DailyLeadTabParser
         return ['rows' => $rows, 'missing_source_fields' => $missingSourceFields];
     }
 
+    /**
+     * @param  array<string, array<int, mixed>>  $tabs
+     * @return array{rows: list<array<string, string|null>>, missing_source_fields: int, errors: list<string>}
+     */
+    public function parseAll(array $tabs): array
+    {
+        $rows = [];
+        $missingSourceFields = 0;
+        $errors = [];
+
+        foreach ($tabs as $tab => $values) {
+            try {
+                $parsed = $this->parse($tab, $values);
+            } catch (RuntimeException $exception) {
+                $errors[] = "Tab {$tab}: {$exception->getMessage()}";
+
+                continue;
+            }
+            $rows = [...$rows, ...$parsed['rows']];
+            $missingSourceFields += $parsed['missing_source_fields'];
+        }
+
+        return ['rows' => $rows, 'missing_source_fields' => $missingSourceFields, 'errors' => $errors];
+    }
+
     /** @param array<int, mixed> $headerRow
      *  @return array<int, string> */
     private function headers(array $headerRow): array
     {
         $headers = [];
-        foreach (array_slice($headerRow, 15, 11) as $column => $header) {
-            $key = mb_strtolower(trim(str_replace('*', '', (string) $header)));
+        foreach ($headerRow as $column => $header) {
+            $key = $this->headerKey($header);
             if (isset(self::FIELDS[$key])) {
                 $headers[$column] = self::FIELDS[$key];
             }
@@ -115,11 +161,36 @@ final class DailyLeadTabParser
     }
 
     /** @param array<int, string> $headers */
-    private function ensureCompleteHeaders(array $headers, string $tab): void
+    private function ensureCompleteHeaders(array $headers, string $tab, int $row): void
     {
-        if (array_diff(array_values(self::FIELDS), array_values($headers)) !== []) {
-            throw new RuntimeException("Header lead utama pada tab {$tab} belum lengkap.");
+        $missing = array_values(array_diff(array_values(self::FIELDS), array_values($headers)));
+        if ($missing !== []) {
+            $labels = array_map(fn (string $field): string => self::FIELD_LABELS[$field], $missing);
+
+            throw new RuntimeException("Header lead utama pada tab {$tab}, baris {$row} belum lengkap: ".implode(', ', $labels).'.');
         }
+    }
+
+    private function headerKey(mixed $header): string
+    {
+        $value = str_replace(["\u{00a0}", "\u{200b}", "\u{feff}", '*'], ' ', (string) $header);
+        $value = preg_replace('/[^\\p{L}\\p{N}]+/u', ' ', $value) ?? '';
+
+        return mb_strtolower(trim(preg_replace('/\\s+/u', ' ', $value) ?? ''));
+    }
+
+    /** @param array<int, mixed> $cells */
+    private function singleValue(array $cells): ?string
+    {
+        $values = [];
+        foreach ($cells as $cell) {
+            $value = $this->value($cell);
+            if ($value !== null) {
+                $values[] = $value;
+            }
+        }
+
+        return count($values) === 1 ? $values[0] : null;
     }
 
     private function sourceRowNumber(?string $block, ?string $sequence, int $rowNumber): string

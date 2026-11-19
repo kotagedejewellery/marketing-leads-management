@@ -375,10 +375,13 @@ class DashboardController extends Controller
         }
 
         $message = "Sinkronisasi cabang selesai: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui.";
+        if ($summary['partial']) {
+            $message .= ' Sebagian tab perlu diperbaiki; data dari tab valid tetap masuk.';
+        }
         if ($summary['missing_source_fields']) {
             $message .= " {$summary['missing_source_fields']} kolom sumber kosong perlu dilengkapi di Google Sheets.";
         }
-        Inertia::flash('toast', ['type' => $summary['failed'] ? 'error' : 'success', 'message' => $summary['failed'] ? 'Sinkronisasi cabang gagal. Periksa konfigurasi atau akun CS.' : $message]);
+        Inertia::flash('toast', ['type' => $summary['failed'] ? 'error' : ($summary['partial'] ? 'warning' : 'success'), 'message' => $summary['failed'] ? 'Sinkronisasi cabang gagal. Periksa konfigurasi atau akun CS.' : $message]);
 
         return back();
     }

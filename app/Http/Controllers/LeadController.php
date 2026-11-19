@@ -199,9 +199,15 @@ class LeadController extends Controller
             return to_route('leads.index');
         }
 
-        $message = $summary['failed']
-            ? "Sinkronisasi selesai sebagian: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui, {$summary['resurfaced']} muncul kembali. {$summary['failed']} cabang gagal; lihat detailnya di menu Cabang."
+        $message = $summary['failed'] || $summary['partial']
+            ? "Sinkronisasi selesai sebagian: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui, {$summary['resurfaced']} muncul kembali."
             : "Sinkronisasi selesai: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui, {$summary['resurfaced']} muncul kembali.";
+        if ($summary['failed']) {
+            $message .= " {$summary['failed']} cabang gagal; lihat detailnya di menu Cabang.";
+        }
+        if ($summary['partial']) {
+            $message .= " {$summary['partial']} cabang memiliki tab yang perlu diperbaiki; data dari tab valid tetap masuk.";
+        }
         if ($summary['missing_dates']) {
             $message .= " {$summary['missing_dates']} lead baru tanpa tanggal lead; periksa format tanggal sumber.";
         }
@@ -209,7 +215,7 @@ class LeadController extends Controller
             $message .= " {$summary['missing_source_fields']} kolom sumber kosong perlu dilengkapi di Google Sheets.";
         }
         Inertia::flash('toast', [
-            'type' => $summary['failed'] ? 'error' : 'success',
+            'type' => $summary['failed'] ? 'error' : ($summary['partial'] ? 'warning' : 'success'),
             'message' => $message,
         ]);
 

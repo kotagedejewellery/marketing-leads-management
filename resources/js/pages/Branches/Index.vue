@@ -57,12 +57,15 @@ const formatSyncTime = (value: string | null) =>
 const canSync = (branch: Branch) => branch.import_status === 'Siap impor';
 const statusClass = (branch: Branch) =>
     canSync(branch) ? 'text-kgj-sage' : 'text-kgj-rose';
-const syncAttemptLabel = (branch: Branch) =>
-    ({
+const syncAttemptLabel = (branch: Branch) => {
+    if (!branch.last_sync) return '';
+
+    return {
         success: 'Percobaan terakhir berhasil',
         partial: 'Percobaan terakhir selesai sebagian',
         failed: 'Percobaan terakhir gagal',
-    })[branch.last_sync?.status || ''] || '';
+    }[branch.last_sync.status];
+};
 const syncAttemptClass = (branch: Branch) =>
     branch.last_sync?.status === 'failed'
         ? 'text-kgj-rose'

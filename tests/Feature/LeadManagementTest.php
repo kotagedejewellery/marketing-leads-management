@@ -907,6 +907,48 @@ class LeadManagementTest extends TestCase
             );
     }
 
+    public function test_admin_branch_filter_uses_source_branch_for_assigned_leads(): void
+    {
+        $admin = $this->user('admin');
+        $palaganId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $bandungId = \DB::table('branches')->insertGetId(['name' => 'Bandung']);
+        $bandungCs = $this->user('cs', ['branch_id' => $bandungId]);
+        $leadId = \DB::table('leads')->insertGetId([
+            'assigned_user_id' => $bandungCs->id,
+            'source_branch_id' => $palaganId,
+            'contact_raw' => '+6285177771888',
+            'contact_key' => 'phone:6285177771888',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->get("/leads?branch={$palaganId}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('leads.data.0.id', $leadId),
+            );
+        $this->actingAs($admin)->get("/leads?branch={$bandungId}")
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('leads.data', []),
+            );
+    }
+
+    public function test_admin_can_filter_leads_without_a_source_branch(): void
+    {
+        $admin = $this->user('admin');
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285177771889',
+            'contact_key' => 'phone:6285177771889',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->get('/leads?source_branch_missing=1')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('leads.data.0.id', $leadId)
+                ->where('filters.source_branch_missing', '1'),
+            );
+    }
+
     public function test_inline_lead_creation_returns_to_the_lead_list(): void
     {
         $cs = $this->user('cs');

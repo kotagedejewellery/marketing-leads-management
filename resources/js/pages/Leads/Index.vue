@@ -80,6 +80,7 @@ const props = defineProps<{
     filters: {
         q?: string;
         branch?: string;
+        source_branch_missing?: string;
         stage?: string;
         outcome?: string;
         outcome_factor?: string;
@@ -114,6 +115,7 @@ const page = usePage();
 const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
 const q = ref(props.filters.q || '');
 const branch = ref(props.filters.branch || '');
+const sourceBranchMissing = ref(props.filters.source_branch_missing || '');
 const stage = ref(props.filters.stage || '');
 const outcome = ref(props.filters.outcome || '');
 const queue = ref(props.filters.queue || '');
@@ -249,6 +251,7 @@ const hasFilters = computed(() =>
     Boolean(
         q.value ||
         branch.value ||
+        sourceBranchMissing.value ||
         stage.value ||
         outcome.value ||
         queue.value ||
@@ -277,6 +280,7 @@ const activeFilterText = computed(() =>
     [
         q.value ? `Pencarian: “${q.value}”` : '',
         branch.value ? 'Cabang dipilih' : '',
+        sourceBranchMissing.value ? 'Tanpa cabang sumber' : '',
         stage.value ? 'Tahap dipilih' : '',
         outcome.value
             ? outcome.value === 'pending'
@@ -369,6 +373,7 @@ const applyFiltersNow = () =>
         {
             q: q.value || undefined,
             branch: branch.value || undefined,
+            source_branch_missing: sourceBranchMissing.value || undefined,
             stage: stage.value || undefined,
             outcome: outcome.value || undefined,
             queue: queue.value || undefined,
@@ -399,6 +404,7 @@ const clearFilters = () =>
     guardUnsavedChanges(() => {
         q.value = '';
         branch.value = '';
+        sourceBranchMissing.value = '';
         stage.value = '';
         outcome.value = '';
         queue.value = '';
@@ -1602,10 +1608,10 @@ onBeforeUnmount(() => {
             <SheetContent
                 side="bottom"
                 :show-close-button="false"
-                class="z-[60] max-h-[calc(100dvh-4rem-env(safe-area-inset-bottom))] overflow-y-auto rounded-t-2xl bg-kgj-paper px-5 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+                class="z-[60] max-h-[calc(100dvh-4rem-env(safe-area-inset-bottom))] gap-0 overflow-y-auto rounded-t-2xl bg-kgj-paper p-0"
             >
                 <div
-                    class="sticky top-0 z-10 -mx-5 -mt-6 border-b border-kgj-line bg-kgj-paper px-5 pt-6 pb-4"
+                    class="sticky top-0 z-20 rounded-t-2xl border-b border-kgj-line bg-kgj-paper px-5 pt-5 pb-3 shadow-[0_3px_10px_rgba(58,48,31,0.06)]"
                 >
                     <SheetHeader class="pr-10 text-left">
                         <SheetTitle>Update lead</SheetTitle>
@@ -1630,7 +1636,7 @@ onBeforeUnmount(() => {
                     v-if="mobileEditorLead"
                     :key="mobileEditorLead.id"
                     ref="mobileQuickUpdate"
-                    class="mt-5"
+                    class="px-5 pt-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
                     :lead="mobileEditorLead"
                     :outcome-factors="outcomeFactors"
                     :can-mark-crm="isAdmin"

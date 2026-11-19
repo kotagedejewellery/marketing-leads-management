@@ -46,7 +46,10 @@ class DashboardController extends Controller
             $query->where(fn ($builder) => $builder->whereRaw('l.name ILIKE ?', [$term])->orWhereRaw('l.phone ILIKE ?', [$term])->orWhereRaw('l.contact_raw ILIKE ?', [$term]));
         }
         if ($request->user()->role === 'admin' && $request->filled('branch')) {
-            $query->whereRaw('COALESCE(u.branch_id, l.source_branch_id) = ?', [$request->integer('branch')]);
+            $query->where('l.source_branch_id', $request->integer('branch'));
+        }
+        if ($request->user()->role === 'admin' && $request->boolean('source_branch_missing')) {
+            $query->whereNull('l.source_branch_id');
         }
         if ($request->filled('stage')) {
             $query->where('l.current_stage', $request->string('stage')->toString());
@@ -198,7 +201,7 @@ class DashboardController extends Controller
 
         return Inertia::render('Leads/Index', [
             'leads' => $leads,
-            'filters' => $request->only('q', 'branch', 'stage', 'outcome', 'outcome_factor', 'queue', 'intent', 'budget', 'lead_date_from', 'lead_date_to', 'lead_date_status', 'follow_up', 'handling', 'crm', 'cs_user_id', 'archived'),
+            'filters' => $request->only('q', 'branch', 'source_branch_missing', 'stage', 'outcome', 'outcome_factor', 'queue', 'intent', 'budget', 'lead_date_from', 'lead_date_to', 'lead_date_status', 'follow_up', 'handling', 'crm', 'cs_user_id', 'archived'),
             'archiveMode' => $showArchived,
             'branches' => $request->user()->role === 'admin' ? DB::table('branches')->orderBy('name')->get(['id', 'name']) : [],
             'csAccounts' => $csAccounts,
@@ -215,11 +218,17 @@ class DashboardController extends Controller
             'stats' => $this->stats($request),
             'quality' => $this->quality($request),
             'outcomes' => $this->outcomes($request),
+            'branches' => $request->user()->role === 'admin'
+                ? DB::table('branches')->orderBy('name')->get(['id', 'name'])
+                : [],
+            'filters' => [
+                'branch' => $request->filled('branch') ? $request->integer('branch') : null,
+            ],
             'outcomePeriod' => [
                 'from' => $request->string('outcome_date_from')->toString() ?: null,
                 'to' => $request->string('outcome_date_to')->toString() ?: null,
             ],
-            'workload' => $request->user()->role === 'admin' ? $this->workload() : [],
+            'workload' => $request->user()->role === 'admin' ? $this->workload($request) : [],
         ]);
     }
 
@@ -561,15 +570,35 @@ class DashboardController extends Controller
     }
 
     /** @return list<\stdClass> */
-    private function workload(): array
+    private function workload(Request $request): array
     {
-        return array_values(DB::table('branches as b')
-            ->leftJoin('users as u', fn ($join) => $join->on('u.branch_id', '=', 'b.id')->where('u.role', 'cs')->where('u.active', true))
-            ->leftJoin('leads as l', fn ($join) => $join->on('l.assigned_user_id', '=', 'u.id')->whereNull('l.archived_at'))
-            ->groupBy('b.id', 'b.name', 'u.name')
+        $query = DB::table('branches as b')
+            ->leftJoin('leads as l', fn ($join) => $join->on('l.source_branch_id', '=', 'b.id')->whereNull('l.archived_at'))
+            ->groupBy('b.id', 'b.name')
             ->orderBy('b.name')
-            ->get(['b.name', 'u.name as cs_name', DB::raw('COUNT(l.id) as lead_count')])
-            ->all());
+            ->select('b.id', 'b.name', DB::raw('COUNT(l.id) as lead_count'));
+
+        if ($request->filled('branch')) {
+            $query->where('b.id', $request->integer('branch'));
+        }
+
+        $workload = $query->get()->all();
+        if (! $request->filled('branch')) {
+            $withoutSourceBranch = DB::table('leads')
+                ->whereNull('archived_at')
+                ->whereNull('source_branch_id')
+                ->count();
+            if ($withoutSourceBranch > 0) {
+                $workload[] = (object) [
+                    'id' => null,
+                    'name' => 'Tanpa cabang sumber',
+                    'lead_count' => $withoutSourceBranch,
+                    'is_unassigned_source_branch' => true,
+                ];
+            }
+        }
+
+        return array_values($workload);
     }
 
     private function activeLeads(Request $request): Builder
@@ -601,6 +630,10 @@ class DashboardController extends Controller
     private function restrictToVisibleLeads(Builder $query, Request $request, string $alias): void
     {
         if ($request->user()->role === 'admin') {
+            if ($request->filled('branch')) {
+                $query->where("{$alias}.source_branch_id", $request->integer('branch'));
+            }
+
             return;
         }
 
@@ -625,6 +658,7 @@ class DashboardController extends Controller
         $request->validate([
             'q' => ['nullable', 'string', 'max:255'],
             'branch' => ['nullable', 'integer', 'exists:branches,id'],
+            'source_branch_missing' => ['nullable', 'boolean'],
             'stage' => ['nullable', Rule::in(['clicked', 'asked', 'price_list', 'offline', 'online', 'closing_repeat'])],
             'outcome' => ['nullable', Rule::in(['closing', 'loss', 'pending'])],
             'outcome_factor' => ['nullable', Rule::in(array_keys(LeadOutcomeFactors::CLOSING + LeadOutcomeFactors::LOSS))],
@@ -645,6 +679,7 @@ class DashboardController extends Controller
     private function validateStatisticsFilters(Request $request): void
     {
         $request->validate([
+            'branch' => ['nullable', 'integer', 'exists:branches,id'],
             'outcome_date_from' => ['nullable', 'date', 'before_or_equal:outcome_date_to'],
             'outcome_date_to' => ['nullable', 'date', 'after_or_equal:outcome_date_from'],
         ]);

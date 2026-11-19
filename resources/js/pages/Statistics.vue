@@ -47,16 +47,33 @@ const props = defineProps<{
         };
     };
     outcomePeriod: { from: string | null; to: string | null };
+    branches: Array<{ id: number; name: string }>;
+    filters: { branch: number | null };
     workload: Array<{
+        id: number | null;
         name: string;
-        cs_name: string | null;
         lead_count: number;
+        is_unassigned_source_branch?: boolean;
     }>;
 }>();
 
 const isAdmin = usePage().props.auth.user?.role === 'admin';
 const outcomeDateFrom = ref(props.outcomePeriod.from || '');
 const outcomeDateTo = ref(props.outcomePeriod.to || '');
+const branch = ref(props.filters.branch ? String(props.filters.branch) : '');
+const selectedBranchName = computed(
+    () =>
+        props.branches.find((item) => item.id === Number(branch.value))?.name ||
+        'Semua cabang',
+);
+const workloadTitle = computed(() =>
+    branch.value ? 'Ringkasan cabang' : 'Beban per cabang',
+);
+const workloadDescription = computed(() =>
+    branch.value
+        ? 'Jumlah lead aktif dari cabang sumber yang dipilih.'
+        : 'Jumlah lead aktif berdasarkan cabang sumber.',
+);
 const stages = computed(() => [
     { label: 'Cold', note: 'Klik saja', value: props.stats.cold },
     {
@@ -113,11 +130,24 @@ const applyOutcomePeriod = () =>
     router.get(
         '/statistics',
         {
+            branch: isAdmin && branch.value ? branch.value : undefined,
             outcome_date_from: outcomeDateFrom.value || undefined,
             outcome_date_to: outcomeDateTo.value || undefined,
         },
         { preserveScroll: true, preserveState: true, replace: true },
     );
+const outcomeLeadsHref = (outcome: string, factor: string) => {
+    const params = new URLSearchParams({ outcome, outcome_factor: factor });
+    if (isAdmin && branch.value) {
+        params.set('branch', branch.value);
+    }
+
+    return `/leads?${params.toString()}`;
+};
+const workloadLeadsHref = (item: (typeof props.workload)[number]) =>
+    item.is_unassigned_source_branch
+        ? '/leads?source_branch_missing=1'
+        : `/leads?branch=${item.id}`;
 </script>
 
 <template>
@@ -132,6 +162,12 @@ const applyOutcomePeriod = () =>
                     Ringkasan pekerjaan yang perlu dituntaskan pada lead dalam
                     cakupan akses Anda.
                 </p>
+                <p v-if="isAdmin" class="mt-2 text-sm text-kgj-muted">
+                    Cakupan statistik:
+                    <strong class="text-kgj-ink">{{
+                        selectedBranchName
+                    }}</strong>
+                </p>
             </div>
             <BarChart3 class="hidden size-7 text-kgj-gold sm:block" />
         </div>
@@ -140,6 +176,20 @@ const applyOutcomePeriod = () =>
             class="kgj-surface mt-7 flex flex-col gap-3 p-4 sm:flex-row sm:items-end"
             @submit.prevent="applyOutcomePeriod"
         >
+            <label
+                v-if="isAdmin"
+                class="grid flex-1 gap-2 text-sm font-semibold"
+                >Cabang sumber<select v-model="branch" class="kgj-input">
+                    <option value="">Semua cabang</option>
+                    <option
+                        v-for="item in branches"
+                        :key="item.id"
+                        :value="String(item.id)"
+                    >
+                        {{ item.name }}
+                    </option>
+                </select></label
+            >
             <label class="grid flex-1 gap-2 text-sm font-semibold"
                 >Hasil akhir dari<input
                     v-model="outcomeDateFrom"
@@ -156,7 +206,7 @@ const applyOutcomePeriod = () =>
                 Terapkan periode
             </button>
             <Link
-                v-if="outcomeDateFrom || outcomeDateTo"
+                v-if="outcomeDateFrom || outcomeDateTo || branch"
                 class="kgj-button-secondary text-center"
                 href="/statistics"
             >
@@ -261,33 +311,34 @@ const applyOutcomePeriod = () =>
                     <div class="flex items-center gap-2">
                         <UsersRound class="size-5 text-kgj-gold-deep" />
                         <h2 id="workload-heading" class="text-lg font-semibold">
-                            Beban per cabang
+                            {{ workloadTitle }}
                         </h2>
                     </div>
                     <p class="mt-1 text-sm text-kgj-muted">
-                        Jumlah lead aktif berdasarkan CS aktif di tiap cabang.
+                        {{ workloadDescription }}
                     </p>
                 </div>
                 <ul
                     v-if="workload.length"
                     class="divide-y divide-kgj-line border-t border-kgj-line"
                 >
-                    <li
-                        v-for="branch in workload"
-                        :key="branch.name"
-                        class="flex items-center justify-between gap-4 px-5 py-4 sm:px-7"
-                    >
-                        <span>
+                    <li v-for="branch in workload" :key="branch.name">
+                        <Link
+                            :href="workloadLeadsHref(branch)"
+                            class="flex min-h-14 items-center justify-between gap-4 px-5 py-4 transition hover:bg-[#faf7ef] sm:px-7"
+                        >
                             <strong class="block text-sm">{{
                                 branch.name
                             }}</strong>
-                            <span class="mt-1 block text-xs text-kgj-muted">{{
-                                branch.cs_name || 'Belum ada CS aktif'
-                            }}</span>
-                        </span>
-                        <strong class="text-lg tabular-nums">{{
-                            branch.lead_count
-                        }}</strong>
+                            <span class="flex items-center gap-3">
+                                <span class="text-xs text-kgj-muted"
+                                    >Buka lead</span
+                                >
+                                <strong class="text-lg tabular-nums">{{
+                                    branch.lead_count
+                                }}</strong>
+                            </span>
+                        </Link>
                     </li>
                 </ul>
                 <p
@@ -411,7 +462,7 @@ const applyOutcomePeriod = () =>
                     >
                         <Link
                             v-if="factor.active_count"
-                            :href="`/leads?outcome=${report.key}&outcome_factor=${factor.key}`"
+                            :href="outcomeLeadsHref(report.key, factor.key)"
                             class="flex items-center justify-between gap-4 px-5 py-3 transition hover:bg-[#faf7ef] sm:px-7"
                         >
                             <span class="min-w-0 text-sm leading-5">

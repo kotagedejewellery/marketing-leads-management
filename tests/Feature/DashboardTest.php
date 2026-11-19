@@ -119,6 +119,7 @@ class DashboardTest extends TestCase
             [
                 'name' => 'Lead terbaru',
                 'assigned_user_id' => $cs->id,
+                'source_branch_id' => $branchId,
                 'current_stage' => 'closing_repeat',
                 'intent_buying' => 'Nikahan',
                 'usage_date' => '2026-12-12',
@@ -210,6 +211,62 @@ class DashboardTest extends TestCase
             fn (Assert $page) => $page
                 ->where('stats.total', 1)
                 ->where('stats.unclassified', 1),
+        );
+    }
+
+    public function test_admin_can_filter_statistics_by_source_branch(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'admin'])->save();
+        $palaganId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $bandungId = \DB::table('branches')->insertGetId(['name' => 'Bandung']);
+
+        \DB::table('leads')->insert([
+            [
+                'name' => 'Lead Palagan',
+                'source_branch_id' => $palaganId,
+                'current_stage' => 'asked',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'Lead Bandung',
+                'source_branch_id' => $bandungId,
+                'current_stage' => 'clicked',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $this->actingAs($admin)->get("/statistics?branch={$palaganId}")->assertInertia(
+            fn (Assert $page) => $page
+                ->where('stats.total', 1)
+                ->where('stats.warm', 1)
+                ->where('stats.cold', 0)
+                ->where('quality.total', 1)
+                ->where('filters.branch', $palaganId)
+                ->where('workload.0.name', 'Palagan')
+                ->where('workload.0.lead_count', 1)
+                ->has('workload', 1),
+        );
+    }
+
+    public function test_statistics_exposes_active_leads_without_a_source_branch(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'admin'])->save();
+        \DB::table('branches')->insert(['name' => 'Palagan']);
+        \DB::table('leads')->insert([
+            'name' => 'Lead tanpa cabang',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->get('/statistics')->assertInertia(
+            fn (Assert $page) => $page
+                ->where('stats.total', 1)
+                ->where('workload.1.name', 'Tanpa cabang sumber')
+                ->where('workload.1.lead_count', 1),
         );
     }
 

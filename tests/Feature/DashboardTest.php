@@ -266,6 +266,7 @@ class DashboardTest extends TestCase
                 'outcome' => 'loss',
                 'outcome_factor' => 'ghosting',
                 'outcome_recorded_at' => '2026-10-10 09:00:00',
+                'archived_at' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ],

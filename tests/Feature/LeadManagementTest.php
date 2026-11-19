@@ -219,7 +219,7 @@ class LeadManagementTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $this->actingAs($cs)->patch("/leads/{$leadId}", [
+        $this->actingAs($cs)->from('/leads')->patch("/leads/{$leadId}", [
             'inline' => true,
             'revision' => 0,
             'outcome' => 'closing',
@@ -239,7 +239,7 @@ class LeadManagementTest extends TestCase
             'action' => 'Hasil akhir lead diperbarui',
         ]);
 
-        $this->actingAs($cs)->patch("/leads/{$leadId}", [
+        $this->actingAs($cs)->from('/leads')->patch("/leads/{$leadId}", [
             'inline' => true,
             'revision' => 1,
             'outcome' => 'loss',
@@ -269,7 +269,7 @@ class LeadManagementTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $this->actingAs($cs)->patch("/leads/{$leadId}", [
+        $this->actingAs($cs)->from('/leads')->patch("/leads/{$leadId}", [
             'inline' => true,
             'revision' => 0,
             'outcome' => 'loss',
@@ -1527,7 +1527,7 @@ class LeadManagementTest extends TestCase
         $writer->addRow(Row::fromValues([null, 'Monitoring Leads']));
         $writer->addRow(Row::fromValues([null, $date]));
         $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['Whatsapp 1'])));
-        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting*', 'Waktu Chat', 'Keterangan Sumber*', 'Keterangan Campaign*'])));
-        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['1', $phone, '0', 'Dila', 'klik saja', 'nikah', 'halo', '10.38', 'Iklan', 'Bio'])));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting*', 'Waktu Chat', 'Keterangan Sumber*', 'Keterangan Campaign*', 'Definisi Leads'])));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['1', $phone, '0', 'Dila', 'klik saja', 'nikah', 'halo', '10.38', 'Iklan', 'Bio', 'Cold'])));
     }
 }

@@ -6,6 +6,7 @@ use App\Support\DailyLeadTabParser;
 use Google\Auth\Credentials\ServiceAccountCredentials;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -15,6 +16,12 @@ class GoogleSheetSyncService
 {
     private const ROW_LIMIT = 5000;
 
+    private const LAST_COLUMN = 'AZ';
+
+    private const LOCK_NAME = 'lead-google-sheets-sync';
+
+    private const LOCK_SECONDS = 600;
+
     public function __construct(
         private readonly LeadImportService $leadImporter,
         private readonly DailyLeadTabParser $dailyLeadTabParser,
@@ -22,6 +29,21 @@ class GoogleSheetSyncService
 
     /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
     public function sync(?int $actorId = null, ?int $branchId = null): array
+    {
+        $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
+        if (! $lock->get()) {
+            throw new RuntimeException('Sinkronisasi Google Sheets sedang berjalan. Coba lagi beberapa saat lagi.');
+        }
+
+        try {
+            return $this->syncUnlocked($actorId, $branchId);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
+    private function syncUnlocked(?int $actorId, ?int $branchId): array
     {
         $sources = DB::table('branches')
             ->whereNotNull('google_spreadsheet_id')
@@ -42,14 +64,7 @@ class GoogleSheetSyncService
         }
 
         try {
-            $token = (new ServiceAccountCredentials(
-                ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-                $credentialsPath,
-            ))->fetchAuthToken();
-            $accessToken = $token['access_token'] ?? null;
-            if (! is_string($accessToken) || $accessToken === '') {
-                throw new RuntimeException('Token Google Sheets tidak dapat dibuat.');
-            }
+            $accessToken = $this->accessToken($credentialsPath);
         } catch (Throwable $exception) {
             $message = $this->failureMessage($exception);
             $this->recordFailures($this->sourceIds($sources), $message);
@@ -58,7 +73,7 @@ class GoogleSheetSyncService
             throw new RuntimeException($message, previous: $exception);
         }
 
-        $client = Http::withToken($accessToken)->acceptJson()->timeout(25);
+        $client = Http::withToken($accessToken)->acceptJson()->timeout(25)->retry(3, 500);
         $summary = ['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0, 'missing_source_fields' => 0, 'failed' => 0, 'partial' => 0];
         $failures = [];
         foreach ($sources as $source) {
@@ -108,7 +123,7 @@ class GoogleSheetSyncService
     }
 
     /** @return array{rows: list<array<string, string|null>>, missing_source_fields: int, errors: list<string>} */
-    private function readBranch(PendingRequest $client, string $spreadsheetId): array
+    protected function readBranch(PendingRequest $client, string $spreadsheetId): array
     {
         $metadata = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?fields=sheets.properties")->throw()->json();
         $sheets = is_array($metadata) && is_array($metadata['sheets'] ?? null) ? $metadata['sheets'] : [];
@@ -119,7 +134,7 @@ class GoogleSheetSyncService
         if ($tabs === []) {
             throw new RuntimeException('Tidak menemukan tab harian bernama angka, misalnya 1 sampai 31.');
         }
-        $ranges = array_map(fn (string $tab) => "{$tab}!A1:Z".self::ROW_LIMIT, $tabs);
+        $ranges = array_map(fn (string $tab) => "{$tab}!A1:".self::LAST_COLUMN.self::ROW_LIMIT, $tabs);
         $query = implode('&', array_map(fn (string $range) => 'ranges='.rawurlencode($range), $ranges));
         $response = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values:batchGet?{$query}")->throw()->json('valueRanges', []);
         $valueRanges = is_array($response) ? $response : [];
@@ -136,6 +151,20 @@ class GoogleSheetSyncService
         }
 
         return $parsed;
+    }
+
+    protected function accessToken(string $credentialsPath): string
+    {
+        $token = (new ServiceAccountCredentials(
+            ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+            $credentialsPath,
+        ))->fetchAuthToken();
+        $accessToken = $token['access_token'] ?? null;
+        if (! is_string($accessToken) || $accessToken === '') {
+            throw new RuntimeException('Token Google Sheets tidak dapat dibuat.');
+        }
+
+        return $accessToken;
     }
 
     /** @param array<int, int> $branchIds */

@@ -3,13 +3,19 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\GoogleSheetSyncService;
 use App\Services\LeadImportService;
+use App\Support\DailyLeadTabParser;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
+use Mockery;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer;
 use Tests\TestCase;
@@ -119,6 +125,101 @@ class LeadManagementTest extends TestCase
             $table->timestamp('created_at')->nullable();
             $table->timestamp('completed_at')->nullable();
         });
+    }
+
+    public function test_google_sheet_sync_refuses_to_overlap_an_existing_sync(): void
+    {
+        $lock = Cache::lock('lead-google-sheets-sync', 120);
+        $this->assertTrue($lock->get());
+
+        try {
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessage('Sinkronisasi Google Sheets sedang berjalan');
+
+            app(GoogleSheetSyncService::class)->sync();
+        } finally {
+            $lock->release();
+        }
+    }
+
+    public function test_google_sheet_sync_records_a_partial_branch_when_valid_daily_tabs_are_imported(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet-palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Palagan']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])
+            ->makePartial()
+            ->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+        $sync->shouldReceive('readBranch')->once()->andReturn([
+            'rows' => [[
+                'source_row_no' => 'Whatsapp 1 #1',
+                'source_date_raw' => '1 November 2026',
+                'source_tab' => '1',
+                'contact_raw' => '+62 851-0000-0999 Rini',
+                'respond_time' => '0',
+                'imported_cs_name' => 'Sisil',
+                'imported_keterangan' => 'Tanya-Tanya',
+                'raw_kebutuhan' => 'Cincin nikah',
+                'greeting' => 'Halo Rini',
+                'chat_time' => '10.46',
+                'source_description' => 'Organik',
+                'campaign_description' => 'Other',
+                'imported_definition' => 'Warm',
+            ]],
+            'missing_source_fields' => 0,
+            'errors' => ['Tab 2: Header lead utama pada tab 2 belum lengkap.'],
+        ]);
+
+        $summary = $sync->sync($cs->id, $branchId);
+
+        $this->assertSame(1, $summary['inserted']);
+        $this->assertSame(1, $summary['partial']);
+        $this->assertDatabaseHas('lead_sync_runs', ['branch_id' => $branchId, 'status' => 'partial']);
+        $this->assertDatabaseHas('branches', ['id' => $branchId, 'google_sheets_sync_error' => 'Tab 2: Header lead utama pada tab 2 belum lengkap.']);
+    }
+
+    public function test_google_sheet_sync_retries_a_temporary_failure_and_reads_headers_beyond_column_z(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Solo', 'google_spreadsheet_id' => 'sheet-solo']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Solo']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+
+        $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];
+        $batchRequests = 0;
+        Http::fake(function (Request $request) use (&$batchRequests, $headers) {
+            if (str_contains($request->url(), 'fields=sheets.properties')) {
+                return Http::response(['sheets' => [['properties' => ['title' => '1']]]]);
+            }
+            $batchRequests++;
+            if ($batchRequests === 1) {
+                return Http::response([], 503);
+            }
+
+            return Http::response(['valueRanges' => [[
+                'values' => [
+                    [],
+                    ['', '1 November 2026'],
+                    [...array_fill(0, 26, ''), 'Whatsapp 1'],
+                    [...array_fill(0, 26, ''), ...$headers],
+                    [...array_fill(0, 26, ''), '1', '+62 851-0000-0888 Rini', '0', 'Sisil', 'Tanya-Tanya', 'Cincin nikah', 'Halo Rini', '10.46', 'Organik', 'Other', 'Warm'],
+                ],
+            ]]]);
+        });
+
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])
+            ->makePartial()
+            ->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+
+        $summary = $sync->sync($cs->id, $branchId);
+
+        $this->assertSame(1, $summary['inserted']);
+        $this->assertSame(2, $batchRequests);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285100000888', 'greeting' => 'Halo Rini']);
     }
 
     public function test_admin_imports_a_phone_once_and_maps_its_first_milestone(): void
@@ -409,6 +510,32 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177775555', 'source_date_raw' => '2 November 2026']);
         $this->assertDatabaseHas('lead_activity', ['action' => 'Diimpor dari tab harian', 'detail' => 'Sumber: tab 1 (1 November 2026). Ditugaskan otomatis ke CS Yogyakarta (Yogyakarta).']);
         $this->assertDatabaseMissing('leads', ['contact_key' => 'phone:6285177776666']);
+        @unlink($path);
+    }
+
+    public function test_daily_xlsx_import_keeps_valid_tabs_when_another_tab_is_incomplete(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
+        $path = tempnam(sys_get_temp_dir(), 'daily-partial-').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $this->writeDailyLeadSheet($writer, '1', '1 November 2026', '+62 851-7777-7001');
+        $writer->addNewSheetAndMakeItCurrent()->setName('2');
+        $writer->addRow(Row::fromValues([null, '2 November 2026']));
+        $writer->addRow(Row::fromValues(['No', 'Nama/Nomor', 'Respond Time']));
+        $writer->close();
+
+        $this->actingAs($admin)->post('/leads/import', [
+            'csv_file' => new UploadedFile($path, 'daily-partial.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+            'import_mode' => 'daily_tabs',
+            'branch_id' => $branchId,
+        ])->assertRedirect('/leads')
+            ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
+
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177777001']);
         @unlink($path);
     }
 

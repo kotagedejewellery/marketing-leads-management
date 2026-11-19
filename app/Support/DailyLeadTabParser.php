@@ -55,6 +55,10 @@ final class DailyLeadTabParser
      */
     public function parse(string $tab, array $values): array
     {
+        if ($this->isEmpty($values)) {
+            return ['rows' => [], 'missing_source_fields' => 0];
+        }
+
         $sourceDateRow = $values[1] ?? [];
         $sourceDate = $this->value(is_array($sourceDateRow) ? ($sourceDateRow[1] ?? null) : null);
         $headers = [];
@@ -177,6 +181,20 @@ final class DailyLeadTabParser
         $value = preg_replace('/[^\\p{L}\\p{N}]+/u', ' ', $value) ?? '';
 
         return mb_strtolower(trim(preg_replace('/\\s+/u', ' ', $value) ?? ''));
+    }
+
+    /** @param array<int, mixed> $values */
+    private function isEmpty(array $values): bool
+    {
+        foreach ($values as $row) {
+            foreach (is_array($row) ? $row : [] as $cell) {
+                if ($this->value($cell) !== null) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /** @param array<int, mixed> $cells */

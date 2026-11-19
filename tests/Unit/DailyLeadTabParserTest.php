@@ -82,6 +82,24 @@ class DailyLeadTabParserTest extends TestCase
         $this->assertSame(['Tab 2: Header lead utama pada tab 2, baris 3 belum lengkap: Nama CS, Keterangan, Kebutuhan, Greeting, Waktu Chat, Keterangan Sumber, Keterangan Campaign, Definisi Leads.'], $result['errors']);
     }
 
+    public function test_it_ignores_an_empty_future_daily_tab(): void
+    {
+        $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];
+
+        $result = (new DailyLeadTabParser)->parseAll([
+            '1' => [
+                [],
+                ['', '1 November 2026'],
+                $this->dailyRow($headers),
+                $this->dailyRow(['1', '+62 851-0000-0001 Rini', '0', 'Sisil', 'Tanya-Tanya', 'Cincin nikah', 'Halo Rini', '10.46', 'Organik', 'Other', 'Warm']),
+            ],
+            '31' => [[], [], []],
+        ]);
+
+        $this->assertCount(1, $result['rows']);
+        $this->assertSame([], $result['errors']);
+    }
+
     /** @param list<string> $values
      *  @return list<string> */
     private function dailyRow(array $values): array

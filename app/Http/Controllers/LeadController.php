@@ -152,11 +152,14 @@ class LeadController extends Controller
             ->exists()) {
             throw ValidationException::withMessages(['branch_id' => 'Cabang sumber harus memiliki CS default impor yang aktif sebelum data harian dapat diimpor.']);
         }
-        [$headers, $valueRows] = match (true) {
-            $importMode === 'daily_tabs' => $this->readDailyTabsXlsx($request->file('csv_file')->getRealPath()),
-            $extension === 'xlsx' => $this->readXlsx($request->file('csv_file')->getRealPath()),
-            default => $this->readCsv($request->file('csv_file')->getRealPath()),
-        };
+        $dailyErrors = [];
+        if ($importMode === 'daily_tabs') {
+            [$headers, $valueRows, $dailyErrors] = $this->readDailyTabsXlsx($request->file('csv_file')->getRealPath());
+        } else {
+            [$headers, $valueRows] = $extension === 'xlsx'
+                ? $this->readXlsx($request->file('csv_file')->getRealPath())
+                : $this->readCsv($request->file('csv_file')->getRealPath());
+        }
         $headerMap = $this->importHeaderMap($headers);
         if (! $this->hasRequiredImportHeaders($headerMap)) {
             throw ValidationException::withMessages(['csv_file' => 'Header CSV belum sesuai template.']);
@@ -179,10 +182,11 @@ class LeadController extends Controller
         $sourceBranchId = $importMode === 'daily_tabs' ? (int) $data['branch_id'] : null;
         $summary = $this->leadImporter->import($rows, $request->user()->id, null, $sourceBranchId);
 
-        Inertia::flash('toast', [
-            'type' => 'success',
-            'message' => "Import selesai: {$summary['inserted']} baru, {$summary['skipped']} duplikat dilewati, {$summary['unassigned']} perlu ditugaskan, {$summary['needs_review']} perlu review, {$summary['missing_dates']} tanpa tanggal lead.",
-        ]);
+        $message = "Import selesai: {$summary['inserted']} baru, {$summary['skipped']} duplikat dilewati, {$summary['unassigned']} perlu ditugaskan, {$summary['needs_review']} perlu review, {$summary['missing_dates']} tanpa tanggal lead.";
+        if ($dailyErrors !== []) {
+            $message .= ' '.count($dailyErrors).' tab perlu diperbaiki; data dari tab valid tetap masuk.';
+        }
+        Inertia::flash('toast', ['type' => $dailyErrors === [] ? 'success' : 'warning', 'message' => $message]);
 
         return to_route('leads.index');
     }
@@ -952,13 +956,13 @@ class LeadController extends Controller
         return [$headers, $rows];
     }
 
-    /** @return array{0: list<string>, 1: list<array<int, string|null>>} */
+    /** @return array{0: list<string>, 1: list<array<int, string|null>>, 2: list<string>} */
     private function readDailyTabsXlsx(string $path): array
     {
         $reader = new XlsxReader;
         $reader->open($path);
         $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads', 'Tanggal sumber', 'Tab sumber'];
-        $rows = [];
+        $tabs = [];
         $foundDailyTab = false;
 
         foreach ($reader->getSheetIterator() as $sheet) {
@@ -974,28 +978,7 @@ class LeadController extends Controller
                     $row->cells,
                 );
             }
-            try {
-                $parsed = $this->dailyLeadTabParser->parse($sheet->getName(), $values);
-            } catch (\RuntimeException $exception) {
-                $reader->close();
-                throw ValidationException::withMessages(['csv_file' => $exception->getMessage()]);
-            }
-            foreach ($parsed['rows'] as $parsedRow) {
-                if (count($rows) >= self::IMPORT_ROW_LIMIT) {
-                    $reader->close();
-                    throw ValidationException::withMessages(['csv_file' => 'Maksimal 5.000 lead total dari seluruh tab harian. Pecah file lalu coba kembali.']);
-                }
-                $rows[] = [
-                    $parsedRow['source_row_no'], $parsedRow['contact_raw'], $parsedRow['respond_time'], $parsedRow['imported_cs_name'],
-                    $parsedRow['imported_keterangan'], $parsedRow['raw_kebutuhan'], $parsedRow['greeting'], $parsedRow['chat_time'],
-                    $parsedRow['source_description'], $parsedRow['campaign_description'], $parsedRow['imported_definition'],
-                    $parsedRow['source_date_raw'], $parsedRow['source_tab'],
-                ];
-            }
-            if (count($rows) > self::IMPORT_ROW_LIMIT) {
-                $reader->close();
-                throw ValidationException::withMessages(['csv_file' => 'Maksimal 5.000 lead total dari seluruh tab harian. Pecah file lalu coba kembali.']);
-            }
+            $tabs[$sheet->getName()] = $values;
         }
         $reader->close();
 
@@ -1003,7 +986,22 @@ class LeadController extends Controller
             throw ValidationException::withMessages(['csv_file' => 'Tidak menemukan tab harian bernama angka, misalnya 1 sampai 31.']);
         }
 
-        return [$headers, $rows];
+        $parsed = $this->dailyLeadTabParser->parseAll($tabs);
+        if ($parsed['rows'] === [] && $parsed['errors'] !== []) {
+            throw ValidationException::withMessages(['csv_file' => implode(' ', $parsed['errors'])]);
+        }
+        if (count($parsed['rows']) > self::IMPORT_ROW_LIMIT) {
+            throw ValidationException::withMessages(['csv_file' => 'Maksimal 5.000 lead total dari seluruh tab harian. Pecah file lalu coba kembali.']);
+        }
+
+        $rows = array_map(static fn (array $row): array => [
+            $row['source_row_no'], $row['contact_raw'], $row['respond_time'], $row['imported_cs_name'],
+            $row['imported_keterangan'], $row['raw_kebutuhan'], $row['greeting'], $row['chat_time'],
+            $row['source_description'], $row['campaign_description'], $row['imported_definition'],
+            $row['source_date_raw'], $row['source_tab'],
+        ], $parsed['rows']);
+
+        return [$headers, $rows, $parsed['errors']];
     }
 
     /** @param array<string, string> $headerMap */

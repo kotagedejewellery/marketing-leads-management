@@ -22,7 +22,7 @@ class SyncGoogleLeads extends Command
             return self::FAILURE;
         }
 
-        $this->info("{$summary['inserted']} baru, {$summary['resurfaced']} muncul kembali.");
+        $this->info("{$summary['inserted']} baru, {$summary['enriched']} diperbarui, {$summary['resurfaced']} muncul kembali, {$summary['missing_source_fields']} kolom sumber kosong.");
 
         return self::SUCCESS;
     }

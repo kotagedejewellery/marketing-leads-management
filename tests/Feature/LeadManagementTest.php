@@ -63,6 +63,10 @@ class LeadManagementTest extends TestCase
             $table->date('usage_date')->nullable();
             $table->string('budget')->nullable();
             $table->text('keterangan')->nullable();
+            $table->string('outcome')->nullable();
+            $table->string('outcome_factor')->nullable();
+            $table->text('outcome_note')->nullable();
+            $table->timestamp('outcome_recorded_at')->nullable();
             $table->string('current_stage')->nullable();
             $table->timestamp('next_follow_up_at')->nullable();
             $table->timestamp('crm_taken_over_at')->nullable();
@@ -200,6 +204,106 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('leads', ['id' => $leadId, 'current_stage' => 'closing_repeat']);
     }
 
+    public function test_cs_can_record_a_single_closing_or_loss_outcome_with_its_factor(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId]);
+        $leadId = \DB::table('leads')->insertGetId([
+            'name' => 'Lead outcome',
+            'contact_key' => 'phone:6285112345678',
+            'assigned_user_id' => $cs->id,
+            'source_branch_id' => $branchId,
+            'next_follow_up_at' => now()->addDay(),
+            'revision' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($cs)->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'revision' => 0,
+            'outcome' => 'closing',
+            'outcome_factor' => 'offline_experience',
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', [
+            'id' => $leadId,
+            'outcome' => 'closing',
+            'outcome_factor' => 'offline_experience',
+            'outcome_note' => null,
+            'current_stage' => 'closing_repeat',
+            'next_follow_up_at' => null,
+        ]);
+        $this->assertDatabaseHas('lead_activity', [
+            'lead_id' => $leadId,
+            'action' => 'Hasil akhir lead diperbarui',
+        ]);
+
+        $this->actingAs($cs)->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'revision' => 1,
+            'outcome' => 'loss',
+            'outcome_factor' => 'ghosting',
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', [
+            'id' => $leadId,
+            'outcome' => 'loss',
+            'outcome_factor' => 'ghosting',
+        ]);
+    }
+
+    public function test_final_outcome_keeps_the_first_recorded_time_when_its_factor_is_corrected(): void
+    {
+        $cs = $this->user('cs');
+        $recordedAt = now()->subDay()->startOfSecond();
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285112345688',
+            'contact_key' => 'phone:6285112345688',
+            'assigned_user_id' => $cs->id,
+            'outcome' => 'loss',
+            'outcome_factor' => 'ghosting',
+            'outcome_recorded_at' => $recordedAt,
+            'revision' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($cs)->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'revision' => 0,
+            'outcome' => 'loss',
+            'outcome_factor' => 'slow_response',
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', [
+            'id' => $leadId,
+            'outcome_factor' => 'slow_response',
+            'outcome_recorded_at' => $recordedAt,
+        ]);
+    }
+
+    public function test_outcome_lainnya_requires_a_note(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Pusat']);
+        $cs = $this->user('cs', ['branch_id' => $branchId]);
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_key' => 'phone:6285112345679',
+            'assigned_user_id' => $cs->id,
+            'source_branch_id' => $branchId,
+            'revision' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($cs)->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'revision' => 0,
+            'outcome' => 'loss',
+            'outcome_factor' => 'other',
+        ])->assertSessionHasErrors('outcome_note');
+    }
+
     public function test_admin_can_create_a_lead_with_optional_source_data(): void
     {
         $admin = $this->user('admin');
@@ -304,6 +408,38 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177775555', 'source_date_raw' => '2 November 2026']);
         $this->assertDatabaseHas('lead_activity', ['action' => 'Diimpor dari tab harian', 'detail' => 'Sumber: tab 1 (1 November 2026). Ditugaskan otomatis ke CS Yogyakarta (Yogyakarta).']);
         $this->assertDatabaseMissing('leads', ['contact_key' => 'phone:6285177776666']);
+        @unlink($path);
+    }
+
+    public function test_daily_xlsx_import_reads_each_whatsapp_block_and_the_definition_column(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
+        $path = tempnam(sys_get_temp_dir(), 'daily-blocks-').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $writer->getCurrentSheet()->setName('1');
+        $writer->addRow(Row::fromValues([null, 'Monitoring Leads']));
+        $writer->addRow(Row::fromValues([null, '1 November 2026']));
+        $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting*', 'Waktu Chat', 'Keterangan Sumber*', 'Keterangan Campaign*', 'Definisi Leads'];
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['Whatsapp 1'])));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), $headers)));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['1', '+62 851-7777-7111', '0', 'Dila', 'klik saja', '', 'Halo pertama', '10.38', 'Iklan', 'Bio', 'Cold'])));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['Whatsapp 2'])));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), $headers)));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['1', '+62 851-7777-7222', '0', 'Dila', 'diskusi online', 'nikah', 'Halo kedua', '11.40', 'Organik', 'Other', 'Hot'])));
+        $writer->close();
+
+        $this->actingAs($admin)->post('/leads/import', [
+            'csv_file' => new UploadedFile($path, 'daily-blocks.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+            'import_mode' => 'daily_tabs',
+            'branch_id' => $branchId,
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177777111', 'greeting' => 'Halo pertama', 'imported_definition' => 'Cold']);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177777222', 'greeting' => 'Halo kedua', 'imported_definition' => 'Hot']);
         @unlink($path);
     }
 
@@ -607,12 +743,78 @@ class LeadManagementTest extends TestCase
         $rows[0]['source_date_raw'] = '2 November 2026';
         $reappeared = app(LeadImportService::class)->import($rows, null, 'sheet-utama');
 
-        $this->assertSame(['inserted' => 1, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 1, 'needs_review' => 0, 'missing_dates' => 0], $first);
-        $this->assertSame(['inserted' => 0, 'skipped' => 1, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0], $again);
-        $this->assertSame(['inserted' => 0, 'skipped' => 0, 'resurfaced' => 1, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0], $reappeared);
+        $this->assertSame(['enriched' => 0, 'inserted' => 1, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 1, 'needs_review' => 0, 'missing_dates' => 0], $first);
+        $this->assertSame(['enriched' => 0, 'inserted' => 0, 'skipped' => 1, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0], $again);
+        $this->assertSame(['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 1, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0], $reappeared);
         $this->assertDatabaseCount('leads', 1);
         $this->assertDatabaseCount('lead_source_occurrences', 2);
         $this->assertDatabaseHas('lead_activity', ['action' => 'Lead muncul kembali dari Google Sheets']);
+    }
+
+    public function test_reimporting_the_same_source_row_enriches_source_data_without_touching_cs_work(): void
+    {
+        $row = [
+            'source_row_no' => '5',
+            'source_date_raw' => '1 November 2026',
+            'source_tab' => '1',
+            'contact_raw' => '+62 851-7777-1777 Rini',
+            'respond_time' => null,
+            'imported_cs_name' => 'Dila',
+            'imported_keterangan' => 'klik saja',
+            'raw_kebutuhan' => null,
+            'greeting' => null,
+            'chat_time' => '10.38',
+            'source_description' => 'Iklan',
+            'campaign_description' => 'Bio',
+            'imported_definition' => 'Cold',
+        ];
+        app(LeadImportService::class)->import([$row], null, 'sheet-utama');
+        $leadId = (int) \DB::table('leads')->where('contact_key', 'phone:6285177771777')->value('id');
+        \DB::table('leads')->where('id', $leadId)->update(['keterangan' => 'Catatan follow-up CS', 'current_stage' => 'asked']);
+
+        $row['greeting'] = 'Halo, saya ingin konsultasi cincin.';
+        $row['raw_kebutuhan'] = 'Cincin nikah';
+        $summary = app(LeadImportService::class)->import([$row], null, 'sheet-utama');
+
+        $this->assertSame(1, $summary['enriched']);
+        $this->assertDatabaseHas('leads', [
+            'id' => $leadId,
+            'greeting' => 'Halo, saya ingin konsultasi cincin.',
+            'raw_kebutuhan' => 'Cincin nikah',
+            'keterangan' => 'Catatan follow-up CS',
+            'current_stage' => 'asked',
+        ]);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'Data sumber diperbarui dari Google Sheets']);
+    }
+
+    public function test_moving_a_row_inside_the_same_daily_tab_keeps_the_same_lead(): void
+    {
+        $row = [
+            'source_row_no' => 'Whatsapp 1 #1',
+            'source_date_raw' => '1 November 2026',
+            'source_tab' => '1',
+            'contact_raw' => '+62 851-7777-1778 Rini',
+            'respond_time' => '0',
+            'imported_cs_name' => 'Dila',
+            'imported_keterangan' => 'Tanya-Tanya',
+            'raw_kebutuhan' => 'Cincin nikah',
+            'greeting' => 'Halo',
+            'chat_time' => '10.38',
+            'source_description' => 'Iklan',
+            'campaign_description' => 'Bio',
+            'imported_definition' => 'Warm',
+        ];
+        app(LeadImportService::class)->import([$row], null, 'sheet-utama');
+
+        $row['source_row_no'] = 'Whatsapp 2 #1';
+        $row['greeting'] = 'Halo, saya ingin konsultasi cincin.';
+        $summary = app(LeadImportService::class)->import([$row], null, 'sheet-utama');
+
+        $this->assertSame(1, $summary['enriched']);
+        $this->assertSame(0, $summary['resurfaced']);
+        $this->assertDatabaseCount('leads', 1);
+        $this->assertDatabaseCount('lead_source_occurrences', 2);
+        $this->assertDatabaseMissing('lead_activity', ['action' => 'Lead muncul kembali dari Google Sheets']);
     }
 
     public function test_import_from_a_branch_assigns_its_default_import_cs_instead_of_the_source_name(): void
@@ -1024,6 +1226,15 @@ class LeadManagementTest extends TestCase
             'created_at' => now()->subHours(2),
             'updated_at' => now()->subHours(2),
         ]);
+        $closedLead = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285100000018',
+            'contact_key' => 'phone:6285100000018',
+            'outcome' => 'loss',
+            'outcome_factor' => 'ghosting',
+            'next_follow_up_at' => now()->subMinute(),
+            'created_at' => now()->subHours(2),
+            'updated_at' => now()->subHours(2),
+        ]);
         \DB::table('lead_activity')->insert([
             'lead_id' => $activeLead,
             'action' => 'Lead diperbarui',
@@ -1036,6 +1247,7 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('lead_activity', ['lead_id' => $overdueLead, 'action' => 'Lead ditandai CRM otomatis']);
         $this->assertDatabaseHas('leads', ['id' => $activeLead, 'crm_taken_over_at' => null]);
         $this->assertDatabaseHas('leads', ['id' => $unscheduledLead, 'crm_taken_over_at' => null]);
+        $this->assertDatabaseHas('leads', ['id' => $closedLead, 'crm_taken_over_at' => null]);
     }
 
     public function test_admin_can_add_a_cs_pendamping_to_selected_leads(): void

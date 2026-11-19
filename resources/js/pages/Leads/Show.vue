@@ -3,6 +3,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, nextTick, ref } from 'vue';
 import { leadSchema } from '@/lib/lead-schema';
 import { budgetOptions } from '@/lib/lead-options';
+import { outcomeLabel } from '@/lib/lead-outcomes';
 import {
     Dialog,
     DialogClose,
@@ -22,6 +23,9 @@ type Lead = Record<string, string | number | null> & {
     source_branch_id: number | null;
     archived_at: string | null;
     crm_taken_over_at: string | null;
+    outcome: string | null;
+    outcome_factor: string | null;
+    outcome_note: string | null;
     revision: number;
 };
 const props = defineProps<{
@@ -46,6 +50,7 @@ const props = defineProps<{
         branch_name: string;
     }[];
     collaborators: { id: number; name: string; branch_name: string }[];
+    outcomeFactors: Record<string, Record<string, string>>;
     handlingRole: 'admin' | 'primary' | 'collaborator' | 'team';
 }>();
 const page = usePage();
@@ -60,6 +65,9 @@ const form = useForm({
         ? String(props.lead.assigned_user_id)
         : '',
     crm_taken_over: Boolean(props.lead.crm_taken_over_at),
+    outcome: String(props.lead.outcome || ''),
+    outcome_factor: String(props.lead.outcome_factor || ''),
+    outcome_note: String(props.lead.outcome_note || ''),
     revision: props.lead.revision,
     milestones: [...props.milestones],
 });
@@ -92,6 +100,9 @@ const formFields = [
     'next_follow_up_at',
     'assigned_user_id',
     'crm_taken_over',
+    'outcome',
+    'outcome_factor',
+    'outcome_note',
     'milestones',
 ] as const;
 const stageLabel = (value: string | null) =>
@@ -103,6 +114,21 @@ const stageLabel = (value: string | null) =>
         online: 'Diskusi Online',
         closing_repeat: 'Closing / Repeat Order',
     })[value || ''];
+const outcomeOptions = computed(() =>
+    Object.entries(props.outcomeFactors[form.outcome] || {}),
+);
+const changeOutcome = () => {
+    if (!form.outcome) {
+        form.outcome_factor = '';
+        form.outcome_note = '';
+
+        return;
+    }
+    if (!outcomeOptions.value.some(([key]) => key === form.outcome_factor)) {
+        form.outcome_factor = '';
+        form.outcome_note = '';
+    }
+};
 const focusFirstError = () => {
     const field = formFields.find((key) => form.errors[key]);
 
@@ -227,7 +253,8 @@ function stopAssisting() {
                     >{{
                         lead.archived_at
                             ? 'Diarsipkan'
-                            : stageLabel(String(lead.current_stage || '')) ||
+                            : outcomeLabel(String(lead.outcome || '')) ||
+                              stageLabel(String(lead.current_stage || '')) ||
                               lead.imported_definition ||
                               'Belum dikualifikasi'
                     }}</span
@@ -366,6 +393,75 @@ function stopAssisting() {
                     ></label
                 >
             </div>
+            <fieldset class="kgj-surface grid gap-4 p-5 md:grid-cols-2">
+                <legend class="px-1 font-semibold">Hasil akhir</legend>
+                <label class="grid gap-2 text-sm font-semibold"
+                    >Status hasil
+                    <select
+                        id="outcome"
+                        v-model="form.outcome"
+                        class="kgj-input"
+                        :aria-invalid="Boolean(form.errors.outcome)"
+                        @change="changeOutcome"
+                    >
+                        <option value="">Belum ada hasil akhir</option>
+                        <option value="closing">Closing</option>
+                        <option value="loss">Loss</option>
+                    </select>
+                    <span
+                        v-if="form.errors.outcome"
+                        class="font-normal text-[#a23e2b]"
+                        >{{ form.errors.outcome }}</span
+                    >
+                </label>
+                <label
+                    v-if="form.outcome"
+                    class="grid gap-2 text-sm font-semibold"
+                    >{{
+                        form.outcome === 'closing'
+                            ? 'Faktor Closing'
+                            : 'Faktor Loss'
+                    }}
+                    <select
+                        id="outcome_factor"
+                        v-model="form.outcome_factor"
+                        class="kgj-input"
+                        :aria-invalid="Boolean(form.errors.outcome_factor)"
+                    >
+                        <option value="">Pilih faktor utama</option>
+                        <option
+                            v-for="[key, label] in outcomeOptions"
+                            :key="key"
+                            :value="key"
+                        >
+                            {{ label }}
+                        </option>
+                    </select>
+                    <span
+                        v-if="form.errors.outcome_factor"
+                        class="font-normal text-[#a23e2b]"
+                        >{{ form.errors.outcome_factor }}</span
+                    >
+                </label>
+                <label
+                    v-if="form.outcome_factor === 'other'"
+                    class="grid gap-2 text-sm font-semibold md:col-span-2"
+                    >Penjelasan lainnya
+                    <textarea
+                        id="outcome_note"
+                        v-model="form.outcome_note"
+                        rows="2"
+                        class="kgj-input"
+                        placeholder="Jelaskan faktor lainnya"
+                        :aria-invalid="Boolean(form.errors.outcome_note)"
+                    />
+                    <span
+                        v-if="form.errors.outcome_note"
+                        class="font-normal text-[#a23e2b]"
+                        >{{ form.errors.outcome_note }}</span
+                    >
+                </label>
+            </fieldset>
             <section
                 v-if="isAdmin && lead.source_branch_id !== null"
                 class="kgj-surface p-5"

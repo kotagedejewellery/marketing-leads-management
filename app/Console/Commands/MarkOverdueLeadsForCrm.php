@@ -48,6 +48,7 @@ class MarkOverdueLeadsForCrm extends Command
     {
         return DB::table('leads as l')
             ->whereNull('l.archived_at')
+            ->whereNull('l.outcome')
             ->whereNull('l.crm_taken_over_at')
             ->whereNotNull('l.next_follow_up_at')
             ->where('l.next_follow_up_at', '<=', now())

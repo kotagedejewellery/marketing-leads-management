@@ -42,6 +42,10 @@ CREATE TABLE leads (
   usage_date DATE,
   budget VARCHAR(120),
   keterangan TEXT,
+  outcome VARCHAR(20) CHECK (outcome IN ('closing', 'loss') OR outcome IS NULL),
+  outcome_factor VARCHAR(80),
+  outcome_note TEXT,
+  outcome_recorded_at TIMESTAMPTZ,
   current_stage VARCHAR(40) CHECK (current_stage IN ('clicked', 'asked', 'price_list', 'offline', 'online', 'closing_pending_transfer', 'closing', 'repeat_order') OR current_stage IS NULL),
   next_follow_up_at TIMESTAMPTZ,
   archived_at TIMESTAMPTZ,
@@ -51,6 +55,7 @@ CREATE TABLE leads (
 
 CREATE INDEX leads_assigned_user_idx ON leads (assigned_user_id);
 CREATE INDEX leads_updated_at_idx ON leads (updated_at DESC);
+CREATE INDEX leads_outcome_idx ON leads (outcome, outcome_factor) WHERE archived_at IS NULL;
 
 CREATE TABLE lead_milestones (
   lead_id BIGINT NOT NULL REFERENCES leads(id) ON DELETE CASCADE,

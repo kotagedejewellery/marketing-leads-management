@@ -160,7 +160,7 @@ const logout = () =>
             <slot />
         </main>
         <nav
-            class="fixed inset-x-0 bottom-0 z-50 grid border-t border-white/10 bg-kgj-ink px-2 pt-2 shadow-[0_-10px_26px_rgba(32,31,28,0.16)] lg:hidden"
+            class="fixed inset-x-0 bottom-0 z-40 grid border-t border-white/10 bg-kgj-ink px-2 pt-2 shadow-[0_-10px_26px_rgba(32,31,28,0.16)] lg:hidden"
             :style="{
                 gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))`,
                 paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',

@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Http\Requests\UpdateLeadRequest;
 use App\Services\GoogleSheetSyncService;
 use App\Services\LeadImportService;
+use App\Support\DailyLeadTabParser;
 use App\Support\LeadBudgetRanges;
+use App\Support\LeadOutcomeFactors;
 use App\Support\LeadSourceDate;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -34,7 +36,10 @@ class LeadController extends Controller
         'closing_repeat' => 'Closing / Repeat Order',
     ];
 
-    public function __construct(private readonly LeadImportService $leadImporter) {}
+    public function __construct(
+        private readonly LeadImportService $leadImporter,
+        private readonly DailyLeadTabParser $dailyLeadTabParser,
+    ) {}
 
     public function store(Request $request): RedirectResponse
     {
@@ -194,9 +199,12 @@ class LeadController extends Controller
             return to_route('leads.index');
         }
 
-        $message = "Sinkronisasi selesai: {$summary['inserted']} lead baru, {$summary['resurfaced']} muncul kembali.";
+        $message = "Sinkronisasi selesai: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui, {$summary['resurfaced']} muncul kembali.";
         if ($summary['missing_dates']) {
             $message .= " {$summary['missing_dates']} lead baru tanpa tanggal lead; periksa format tanggal sumber.";
+        }
+        if ($summary['missing_source_fields']) {
+            $message .= " {$summary['missing_source_fields']} kolom sumber kosong perlu dilengkapi di Google Sheets.";
         }
         if ($summary['failed']) {
             $message .= " {$summary['failed']} cabang gagal disinkronkan; periksa statusnya di menu Cabang.";
@@ -232,7 +240,7 @@ class LeadController extends Controller
             ->orderBy('b.name')
             ->get(['u.id', 'u.name', 'b.name as branch_name']);
 
-        return Inertia::render('Leads/Show', ['lead' => $record, 'milestones' => $milestones, 'history' => $history, 'csAccounts' => $csAccounts, 'collaborators' => $collaborators, 'handlingRole' => $this->handlingRole($request, $record)]);
+        return Inertia::render('Leads/Show', ['lead' => $record, 'milestones' => $milestones, 'history' => $history, 'csAccounts' => $csAccounts, 'collaborators' => $collaborators, 'outcomeFactors' => LeadOutcomeFactors::all(), 'handlingRole' => $this->handlingRole($request, $record)]);
     }
 
     public function historyPreview(Request $request, int $lead): JsonResponse
@@ -507,6 +515,10 @@ class LeadController extends Controller
         $selected = array_key_exists('milestones', $data)
             ? $data['milestones']
             : DB::table('lead_milestones')->where('lead_id', $lead)->where('is_active', true)->pluck('milestone')->all();
+        if (($data['outcome'] ?? null) === 'closing' && ! in_array('closing_repeat', $selected, true)) {
+            $selected[] = 'closing_repeat';
+        }
+        $selected = array_values(array_unique($selected));
         $isAdmin = $request->user()->role === 'admin';
 
         $assignedOwner = null;
@@ -561,6 +573,31 @@ class LeadController extends Controller
                 }
             }
 
+            $outcomeChanged = false;
+            if (array_key_exists('outcome', $data)) {
+                $outcome = $data['outcome'] ?: null;
+                $factor = $outcome ? (string) $data['outcome_factor'] : null;
+                $note = $outcome ? (trim((string) ($data['outcome_note'] ?? '')) ?: null) : null;
+                if (($record->outcome ?? null) !== $outcome || ($record->outcome_factor ?? null) !== $factor || ($record->outcome_note ?? null) !== $note) {
+                    $updates['outcome'] = $outcome;
+                    $updates['outcome_factor'] = $factor;
+                    $updates['outcome_note'] = $note;
+                    $updates['outcome_recorded_at'] = $outcome ? ($record->outcome_recorded_at ?? now()) : null;
+                    if ($outcome && ($record->next_follow_up_at !== null || ($updates['next_follow_up_at'] ?? null) !== null)) {
+                        $updates['next_follow_up_at'] = null;
+                        $changes[] = 'Tindak lanjut berikutnya dihentikan';
+                    }
+                    if ($outcome && ($record->crm_taken_over_at !== null || ($updates['crm_taken_over_at'] ?? null) !== null)) {
+                        $updates['crm_taken_over_at'] = null;
+                        $changes[] = 'Penanda pengambilalihan CRM dibatalkan';
+                    }
+                    $outcomeChanged = true;
+                    $changes[] = $outcome
+                        ? 'Hasil akhir: '.($outcome === 'closing' ? 'Closing' : 'Loss').' — '.LeadOutcomeFactors::label($outcome, $factor)
+                        : 'Hasil akhir dibuka kembali';
+                }
+            }
+
             $active = DB::table('lead_milestones')->where('lead_id', $lead)->where('is_active', true)->pluck('milestone')->all();
             foreach (self::MILESTONES as $milestone => $label) {
                 $enabled = in_array($milestone, $selected, true);
@@ -582,7 +619,7 @@ class LeadController extends Controller
 
             if ($updates || $changes) {
                 DB::table('leads')->where('id', $lead)->update($updates + ['updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
-                DB::table('lead_activity')->insert(['lead_id' => $lead, 'actor_id' => $request->user()->id, 'action' => 'Lead diperbarui', 'detail' => implode('; ', $changes), 'created_at' => now()]);
+                DB::table('lead_activity')->insert(['lead_id' => $lead, 'actor_id' => $request->user()->id, 'action' => $outcomeChanged ? 'Hasil akhir lead diperbarui' : 'Lead diperbarui', 'detail' => implode('; ', $changes), 'created_at' => now()]);
             }
         });
 
@@ -676,7 +713,7 @@ class LeadController extends Controller
     }
 
     /**
-     * @return object{id: int, assigned_user_id: int|null, source_branch_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null, lead_created_on: string|null, created_at: string|null}
+     * @return object{id: int, assigned_user_id: int|null, source_branch_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, outcome: string|null, outcome_factor: string|null, outcome_note: string|null, outcome_recorded_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null, lead_created_on: string|null, created_at: string|null}
      */
     private function visibleLead(Request $request, int $lead, ?bool $archived = false, bool $requiresHandling = false): object
     {
@@ -688,7 +725,7 @@ class LeadController extends Controller
 
         $record = $query->first() ?? abort(404);
 
-        /** @var object{id: int, assigned_user_id: int|null, source_branch_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null, lead_created_on: string|null, created_at: string|null} $record */
+        /** @var object{id: int, assigned_user_id: int|null, source_branch_id: int|null, archived_at: string|null, crm_taken_over_at: string|null, outcome: string|null, outcome_factor: string|null, outcome_note: string|null, outcome_recorded_at: string|null, revision: int, current_stage: string|null, intent_buying: string|null, usage_date: string|null, budget: string|null, keterangan: string|null, next_follow_up_at: string|null, lead_created_on: string|null, created_at: string|null} $record */
         return $record;
     }
 
@@ -916,7 +953,7 @@ class LeadController extends Controller
     {
         $reader = new XlsxReader;
         $reader->open($path);
-        $headers = [];
+        $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads', 'Tanggal sumber', 'Tab sumber'];
         $rows = [];
         $foundDailyTab = false;
 
@@ -925,50 +962,35 @@ class LeadController extends Controller
                 continue;
             }
             $foundDailyTab = true;
-            $sourceDate = '';
-            $dailyHeaders = [];
-            $rowNumber = 0;
+            $values = [];
 
             foreach ($sheet->getRowIterator() as $row) {
-                $rowNumber++;
-                $values = array_map(
+                $values[] = array_map(
                     fn ($cell) => $this->spreadsheetValue($cell instanceof FormulaCell ? $cell->getComputedValue() : $cell->getValue()),
                     $row->cells,
                 );
-                if ($rowNumber === 2) {
-                    $sourceDate = $values[1] ?? '';
-                }
-                if ($rowNumber === 4) {
-                    $dailyHeaders = $this->cleanHeaders(array_slice($values, 15, 10));
-
-                    continue;
-                }
-                if ($rowNumber <= 4) {
-                    continue;
-                }
-
-                $dailyValues = array_slice($values, 15, 10);
-                if (trim((string) ($dailyValues[1] ?? '')) === '') {
-                    continue;
-                }
+            }
+            try {
+                $parsed = $this->dailyLeadTabParser->parse($sheet->getName(), $values);
+            } catch (\RuntimeException $exception) {
+                $reader->close();
+                throw ValidationException::withMessages(['csv_file' => $exception->getMessage()]);
+            }
+            foreach ($parsed['rows'] as $parsedRow) {
                 if (count($rows) >= self::IMPORT_ROW_LIMIT) {
                     $reader->close();
                     throw ValidationException::withMessages(['csv_file' => 'Maksimal 5.000 lead total dari seluruh tab harian. Pecah file lalu coba kembali.']);
                 }
-                $rows[] = [...$dailyValues, $sourceDate, $sheet->getName()];
+                $rows[] = [
+                    $parsedRow['source_row_no'], $parsedRow['contact_raw'], $parsedRow['respond_time'], $parsedRow['imported_cs_name'],
+                    $parsedRow['imported_keterangan'], $parsedRow['raw_kebutuhan'], $parsedRow['greeting'], $parsedRow['chat_time'],
+                    $parsedRow['source_description'], $parsedRow['campaign_description'], $parsedRow['imported_definition'],
+                    $parsedRow['source_date_raw'], $parsedRow['source_tab'],
+                ];
             }
-
-            if (! $this->hasRequiredImportHeaders($this->importHeaderMap($dailyHeaders))) {
+            if (count($rows) > self::IMPORT_ROW_LIMIT) {
                 $reader->close();
-                throw ValidationException::withMessages(['csv_file' => "Struktur lead utama pada tab {$sheet->getName()} belum sesuai."]);
-            }
-
-            $dailyHeaders = [...$dailyHeaders, 'Tanggal sumber', 'Tab sumber'];
-            if ($headers === []) {
-                $headers = $dailyHeaders;
-            } elseif ($headers !== $dailyHeaders) {
-                $reader->close();
-                throw ValidationException::withMessages(['csv_file' => "Header tab {$sheet->getName()} berbeda dari tab harian lainnya."]);
+                throw ValidationException::withMessages(['csv_file' => 'Maksimal 5.000 lead total dari seluruh tab harian. Pecah file lalu coba kembali.']);
             }
         }
         $reader->close();

@@ -10,6 +10,9 @@ type Lead = {
     usage_date: string | null;
     budget: string | null;
     keterangan: string | null;
+    outcome: string | null;
+    outcome_factor: string | null;
+    outcome_note: string | null;
     next_follow_up_at: string | null;
     crm_taken_over_at: string | null;
     revision: number;
@@ -20,6 +23,9 @@ type QuickUpdateFields = {
     usage_date: string;
     budget: string;
     keterangan: string;
+    outcome: string;
+    outcome_factor: string;
+    outcome_note: string;
     next_follow_up_at: string;
     crm_taken_over: boolean;
     revision: number;
@@ -31,6 +37,7 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
 const props = withDefaults(
     defineProps<{
         lead: Lead;
+        outcomeFactors: Record<string, Record<string, string>>;
         variant?: 'card' | 'table';
         retrySaveVersion?: number;
         canMarkCrm?: boolean;
@@ -48,6 +55,9 @@ const values = reactive<QuickUpdateFields>({
     usage_date: props.lead.usage_date || '',
     budget: props.lead.budget || '',
     keterangan: props.lead.keterangan || '',
+    outcome: props.lead.outcome || '',
+    outcome_factor: props.lead.outcome_factor || '',
+    outcome_note: props.lead.outcome_note || '',
     next_follow_up_at: toDateTimeLocal(props.lead.next_follow_up_at),
     crm_taken_over: Boolean(props.lead.crm_taken_over_at),
     revision: props.lead.revision,
@@ -96,6 +106,9 @@ const snapshot = (): QuickUpdateFields => ({
     usage_date: values.usage_date,
     budget: values.budget,
     keterangan: values.keterangan,
+    outcome: values.outcome,
+    outcome_factor: values.outcome_factor,
+    outcome_note: values.outcome_note,
     next_follow_up_at: values.next_follow_up_at,
     crm_taken_over: values.crm_taken_over,
     revision: values.revision,
@@ -124,6 +137,15 @@ const changedPayload = (current: QuickUpdateFields): QuickUpdatePayload => {
     if (current.budget !== savedValues.budget) payload.budget = current.budget;
     if (current.keterangan !== savedValues.keterangan)
         payload.keterangan = current.keterangan;
+    if (
+        current.outcome !== savedValues.outcome ||
+        current.outcome_factor !== savedValues.outcome_factor ||
+        current.outcome_note !== savedValues.outcome_note
+    ) {
+        payload.outcome = current.outcome;
+        payload.outcome_factor = current.outcome_factor;
+        payload.outcome_note = current.outcome_note;
+    }
     if (current.next_follow_up_at !== savedValues.next_follow_up_at)
         payload.next_follow_up_at = current.next_follow_up_at;
     if (
@@ -152,6 +174,20 @@ watch(
 const save = () => {
     waiting.value = false;
     if (!isDirty.value) return;
+    if (
+        values.outcome &&
+        (!values.outcome_factor ||
+            (values.outcome_factor === 'other' && !values.outcome_note.trim()))
+    ) {
+        invalidField.value = values.outcome_factor
+            ? 'outcome_note'
+            : 'outcome_factor';
+        saveError.value = values.outcome_factor
+            ? 'Jelaskan faktor lainnya sebelum menyimpan.'
+            : 'Pilih faktor hasil akhir sebelum menyimpan.';
+
+        return;
+    }
     if (processing.value) {
         queued.value = true;
 
@@ -217,7 +253,39 @@ const queueSave = (delay = 0) => {
 };
 const saveImmediately = () => queueSave();
 const saveAfterTyping = () => queueSave(650);
+const outcomeOptions = computed(() =>
+    Object.entries(props.outcomeFactors[values.outcome] || {}),
+);
+const changeOutcome = () => {
+    if (!values.outcome) {
+        values.outcome_factor = '';
+        values.outcome_note = '';
+        saveImmediately();
+
+        return;
+    }
+    if (!outcomeOptions.value.some(([key]) => key === values.outcome_factor)) {
+        values.outcome_factor = '';
+        values.outcome_note = '';
+    }
+};
+const saveOutcome = () => {
+    if (
+        !values.outcome ||
+        !values.outcome_factor ||
+        (values.outcome_factor === 'other' && !values.outcome_note.trim())
+    ) {
+        return;
+    }
+    saveImmediately();
+};
 const retrySave = () => queueSave(0);
+const flushPendingSave = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    if (!processing.value && isDirty.value) save();
+};
+
+defineExpose({ flushPendingSave });
 
 watch(
     () => props.retrySaveVersion,
@@ -227,7 +295,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
-    if (saveTimer) clearTimeout(saveTimer);
+    flushPendingSave();
     if (savedTimer) clearTimeout(savedTimer);
     emit('save-state', props.lead.id, 'idle', '');
 });
@@ -252,6 +320,61 @@ onBeforeUnmount(() => {
                     />
                     <span>{{ label }}</span>
                 </label>
+            </div>
+        </td>
+        <td class="min-w-72 p-3 align-middle">
+            <div class="grid gap-2">
+                <select
+                    v-model="values.outcome"
+                    class="kgj-input w-full"
+                    aria-label="Hasil akhir lead"
+                    :aria-invalid="isInvalid('outcome')"
+                    :aria-describedby="saveError ? errorId : undefined"
+                    @change="changeOutcome"
+                >
+                    <option value="">Belum ada hasil akhir</option>
+                    <option value="closing">Closing</option>
+                    <option value="loss">Loss</option>
+                </select>
+                <select
+                    v-if="values.outcome"
+                    v-model="values.outcome_factor"
+                    class="kgj-input w-full"
+                    :aria-label="
+                        values.outcome === 'closing'
+                            ? 'Faktor Closing'
+                            : 'Faktor Loss'
+                    "
+                    :aria-invalid="isInvalid('outcome_factor')"
+                    :aria-describedby="saveError ? errorId : undefined"
+                    @change="saveOutcome"
+                >
+                    <option value="">
+                        {{
+                            values.outcome === 'closing'
+                                ? 'Pilih faktor closing'
+                                : 'Pilih faktor loss'
+                        }}
+                    </option>
+                    <option
+                        v-for="[key, label] in outcomeOptions"
+                        :key="key"
+                        :value="key"
+                    >
+                        {{ label }}
+                    </option>
+                </select>
+                <input
+                    v-if="values.outcome_factor === 'other'"
+                    v-model="values.outcome_note"
+                    class="kgj-input w-full"
+                    placeholder="Jelaskan faktor lainnya"
+                    aria-label="Catatan faktor lainnya"
+                    :aria-invalid="isInvalid('outcome_note')"
+                    :aria-describedby="saveError ? errorId : undefined"
+                    @input="saveAfterTyping"
+                    @blur="saveOutcome"
+                />
             </div>
         </td>
         <td class="min-w-40 p-3 align-middle">
@@ -349,19 +472,19 @@ onBeforeUnmount(() => {
         class="min-w-0 lg:min-w-[34rem]"
         :aria-label="`Update cepat lead ${lead.id}`"
     >
-        <div class="grid gap-3 lg:grid-cols-3">
+        <div class="grid gap-4 sm:grid-cols-3">
             <fieldset
                 v-for="group in groups"
                 :key="group.label"
-                class="rounded-lg bg-kgj-canvas p-3"
+                class="min-w-0"
             >
-                <legend class="px-1 text-sm font-semibold">
+                <legend class="text-sm font-semibold">
                     {{ group.label }}
                 </legend>
                 <label
                     v-for="[value, label] in group.items"
                     :key="value"
-                    class="mt-2 flex min-h-11 cursor-pointer items-center gap-2 text-sm text-kgj-ink"
+                    class="mt-2 flex min-h-9 cursor-pointer items-center gap-2 text-sm text-kgj-ink"
                 >
                     <input
                         v-model="values.milestones"
@@ -374,6 +497,60 @@ onBeforeUnmount(() => {
                 </label>
             </fieldset>
         </div>
+
+        <fieldset class="mt-4 grid gap-3 rounded-xl border border-kgj-line p-4">
+            <legend class="px-1 text-sm font-semibold">Hasil akhir</legend>
+            <label class="grid gap-2 text-sm font-semibold"
+                >Status hasil
+                <select
+                    v-model="values.outcome"
+                    class="kgj-input"
+                    :aria-invalid="isInvalid('outcome')"
+                    @change="changeOutcome"
+                >
+                    <option value="">Belum ada hasil akhir</option>
+                    <option value="closing">Closing</option>
+                    <option value="loss">Loss</option>
+                </select>
+            </label>
+            <label
+                v-if="values.outcome"
+                class="grid gap-2 text-sm font-semibold"
+                >{{
+                    values.outcome === 'closing'
+                        ? 'Faktor Closing'
+                        : 'Faktor Loss'
+                }}
+                <select
+                    v-model="values.outcome_factor"
+                    class="kgj-input"
+                    :aria-invalid="isInvalid('outcome_factor')"
+                    @change="saveOutcome"
+                >
+                    <option value="">Pilih faktor utama</option>
+                    <option
+                        v-for="[key, label] in outcomeOptions"
+                        :key="key"
+                        :value="key"
+                    >
+                        {{ label }}
+                    </option>
+                </select>
+            </label>
+            <label
+                v-if="values.outcome_factor === 'other'"
+                class="grid gap-2 text-sm font-semibold"
+                >Penjelasan lainnya
+                <textarea
+                    v-model="values.outcome_note"
+                    class="kgj-input min-h-20 resize-y"
+                    placeholder="Jelaskan faktor lainnya"
+                    :aria-invalid="isInvalid('outcome_note')"
+                    @input="saveAfterTyping"
+                    @blur="saveOutcome"
+                />
+            </label>
+        </fieldset>
 
         <div class="mt-4 grid gap-4 sm:grid-cols-2">
             <label class="grid gap-2 text-sm font-semibold"
@@ -443,6 +620,26 @@ onBeforeUnmount(() => {
                 @blur="saveImmediately"
             />
         </label>
+
+        <p
+            class="mt-4 text-sm"
+            :class="{
+                'text-kgj-muted': saveState === 'idle',
+                'text-kgj-gold-deep': saveState === 'saving',
+                'text-[#49654e]': saveState === 'saved',
+                'text-kgj-rose':
+                    saveState === 'error' || saveState === 'conflict',
+            }"
+            role="status"
+        >
+            {{
+                saveState === 'saving'
+                    ? 'Menyimpan perubahan...'
+                    : saveState === 'saved'
+                      ? 'Tersimpan otomatis.'
+                      : saveError || 'Perubahan disimpan otomatis.'
+            }}
+        </p>
 
         <div
             class="mt-4 flex flex-col gap-3 border-t border-[#e7dfcf] pt-4 sm:flex-row sm:items-center sm:justify-between"

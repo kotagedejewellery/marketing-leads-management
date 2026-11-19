@@ -15,4 +15,8 @@
 - **CS default impor**: salah satu CS aktif pada cabang yang menerima penugasan utama untuk lead baru dari spreadsheet cabang tersebut.
 - **Batas tindak lanjut**: waktu follow-up berikutnya yang ditetapkan CS pada sebuah lead. Lead yang melewati waktu ini tanpa aktivitas lanjutan akan ditandai CRM.
 - **Pengambilalihan CRM**: penanda otomatis bahwa lead melewati batas tindak lanjut tanpa aktivitas lanjutan. Penanda ini tidak mengganti CS utama dan dapat dibatalkan bila dibuat keliru.
+- **Hasil akhir lead**: hasil operasional terakhir yang dipilih CS, yaitu Closing atau Loss. Penetapan hasil akhir menghentikan follow-up dan membatalkan penanda Pengambilalihan CRM; Closing juga menandai tahap Closing / Repeat Order.
+- **Faktor hasil akhir**: satu alasan utama terstruktur untuk hasil Closing atau Loss. Jika faktor Lainnya dipilih, catatan penjelas wajib diisi.
+- **Tanggal hasil akhir**: waktu pertama kali Closing atau Loss dicatat. Koreksi faktor tidak mengubah tanggal ini agar laporan periode tetap konsisten.
+- **Lead Loss**: lead dengan hasil akhir Loss. Lead ini tetap berada di daftar kerja sampai diarsipkan secara terpisah dan dapat dibuka kembali bila customer melanjutkan percakapan.
 - **Konflik pembaruan**: kondisi ketika lead telah diperbarui CS lain sebelum perubahan yang sedang disimpan selesai. CS perlu membuka ulang detail lead sebelum melanjutkan perubahan.

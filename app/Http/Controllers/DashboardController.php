@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\GoogleSheetSyncService;
 use App\Support\LeadBudgetRanges;
+use App\Support\LeadOutcomeFactors;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,7 +35,7 @@ class DashboardController extends Controller
             ->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')
             ->leftJoin('branches as source_b', 'source_b.id', '=', 'l.source_branch_id')
             ->leftJoin('branches as conflict_b', 'conflict_b.id', '=', 'l.source_conflict_branch_id')
-            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.assigned_user_id', 'l.source_branch_id', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
+            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.assigned_user_id', 'l.source_branch_id', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.outcome', 'l.outcome_factor', 'l.outcome_note', 'l.outcome_recorded_at', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
             ->orderByDesc('l.updated_at');
 
         $showArchived = $request->boolean('archived');
@@ -49,6 +50,15 @@ class DashboardController extends Controller
         }
         if ($request->filled('stage')) {
             $query->where('l.current_stage', $request->string('stage')->toString());
+        }
+        if ($request->filled('outcome')) {
+            match ($request->string('outcome')->toString()) {
+                'pending' => $query->whereNull('l.outcome'),
+                default => $query->where('l.outcome', $request->string('outcome')->toString()),
+            };
+        }
+        if ($request->filled('outcome_factor')) {
+            $query->where('l.outcome_factor', $request->string('outcome_factor')->toString());
         }
         if ($request->filled('intent')) {
             $query->where('l.intent_buying', $request->string('intent')->toString());
@@ -179,23 +189,36 @@ class DashboardController extends Controller
             ->orderBy('b.name')
             ->get(['u.id', 'u.name', 'u.branch_id', 'b.name as branch_name']);
 
+        $sheetSync = $request->user()->role === 'admin'
+            ? DB::table('lead_sync_runs')->where('source', 'google_sheets')->orderByDesc('completed_at')->first(['status', 'completed_at', 'summary'])
+            : null;
+        if ($sheetSync && $sheetSync->summary) {
+            $sheetSync->summary = json_decode((string) $sheetSync->summary, true) ?: null;
+        }
+
         return Inertia::render('Leads/Index', [
             'leads' => $leads,
-            'filters' => $request->only('q', 'branch', 'stage', 'queue', 'intent', 'budget', 'lead_date_from', 'lead_date_to', 'lead_date_status', 'follow_up', 'handling', 'crm', 'cs_user_id', 'archived'),
+            'filters' => $request->only('q', 'branch', 'stage', 'outcome', 'outcome_factor', 'queue', 'intent', 'budget', 'lead_date_from', 'lead_date_to', 'lead_date_status', 'follow_up', 'handling', 'crm', 'cs_user_id', 'archived'),
             'archiveMode' => $showArchived,
             'branches' => $request->user()->role === 'admin' ? DB::table('branches')->orderBy('name')->get(['id', 'name']) : [],
             'csAccounts' => $csAccounts,
-            'sheetSync' => $request->user()->role === 'admin'
-                ? DB::table('lead_sync_runs')->where('source', 'google_sheets')->orderByDesc('completed_at')->first(['status', 'completed_at'])
-                : null,
+            'outcomeFactors' => LeadOutcomeFactors::all(),
+            'sheetSync' => $sheetSync,
         ]);
     }
 
     public function statistics(Request $request): Response
     {
+        $this->validateStatisticsFilters($request);
+
         return Inertia::render('Statistics', [
             'stats' => $this->stats($request),
             'quality' => $this->quality($request),
+            'outcomes' => $this->outcomes($request),
+            'outcomePeriod' => [
+                'from' => $request->string('outcome_date_from')->toString() ?: null,
+                'to' => $request->string('outcome_date_to')->toString() ?: null,
+            ],
             'workload' => $request->user()->role === 'admin' ? $this->workload() : [],
         ]);
     }
@@ -318,7 +341,11 @@ class DashboardController extends Controller
             return back();
         }
 
-        Inertia::flash('toast', ['type' => $summary['failed'] ? 'error' : 'success', 'message' => $summary['failed'] ? 'Sinkronisasi cabang gagal. Periksa konfigurasi atau akun CS.' : "Sinkronisasi cabang selesai: {$summary['inserted']} lead baru."]);
+        $message = "Sinkronisasi cabang selesai: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui.";
+        if ($summary['missing_source_fields']) {
+            $message .= " {$summary['missing_source_fields']} kolom sumber kosong perlu dilengkapi di Google Sheets.";
+        }
+        Inertia::flash('toast', ['type' => $summary['failed'] ? 'error' : 'success', 'message' => $summary['failed'] ? 'Sinkronisasi cabang gagal. Periksa konfigurasi atau akun CS.' : $message]);
 
         return back();
     }
@@ -477,18 +504,58 @@ class DashboardController extends Controller
             ->all());
     }
 
-    /** @return array{total: int, complete: int, follow_up_set: int} */
+    /** @return array{total: int, complete: int, follow_up_set: int, needs_qualification: int, without_follow_up: int} */
     private function quality(Request $request): array
     {
         $counts = (array) $this->activeLeads($request)
-            ->selectRaw('COUNT(*) as total, COALESCE(SUM(CASE WHEN l.intent_buying IS NOT NULL AND l.usage_date IS NOT NULL AND l.budget IS NOT NULL THEN 1 ELSE 0 END), 0) as complete, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NOT NULL THEN 1 ELSE 0 END), 0) as follow_up_set')
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(CASE WHEN l.intent_buying IS NOT NULL AND l.usage_date IS NOT NULL AND l.budget IS NOT NULL THEN 1 ELSE 0 END), 0) as complete, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NOT NULL THEN 1 ELSE 0 END), 0) as follow_up_set, COALESCE(SUM(CASE WHEN l.intent_buying IS NULL OR l.usage_date IS NULL OR l.budget IS NULL THEN 1 ELSE 0 END), 0) as needs_qualification, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NULL THEN 1 ELSE 0 END), 0) as without_follow_up')
             ->first();
 
         return [
             'total' => (int) ($counts['total'] ?? 0),
             'complete' => (int) ($counts['complete'] ?? 0),
             'follow_up_set' => (int) ($counts['follow_up_set'] ?? 0),
+            'needs_qualification' => (int) ($counts['needs_qualification'] ?? 0),
+            'without_follow_up' => (int) ($counts['without_follow_up'] ?? 0),
         ];
+    }
+
+    /** @return array{closing: array{total: int, factors: list<array{key: string, label: string, count: int, active_count: int}>}, loss: array{total: int, factors: list<array{key: string, label: string, count: int, active_count: int}>}} */
+    private function outcomes(Request $request): array
+    {
+        $counts = $this->outcomeLeads($request)
+            ->whereNotNull('l.outcome')
+            ->whereNotNull('l.outcome_factor')
+            ->groupBy('l.outcome', 'l.outcome_factor')
+            ->pluck(DB::raw('COUNT(*)'), DB::raw("l.outcome || ':' || l.outcome_factor"))
+            ->all();
+        $activeCounts = $this->outcomeLeads($request)
+            ->whereNull('l.archived_at')
+            ->whereNotNull('l.outcome')
+            ->whereNotNull('l.outcome_factor')
+            ->groupBy('l.outcome', 'l.outcome_factor')
+            ->pluck(DB::raw('COUNT(*)'), DB::raw("l.outcome || ':' || l.outcome_factor"))
+            ->all();
+
+        $report = [];
+        foreach (['closing', 'loss'] as $outcome) {
+            $factors = [];
+            $total = 0;
+            foreach (LeadOutcomeFactors::forOutcome($outcome) as $key => $label) {
+                $count = (int) ($counts["{$outcome}:{$key}"] ?? 0);
+                $total += $count;
+                $factors[] = [
+                    'key' => $key,
+                    'label' => $label,
+                    'count' => $count,
+                    'active_count' => (int) ($activeCounts["{$outcome}:{$key}"] ?? 0),
+                ];
+            }
+            $report[$outcome] = ['total' => $total, 'factors' => $factors];
+        }
+
+        /** @var array{closing: array{total: int, factors: list<array{key: string, label: string, count: int, active_count: int}>}, loss: array{total: int, factors: list<array{key: string, label: string, count: int, active_count: int}>}} $report */
+        return $report;
     }
 
     /** @return list<\stdClass> */
@@ -505,7 +572,25 @@ class DashboardController extends Controller
 
     private function activeLeads(Request $request): Builder
     {
-        $query = DB::table('leads as l')->whereNull('l.archived_at');
+        return $this->visibleLeads($request)->whereNull('l.archived_at');
+    }
+
+    private function outcomeLeads(Request $request): Builder
+    {
+        $query = $this->visibleLeads($request);
+        if ($request->filled('outcome_date_from')) {
+            $query->whereDate('l.outcome_recorded_at', '>=', $request->string('outcome_date_from')->toString());
+        }
+        if ($request->filled('outcome_date_to')) {
+            $query->whereDate('l.outcome_recorded_at', '<=', $request->string('outcome_date_to')->toString());
+        }
+
+        return $query;
+    }
+
+    private function visibleLeads(Request $request): Builder
+    {
+        $query = DB::table('leads as l');
         $this->restrictToVisibleLeads($query, $request, 'l');
 
         return $query;
@@ -539,6 +624,8 @@ class DashboardController extends Controller
             'q' => ['nullable', 'string', 'max:255'],
             'branch' => ['nullable', 'integer', 'exists:branches,id'],
             'stage' => ['nullable', Rule::in(['clicked', 'asked', 'price_list', 'offline', 'online', 'closing_repeat'])],
+            'outcome' => ['nullable', Rule::in(['closing', 'loss', 'pending'])],
+            'outcome_factor' => ['nullable', Rule::in(array_keys(LeadOutcomeFactors::CLOSING + LeadOutcomeFactors::LOSS))],
             'queue' => ['nullable', Rule::in(['unassigned', 'needs_qualification', 'follow_up_due', 'crm_taken_over', 'source_conflict'])],
             'intent' => ['nullable', Rule::in(['Tunangan', 'Lamaran', 'Nikahan', 'Anniversary', 'Lainnya'])],
             'budget' => ['nullable', Rule::in(LeadBudgetRanges::OPTIONS)],
@@ -550,6 +637,14 @@ class DashboardController extends Controller
             'crm' => ['nullable', Rule::in(['taken_over', 'not_taken_over'])],
             'cs_user_id' => ['nullable', Rule::exists('users', 'id')->where('role', 'cs')->where('active', true)],
             'archived' => ['nullable', 'boolean'],
+        ]);
+    }
+
+    private function validateStatisticsFilters(Request $request): void
+    {
+        $request->validate([
+            'outcome_date_from' => ['nullable', 'date', 'before_or_equal:outcome_date_to'],
+            'outcome_date_to' => ['nullable', 'date', 'after_or_equal:outcome_date_from'],
         ]);
     }
 }

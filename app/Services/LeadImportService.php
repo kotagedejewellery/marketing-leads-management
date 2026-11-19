@@ -18,7 +18,7 @@ class LeadImportService
 
     /**
      * @param  list<array<string, string|null>>  $rows
-     * @return array{inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int}
+     * @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int}
      */
     public function import(array $rows, ?int $actorId, ?string $spreadsheetId = null, ?int $sourceBranchId = null): array
     {
@@ -42,7 +42,7 @@ class LeadImportService
             ->groupBy(fn (object $user) => $this->csKey($user->name))
             ->map(fn ($users) => $users->count() === 1 ? $users->first()->id : null)
             ->all();
-        $summary = ['inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0];
+        $summary = ['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0];
 
         DB::transaction(function () use ($rows, $actorId, $spreadsheetId, $sourceBranchId, $sourceBranch, $branchOwner, $known, $csByName, &$summary): void {
             foreach ($rows as $row) {
@@ -53,8 +53,28 @@ class LeadImportService
 
                 $key = $this->contactKey($contact);
                 $sourceHash = $spreadsheetId ? $this->sourceHash($spreadsheetId, $row, $key) : null;
-                if ($sourceHash && DB::table('lead_source_occurrences')->where('source_hash', $sourceHash)->exists()) {
-                    $summary['skipped']++;
+                $sourceOccurrence = $sourceHash
+                    ? DB::table('lead_source_occurrences')->where('source_hash', $sourceHash)->first(['lead_id'])
+                    : null;
+                if (! $sourceOccurrence && $spreadsheetId && $sourceHash && ($row['source_tab'] ?? null)) {
+                    $sourceOccurrence = $this->sourceOccurrenceForMovedRow($spreadsheetId, $row, $contact);
+                    if ($sourceOccurrence) {
+                        $this->recordSourceOccurrence((int) $sourceOccurrence->lead_id, $spreadsheetId, $row, $sourceHash);
+                    }
+                }
+                if ($sourceOccurrence) {
+                    if ($this->refreshSourceData((int) $sourceOccurrence->lead_id, $row)) {
+                        $summary['enriched']++;
+                        DB::table('lead_activity')->insert([
+                            'lead_id' => $sourceOccurrence->lead_id,
+                            'actor_id' => $actorId,
+                            'action' => 'Data sumber diperbarui dari Google Sheets',
+                            'detail' => "Sumber: tab {$row['source_tab']} ({$row['source_date_raw']}). Data kerja CS tidak diubah.",
+                            'created_at' => now(),
+                        ]);
+                    } else {
+                        $summary['skipped']++;
+                    }
 
                     continue;
                 }
@@ -70,15 +90,7 @@ class LeadImportService
                 if ($knownLead) {
                     $leadId = $knownLead['id'];
                     if ($spreadsheetId && $sourceHash) {
-                        DB::table('lead_source_occurrences')->insert([
-                            'lead_id' => $leadId,
-                            'spreadsheet_id' => $spreadsheetId,
-                            'source_tab' => $row['source_tab'] ?? '',
-                            'source_row_no' => $row['source_row_no'] ?? null,
-                            'source_date_raw' => $row['source_date_raw'] ?? null,
-                            'source_hash' => $sourceHash,
-                            'created_at' => now(),
-                        ]);
+                        $this->recordSourceOccurrence($leadId, $spreadsheetId, $row, $sourceHash);
                         $isCrossBranch = $sourceBranchId
                             && $knownLead['source_branch_id']
                             && $knownLead['source_branch_id'] !== $sourceBranchId;
@@ -157,15 +169,7 @@ class LeadImportService
                     'created_at' => now(),
                 ]);
                 if ($spreadsheetId && $sourceHash) {
-                    DB::table('lead_source_occurrences')->insert([
-                        'lead_id' => $leadId,
-                        'spreadsheet_id' => $spreadsheetId,
-                        'source_tab' => $row['source_tab'] ?? '',
-                        'source_row_no' => $row['source_row_no'] ?? null,
-                        'source_date_raw' => $row['source_date_raw'] ?? null,
-                        'source_hash' => $sourceHash,
-                        'created_at' => now(),
-                    ]);
+                    $this->recordSourceOccurrence($leadId, $spreadsheetId, $row, $sourceHash);
                 }
                 foreach ($this->contactKeys($contact) as $candidate) {
                     $known[$candidate] = [
@@ -214,6 +218,70 @@ class LeadImportService
     private function sourceHash(string $spreadsheetId, array $row, string $contactKey): string
     {
         return hash('sha256', implode('|', [$spreadsheetId, $row['source_tab'] ?? '', $row['source_row_no'] ?? '', $contactKey]));
+    }
+
+    /** @param array<string, string|null> $row */
+    private function sourceOccurrenceForMovedRow(string $spreadsheetId, array $row, string $contact): ?object
+    {
+        return DB::table('lead_source_occurrences as occurrence')
+            ->join('leads as lead', 'lead.id', '=', 'occurrence.lead_id')
+            ->where('occurrence.spreadsheet_id', $spreadsheetId)
+            ->where('occurrence.source_tab', $row['source_tab'])
+            ->whereIn('lead.contact_key', $this->contactKeys($contact))
+            ->orderByDesc('occurrence.created_at')
+            ->first(['occurrence.lead_id']);
+    }
+
+    /** @param array<string, string|null> $row */
+    private function recordSourceOccurrence(int $leadId, string $spreadsheetId, array $row, string $sourceHash): void
+    {
+        DB::table('lead_source_occurrences')->insertOrIgnore([
+            'lead_id' => $leadId,
+            'spreadsheet_id' => $spreadsheetId,
+            'source_tab' => $row['source_tab'] ?? '',
+            'source_row_no' => $row['source_row_no'] ?? null,
+            'source_date_raw' => $row['source_date_raw'] ?? null,
+            'source_hash' => $sourceHash,
+            'created_at' => now(),
+        ]);
+    }
+
+    /** @param array<string, string|null> $row */
+    private function refreshSourceData(int $leadId, array $row): bool
+    {
+        $lead = DB::table('leads')->where('id', $leadId)->first([
+            'source_date_raw', 'lead_created_on', 'respond_time', 'imported_cs_name', 'imported_keterangan',
+            'raw_kebutuhan', 'greeting', 'chat_time', 'source_description', 'campaign_description', 'imported_definition',
+        ]);
+        if (! $lead) {
+            return false;
+        }
+
+        $updates = [];
+        foreach ([
+            'source_date_raw', 'respond_time', 'imported_cs_name', 'imported_keterangan', 'raw_kebutuhan',
+            'greeting', 'chat_time', 'source_description', 'campaign_description',
+        ] as $field) {
+            $value = $row[$field] ?? null;
+            if ($value !== null && $value !== '' && $lead->{$field} !== $value) {
+                $updates[$field] = $value;
+            }
+        }
+        $classification = $this->classification($row, $this->initialMilestones($row));
+        if ($classification !== null && $lead->imported_definition !== $classification) {
+            $updates['imported_definition'] = $classification;
+        }
+        $leadCreatedOn = LeadSourceDate::parse($row['source_date_raw'] ?? null);
+        if ($leadCreatedOn !== null && (string) $lead->lead_created_on !== $leadCreatedOn) {
+            $updates['lead_created_on'] = $leadCreatedOn;
+        }
+        if ($updates === []) {
+            return false;
+        }
+
+        DB::table('leads')->where('id', $leadId)->update([...$updates, 'updated_at' => now()]);
+
+        return true;
     }
 
     private function contactKey(string $contact): string

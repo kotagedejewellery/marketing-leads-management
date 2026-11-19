@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
-import { ChevronDown, ChevronUp, SlidersHorizontal } from '@lucide/vue';
+import { ChevronDown, ChevronUp, Pencil, SlidersHorizontal } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import LeadSaveFeedback from '@/components/LeadSaveFeedback.vue';
 import LeadQuickUpdate from '@/components/LeadQuickUpdate.vue';
 import { budgetOptions } from '@/lib/lead-options';
+import { outcomeLabel } from '@/lib/lead-outcomes';
 import {
     Dialog,
     DialogClose,
@@ -14,6 +15,13 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
 
 type Lead = {
     id: number;
@@ -26,6 +34,10 @@ type Lead = {
     keterangan: string | null;
     imported_definition: string | null;
     current_stage: string | null;
+    outcome: string | null;
+    outcome_factor: string | null;
+    outcome_note: string | null;
+    outcome_recorded_at: string | null;
     next_follow_up_at: string | null;
     crm_taken_over_at: string | null;
     milestones: string[];
@@ -63,6 +75,8 @@ const props = defineProps<{
         q?: string;
         branch?: string;
         stage?: string;
+        outcome?: string;
+        outcome_factor?: string;
         queue?: string;
         intent?: string;
         budget?: string;
@@ -82,14 +96,20 @@ const props = defineProps<{
         branch_id: number;
         branch_name: string;
     }[];
+    outcomeFactors: Record<string, Record<string, string>>;
     archiveMode: boolean;
-    sheetSync: { status: string; completed_at: string | null } | null;
+    sheetSync: {
+        status: string;
+        completed_at: string | null;
+        summary: { missing_source_fields?: number } | null;
+    } | null;
 }>();
 const page = usePage();
 const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
 const q = ref(props.filters.q || '');
 const branch = ref(props.filters.branch || '');
 const stage = ref(props.filters.stage || '');
+const outcome = ref(props.filters.outcome || '');
 const queue = ref(props.filters.queue || '');
 const intent = ref(props.filters.intent || '');
 const budget = ref(props.filters.budget || '');
@@ -104,6 +124,7 @@ const showAdvancedFilters = ref(
     Boolean(
         intent.value ||
         budget.value ||
+        outcome.value ||
         leadDateFrom.value ||
         leadDateTo.value ||
         leadDateStatus.value ||
@@ -116,6 +137,12 @@ const showAdvancedFilters = ref(
 const isFiltering = ref(false);
 const assistingLeadId = ref<number | null>(null);
 const selectedLeadIds = ref<number[]>([]);
+const mobileSelectionMode = ref(false);
+const mobileEditorLead = ref<Lead | null>(null);
+const mobileQuickUpdate = ref<InstanceType<typeof LeadQuickUpdate> | null>(
+    null,
+);
+const mobileEditorCloseRequested = ref(false);
 const selectedSourceBranchIds = computed(() =>
     Array.from(
         new Set(
@@ -217,6 +244,7 @@ const hasFilters = computed(() =>
         q.value ||
         branch.value ||
         stage.value ||
+        outcome.value ||
         queue.value ||
         intent.value ||
         budget.value ||
@@ -244,6 +272,11 @@ const activeFilterText = computed(() =>
         q.value ? `Pencarian: “${q.value}”` : '',
         branch.value ? 'Cabang dipilih' : '',
         stage.value ? 'Tahap dipilih' : '',
+        outcome.value
+            ? outcome.value === 'pending'
+                ? 'Hasil akhir belum ada'
+                : `Hasil akhir: ${outcomeLabel(outcome.value)}`
+            : '',
         queue.value ? 'Queue dipilih' : '',
         intent.value ? `Kebutuhan: ${intent.value}` : '',
         budget.value ? `Budget: ${budget.value}` : '',
@@ -296,6 +329,14 @@ const trackLeadSaveState = (
         next.set(leadId, { state, message });
     }
     leadSaveStates.value = next;
+    if (
+        mobileEditorCloseRequested.value &&
+        mobileEditorLead.value?.id === leadId &&
+        (state === 'idle' || state === 'saved')
+    ) {
+        mobileEditorCloseRequested.value = false;
+        mobileEditorLead.value = null;
+    }
 };
 const leadSaveState = (leadId: number) => leadSaveStates.value.get(leadId);
 const leadRetryVersion = (leadId: number) =>
@@ -323,6 +364,7 @@ const applyFiltersNow = () =>
             q: q.value || undefined,
             branch: branch.value || undefined,
             stage: stage.value || undefined,
+            outcome: outcome.value || undefined,
             queue: queue.value || undefined,
             intent: intent.value || undefined,
             budget: budget.value || undefined,
@@ -352,6 +394,7 @@ const clearFilters = () =>
         q.value = '';
         branch.value = '';
         stage.value = '';
+        outcome.value = '';
         queue.value = '';
         intent.value = '';
         budget.value = '';
@@ -452,6 +495,8 @@ const formatLeadDate = (value: string | null) =>
               year: 'numeric',
           }).format(new Date(`${value}T12:00:00`))
         : '—';
+const formatFollowUp = (value: string | null) =>
+    value ? new Date(value).toLocaleString('id-ID') : '—';
 const assignSelectedNow = () => {
     bulkForm.lead_ids = selectedLeadIds.value;
     bulkForm.post('/leads/assign', {
@@ -478,6 +523,27 @@ const clearSelection = () => {
     selectionForm.reset();
     bulkForm.reset();
     collaboratorBulkForm.reset();
+};
+const toggleMobileSelectionMode = () => {
+    mobileSelectionMode.value = !mobileSelectionMode.value;
+    if (!mobileSelectionMode.value) clearSelection();
+};
+const openMobileEditor = (lead: Lead) => {
+    mobileEditorCloseRequested.value = false;
+    mobileEditorLead.value = lead;
+};
+const setMobileEditorOpen = (open: boolean) => {
+    if (open || !mobileEditorLead.value) return;
+    if (
+        dirtyLeadIds.value.has(mobileEditorLead.value.id) &&
+        mobileQuickUpdate.value
+    ) {
+        mobileEditorCloseRequested.value = true;
+        mobileQuickUpdate.value.flushPendingSave();
+
+        return;
+    }
+    mobileEditorLead.value = null;
 };
 const toggleVisibleSelection = () => {
     if (allVisibleSelected.value) {
@@ -995,6 +1061,20 @@ onBeforeUnmount(() => {
                 </select>
             </label>
             <label class="grid gap-2 text-sm font-semibold"
+                >Hasil akhir
+                <select
+                    v-model="outcome"
+                    class="kgj-input"
+                    :disabled="isFiltering"
+                    @change="applyFilters"
+                >
+                    <option value="">Semua hasil akhir</option>
+                    <option value="pending">Belum ada hasil akhir</option>
+                    <option value="closing">Closing</option>
+                    <option value="loss">Loss</option>
+                </select>
+            </label>
+            <label class="grid gap-2 text-sm font-semibold"
                 >Tanggal lead dari
                 <input
                     v-model="leadDateFrom"
@@ -1113,6 +1193,12 @@ onBeforeUnmount(() => {
                         : ''
                 }}</span
             >
+            <span
+                v-if="sheetSync?.summary?.missing_source_fields"
+                class="text-[#a23e2b]"
+                >{{ sheetSync.summary.missing_source_fields }} kolom sumber
+                kosong</span
+            >
         </div>
         <p
             v-if="importForm.errors.csv_file"
@@ -1128,19 +1214,36 @@ onBeforeUnmount(() => {
         >
             {{ importForm.errors.branch_id }}
         </p>
-        <label
+        <div
             v-if="visibleLeadIds.length"
-            class="mt-4 flex min-h-11 w-fit items-center gap-2 text-sm font-semibold text-[#4f514a]"
+            class="mt-4 flex flex-wrap items-center gap-3"
         >
-            <input
-                :checked="allVisibleSelected"
-                :indeterminate="someVisibleSelected"
-                class="size-4 accent-kgj-gold"
-                type="checkbox"
-                @change="toggleVisibleSelection"
-            />
-            Pilih semua {{ visibleLeadIds.length }} lead pada halaman ini
-        </label>
+            <button
+                v-if="!isDesktopWorkspace"
+                class="kgj-button-secondary"
+                type="button"
+                @click="toggleMobileSelectionMode"
+            >
+                {{
+                    mobileSelectionMode
+                        ? 'Selesai memilih'
+                        : 'Pilih beberapa lead'
+                }}
+            </button>
+            <label
+                v-if="isDesktopWorkspace || mobileSelectionMode"
+                class="flex min-h-11 items-center gap-2 text-sm font-semibold text-[#4f514a]"
+            >
+                <input
+                    :checked="allVisibleSelected"
+                    :indeterminate="someVisibleSelected"
+                    class="size-4 accent-kgj-gold"
+                    type="checkbox"
+                    @change="toggleVisibleSelection"
+                />
+                Pilih semua {{ visibleLeadIds.length }} lead pada halaman ini
+            </label>
+        </div>
         <form
             v-if="selectedLeadIds.length"
             class="kgj-surface mt-4 flex flex-col gap-3 border border-[#dccd9f] p-4 sm:flex-row sm:items-center"
@@ -1263,101 +1366,127 @@ onBeforeUnmount(() => {
             <article
                 v-for="lead in leads.data"
                 :key="lead.id"
-                class="rounded-2xl border border-kgj-line bg-kgj-paper p-4 shadow-[0_8px_22px_rgba(58,48,31,0.06)] transition hover:-translate-y-0.5 hover:border-[#c3a463]"
+                class="rounded-2xl border border-kgj-line bg-kgj-paper p-4 shadow-[0_8px_22px_rgba(58,48,31,0.06)]"
             >
-                <label
-                    class="mb-3 flex min-h-11 items-center gap-2 text-sm font-semibold"
-                    ><input
-                        v-model="selectedLeadIds"
-                        class="size-4 accent-kgj-gold"
-                        type="checkbox"
-                        :disabled="
-                            !selectedLeadIds.includes(lead.id) &&
-                            selectedLeadIds.length >= 100
-                        "
-                        :value="lead.id"
-                    />Pilih lead</label
-                >
-                ><Link :href="`/leads/${lead.id}`" class="block"
-                    ><strong class="block">{{
-                        lead.name || lead.contact_raw
-                    }}</strong
-                    ><span class="mt-1 block text-sm text-[#62665b]">{{
-                        lead.phone || lead.contact_raw
-                    }}</span
-                    ><span class="mt-2 block text-xs text-[#62665b]"
-                        >Tanggal lead:
-                        {{ formatLeadDate(lead.lead_created_on) }}</span
+                <div class="flex items-start gap-3">
+                    <label
+                        v-if="mobileSelectionMode"
+                        class="mt-1 flex size-6 shrink-0 items-center justify-center"
                     >
-                    ><span class="mt-3 block text-sm font-semibold">{{
-                        lead.owner_name || 'Belum ditugaskan'
-                    }}</span
-                    ><span class="mt-1 block text-xs text-[#62665b]">{{
-                        lead.branch_name || '—'
-                    }}</span
-                    ><span
-                        v-if="lead.cs_filter_match"
-                        class="mt-2 block text-xs font-semibold text-kgj-gold-deep"
-                        >Cocok sebagai: {{ lead.cs_filter_match }}</span
-                    >
+                        <input
+                            v-model="selectedLeadIds"
+                            class="size-4 accent-kgj-gold"
+                            type="checkbox"
+                            :aria-label="`Pilih ${lead.name || lead.contact_raw}`"
+                            :disabled="
+                                !selectedLeadIds.includes(lead.id) &&
+                                selectedLeadIds.length >= 100
+                            "
+                            :value="lead.id"
+                        />
+                    </label>
+                    <div class="min-w-0 flex-1">
+                        <Link :href="`/leads/${lead.id}`" class="block">
+                            <strong class="block truncate text-base">{{
+                                lead.name || lead.contact_raw
+                            }}</strong>
+                            <span
+                                class="mt-1 block truncate text-sm text-kgj-muted"
+                                >{{ lead.phone || lead.contact_raw }}</span
+                            >
+                        </Link>
+                    </div>
                     <span
-                        v-if="!isAdmin"
-                        class="mt-2 block text-xs font-semibold text-[#665a43]"
-                        >{{ handlingLabel(lead.handling_role) }}</span
-                    >
-                    ><span
-                        class="mt-1 block text-xs tracking-wide text-[#8a6b2d] uppercase"
+                        class="shrink-0 text-right text-xs font-semibold tracking-wide text-[#8a6b2d] uppercase"
                         >{{
                             stageLabel(lead.current_stage) ||
                             lead.intent_buying ||
                             lead.imported_definition ||
                             'Belum dikualifikasi'
                         }}</span
-                    ><span
+                    >
+                </div>
+
+                <dl class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-kgj-muted">Tanggal lead</dt>
+                        <dd class="mt-1 font-medium">
+                            {{ formatLeadDate(lead.lead_created_on) }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-kgj-muted">CS / cabang</dt>
+                        <dd class="mt-1 truncate font-medium">
+                            {{ lead.owner_name || 'Belum ditugaskan' }}
+                        </dd>
+                        <dd class="truncate text-xs text-kgj-muted">
+                            {{ lead.branch_name || '—' }}
+                        </dd>
+                    </div>
+                    <div v-if="!isAdmin">
+                        <dt class="text-xs text-kgj-muted">Penanganan</dt>
+                        <dd class="mt-1 font-medium text-[#665a43]">
+                            {{ handlingLabel(lead.handling_role) }}
+                        </dd>
+                    </div>
+                    <div v-if="lead.next_follow_up_at">
+                        <dt class="text-xs text-kgj-muted">Follow-up</dt>
+                        <dd class="mt-1 font-medium">
+                            {{ formatFollowUp(lead.next_follow_up_at) }}
+                        </dd>
+                    </div>
+                </dl>
+
+                <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                    <span
+                        v-if="lead.cs_filter_match"
+                        class="rounded-full bg-[#fbf6e8] px-2 py-1 text-kgj-gold-deep"
+                        >Cocok sebagai: {{ lead.cs_filter_match }}</span
+                    >
+                    <span
                         v-if="lead.collaborators.length"
-                        class="mt-2 block text-xs font-semibold text-[#665a43]"
+                        class="rounded-full bg-[#f1eee7] px-2 py-1 text-[#665a43]"
                         >Pendamping:
                         {{
                             lead.collaborators
                                 .map((item) => item.name)
                                 .join(', ')
                         }}</span
-                    ><span
+                    >
+                    <span
                         v-if="lead.crm_taken_over_at"
-                        class="mt-2 block text-xs font-semibold text-[#8a6b2d]"
+                        class="rounded-full bg-[#fbf6e8] px-2 py-1 text-[#8a6b2d]"
                         >Diambil alih CRM</span
-                    ><span
+                    >
+                    <span
+                        v-if="outcomeLabel(lead.outcome)"
+                        class="rounded-full bg-[#e7f0e8] px-2 py-1 text-[#49654e]"
+                        >Hasil: {{ outcomeLabel(lead.outcome) }}</span
+                    >
+                    <span
                         v-if="lead.source_conflict_at"
-                        class="mt-2 block text-xs font-semibold text-kgj-rose"
-                        >Nomor juga masuk dari
+                        class="rounded-full bg-[#fff3f1] px-2 py-1 text-kgj-rose"
+                        >Juga masuk dari
                         {{
                             lead.source_conflict_branch_name || 'cabang lain'
                         }}</span
-                    ><span
-                        v-if="lead.next_follow_up_at"
-                        class="mt-2 block text-xs text-kgj-muted"
-                        >Follow-up:
-                        {{
-                            new Date(lead.next_follow_up_at).toLocaleString(
-                                'id-ID',
-                            )
-                        }}</span
                     >
-                    ></Link
-                >
+                </div>
+
                 <LeadSaveFeedback
                     :state="leadSaveState(lead.id)?.state"
                     :message="leadSaveState(lead.id)?.message"
                     @retry="retryLeadSave(lead.id)"
                     @resolve-conflict="resolveLeadConflict(lead.id)"
                 />
+
                 <div
                     v-if="
                         !archiveMode &&
                         !isAdmin &&
                         lead.handling_role === 'team'
                     "
-                    class="mt-4 rounded-xl border border-[#dccd9f] bg-[#fbf6e8] p-3 text-sm text-[#665a43]"
+                    class="mt-4 rounded-xl bg-[#fbf6e8] p-3 text-sm text-[#665a43]"
                 >
                     <p>
                         Lead antrean cabang. Mulai bantu untuk dapat
@@ -1371,50 +1500,51 @@ onBeforeUnmount(() => {
                     >
                         {{
                             assistingLeadId === lead.id
-                                ? 'Memulai…'
+                                ? 'Memulai...'
                                 : 'Mulai bantu'
                         }}
                     </button>
                 </div>
-                <button
-                    v-else-if="
-                        !archiveMode &&
-                        !isAdmin &&
-                        lead.handling_role === 'collaborator'
-                    "
-                    class="kgj-button-secondary mt-4"
-                    type="button"
-                    :disabled="assistingLeadId === lead.id"
-                    @click="stopAssisting(lead.id)"
+                <div
+                    v-else-if="!archiveMode"
+                    class="mt-4 flex flex-wrap items-center gap-3"
                 >
-                    {{
-                        assistingLeadId === lead.id
-                            ? 'Memproses…'
-                            : 'Selesai membantu'
-                    }}
-                </button>
-                <LeadQuickUpdate
-                    v-if="
-                        !archiveMode &&
-                        (isAdmin || lead.handling_role !== 'team')
-                    "
-                    class="mt-5"
-                    :lead="lead"
-                    :can-mark-crm="isAdmin"
-                    :retry-save-version="leadRetryVersion(lead.id)"
-                    @dirty-change="trackDirtyLead"
-                    @save-state="trackLeadSaveState"
-                />
+                    <button
+                        class="kgj-button-primary"
+                        type="button"
+                        @click="openMobileEditor(lead)"
+                    >
+                        <Pencil class="size-4" /> Update lead
+                    </button>
+                    <button
+                        v-if="!isAdmin && lead.handling_role === 'collaborator'"
+                        class="min-h-11 text-sm font-semibold text-[#62665b] underline underline-offset-4"
+                        type="button"
+                        :disabled="assistingLeadId === lead.id"
+                        @click="stopAssisting(lead.id)"
+                    >
+                        {{
+                            assistingLeadId === lead.id
+                                ? 'Memproses...'
+                                : 'Selesai membantu'
+                        }}
+                    </button>
+                    <Link
+                        :href="`/leads/${lead.id}`"
+                        class="min-h-11 py-3 text-sm font-semibold text-[#62665b] underline underline-offset-4"
+                        >Detail lengkap</Link
+                    >
+                </div>
                 <Link
                     v-else
                     :href="`/leads/${lead.id}`"
-                    class="mt-4 block font-semibold text-[#62665b] underline underline-offset-4"
+                    class="mt-4 block min-h-11 py-3 text-sm font-semibold text-[#62665b] underline underline-offset-4"
                     >Detail lengkap</Link
                 >
             </article>
             <p
                 v-if="!leads.data.length"
-                class="py-12 text-center text-[#62665b]"
+                class="py-12 text-center text-kgj-muted"
             >
                 {{
                     hasFilters
@@ -1432,12 +1562,45 @@ onBeforeUnmount(() => {
             </p>
         </div>
 
+        <Sheet
+            :open="Boolean(mobileEditorLead)"
+            @update:open="setMobileEditorOpen"
+        >
+            <SheetContent
+                side="bottom"
+                class="z-[60] max-h-[calc(100dvh-env(safe-area-inset-bottom))] overflow-y-auto rounded-t-2xl bg-kgj-paper px-5 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+            >
+                <SheetHeader class="pr-10 text-left">
+                    <SheetTitle>Update lead</SheetTitle>
+                    <SheetDescription>
+                        {{
+                            mobileEditorLead?.name ||
+                            mobileEditorLead?.contact_raw
+                        }}
+                        — perubahan tersimpan otomatis.
+                    </SheetDescription>
+                </SheetHeader>
+                <LeadQuickUpdate
+                    v-if="mobileEditorLead"
+                    :key="mobileEditorLead.id"
+                    ref="mobileQuickUpdate"
+                    class="mt-5"
+                    :lead="mobileEditorLead"
+                    :outcome-factors="outcomeFactors"
+                    :can-mark-crm="isAdmin"
+                    :retry-save-version="leadRetryVersion(mobileEditorLead.id)"
+                    @dirty-change="trackDirtyLead"
+                    @save-state="trackLeadSaveState"
+                />
+            </SheetContent>
+        </Sheet>
+
         <div
             v-if="isDesktopWorkspace"
             class="kgj-table mt-6 max-h-[calc(100dvh-18rem)] overflow-auto"
         >
             <table
-                class="w-full min-w-[2210px] border-separate border-spacing-0 text-sm"
+                class="w-full min-w-[2490px] border-separate border-spacing-0 text-sm"
             >
                 <thead
                     class="sticky top-0 z-30 text-left text-xs tracking-wider text-[#62665b] uppercase"
@@ -1463,6 +1626,7 @@ onBeforeUnmount(() => {
                             <th class="p-4">Cold</th>
                             <th class="p-4">Warm</th>
                             <th class="p-4">Hot</th>
+                            <th class="p-4">Hasil akhir</th>
                             <th class="p-4">Intent buying</th>
                             <th class="p-4">Waktu pakai</th>
                             <th class="p-4">Budget</th>
@@ -1614,6 +1778,7 @@ onBeforeUnmount(() => {
                                 "
                                 variant="table"
                                 :lead="lead"
+                                :outcome-factors="outcomeFactors"
                                 :can-mark-crm="isAdmin"
                                 :retry-save-version="leadRetryVersion(lead.id)"
                                 @dirty-change="trackDirtyLead"
@@ -1630,7 +1795,7 @@ onBeforeUnmount(() => {
                     </template>
                     <tr v-if="!leads.data.length">
                         <td
-                            :colspan="archiveMode ? 5 : 13"
+                            :colspan="archiveMode ? 5 : 14"
                             class="p-12 text-center text-[#62665b]"
                         >
                             {{

@@ -10,7 +10,7 @@ import Branches from '@/pages/Branches/Index.vue';
 import Accounts from '@/pages/Accounts/Index.vue';
 import Login from '@/pages/auth/Login.vue';
 
-const appName = import.meta.env.VITE_APP_NAME || 'KGJ Leads';
+const appName = import.meta.env.VITE_APP_NAME || 'Kotagede Jewellery';
 const pages = {
     Dashboard,
     'Leads/Index': LeadsIndex,
@@ -30,7 +30,7 @@ void createInertiaApp({
 
         return page as unknown as DefineComponent;
     },
-    title: (title) => (title ? `${title} - ${appName}` : appName),
+    title: (title) => (title ? `${title} — ${appName}` : appName),
     layout: (name) => {
         switch (true) {
             case name === 'Welcome':

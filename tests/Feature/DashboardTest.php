@@ -28,6 +28,10 @@ class DashboardTest extends TestCase
             $table->string('intent_buying')->nullable();
             $table->date('usage_date')->nullable();
             $table->string('budget')->nullable();
+            $table->string('outcome')->nullable();
+            $table->string('outcome_factor')->nullable();
+            $table->text('outcome_note')->nullable();
+            $table->timestamp('outcome_recorded_at')->nullable();
             $table->timestamp('archived_at')->nullable();
             $table->timestamp('next_follow_up_at')->nullable();
             $table->timestamp('crm_taken_over_at')->nullable();
@@ -138,6 +142,8 @@ class DashboardTest extends TestCase
                 ->component('Statistics')
                 ->where('quality.total', 2)
                 ->where('quality.complete', 1)
+                ->where('quality.needs_qualification', 1)
+                ->where('quality.without_follow_up', 2)
                 ->where('stats.closing', 1)
                 ->where('workload.0.name', 'Pusat')
                 ->where('workload.0.lead_count', 1),
@@ -204,6 +210,76 @@ class DashboardTest extends TestCase
             fn (Assert $page) => $page
                 ->where('stats.total', 1)
                 ->where('stats.unclassified', 1),
+        );
+    }
+
+    public function test_statistics_groups_closing_and_loss_factors(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'admin'])->save();
+        \DB::table('leads')->insert([
+            [
+                'name' => 'Deal offline',
+                'outcome' => 'closing',
+                'outcome_factor' => 'offline_experience',
+                'outcome_recorded_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'Tidak ada kabar',
+                'outcome' => 'loss',
+                'outcome_factor' => 'ghosting',
+                'outcome_recorded_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $this->actingAs($admin)->get('/statistics')->assertInertia(
+            fn (Assert $page) => $page
+                ->where('outcomes.closing.total', 1)
+                ->where('outcomes.closing.factors.9.key', 'offline_experience')
+                ->where('outcomes.closing.factors.9.count', 1)
+                ->where('outcomes.loss.total', 1)
+                ->where('outcomes.loss.factors.8.key', 'ghosting')
+                ->where('outcomes.loss.factors.8.count', 1),
+        );
+    }
+
+    public function test_statistics_keeps_archived_outcomes_and_filters_by_first_result_date(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'admin'])->save();
+        \DB::table('leads')->insert([
+            [
+                'name' => 'Closing diarsipkan',
+                'outcome' => 'closing',
+                'outcome_factor' => 'offline_experience',
+                'outcome_recorded_at' => '2026-11-10 09:00:00',
+                'archived_at' => now(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'name' => 'Loss periode lain',
+                'outcome' => 'loss',
+                'outcome_factor' => 'ghosting',
+                'outcome_recorded_at' => '2026-10-10 09:00:00',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $this->actingAs($admin)->get('/statistics?outcome_date_from=2026-11-01&outcome_date_to=2026-11-30')->assertInertia(
+            fn (Assert $page) => $page
+                ->component('Statistics')
+                ->where('outcomes.closing.total', 1)
+                ->where('outcomes.closing.factors.9.count', 1)
+                ->where('outcomes.closing.factors.9.active_count', 0)
+                ->where('outcomes.loss.total', 0)
+                ->where('outcomePeriod.from', '2026-11-01')
+                ->where('outcomePeriod.to', '2026-11-30'),
         );
     }
 

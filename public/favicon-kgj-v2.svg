@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Kotagede Jewellery">
+  <rect width="64" height="64" rx="14" fill="#201f1c"/>
+  <path d="M32 12 46 26 32 48 18 26 32 12Z" fill="none" stroke="#d8b775" stroke-linejoin="round" stroke-width="3"/>
+  <path d="M18 26h28M25 19l7 29m7-29-7 29" fill="none" stroke="#d8b775" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"/>
+</svg>

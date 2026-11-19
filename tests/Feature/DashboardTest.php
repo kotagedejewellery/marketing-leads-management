@@ -108,6 +108,7 @@ class DashboardTest extends TestCase
             [
                 'name' => 'Perlu ditindaklanjuti',
                 'assigned_user_id' => null,
+                'source_branch_id' => null,
                 'current_stage' => 'asked',
                 'intent_buying' => null,
                 'usage_date' => null,

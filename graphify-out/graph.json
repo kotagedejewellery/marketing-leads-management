@@ -1923,7 +1923,7 @@
       "file_type": "code",
       "norm_label": "archiveselected()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L719"
+      "source_location": "L720"
     },
     {
       "id": "resources_js_pages_leads_index_clearselection",
@@ -1935,7 +1935,7 @@
       "file_type": "code",
       "norm_label": "clearselection()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L680"
+      "source_location": "L681"
     },
     {
       "id": "resources_js_pages_leads_index_destroyselected",
@@ -1947,7 +1947,7 @@
       "file_type": "code",
       "norm_label": "destroyselected()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L731"
+      "source_location": "L732"
     },
     {
       "id": "resources_js_pages_leads_index_restoreselected",
@@ -1959,7 +1959,7 @@
       "file_type": "code",
       "norm_label": "restoreselected()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L730"
+      "source_location": "L731"
     },
     {
       "id": "resources_js_pages_leads_index_restoreselectednow",
@@ -1971,7 +1971,7 @@
       "file_type": "code",
       "norm_label": "restoreselectednow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L726"
+      "source_location": "L727"
     },
     {
       "id": "resources_js_pages_leads_index_togglemobileselectionmode",
@@ -1983,7 +1983,7 @@
       "file_type": "code",
       "norm_label": "togglemobileselectionmode()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L686"
+      "source_location": "L687"
     },
     {
       "id": "tests_feature_settings_profileupdatetest_profileupdatetest_test_correct_password_must_be_provided_to_delete_account",
@@ -2535,7 +2535,7 @@
       "file_type": "code",
       "norm_label": "resolveleadconflict()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L505"
+      "source_location": "L506"
     },
     {
       "id": "resources_js_pages_leads_index_trackdirtylead",
@@ -2547,7 +2547,7 @@
       "file_type": "code",
       "norm_label": "trackdirtylead()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L441"
+      "source_location": "L442"
     },
     {
       "id": "app_concerns_profilevalidationrules_profilevalidationrules_emailrules",
@@ -2847,7 +2847,7 @@
       "file_type": "code",
       "norm_label": "createdesktoprowresizeobserver()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L755"
+      "source_location": "L756"
     },
     {
       "id": "resources_js_pages_leads_index_resetdesktopvirtualrows",
@@ -2859,7 +2859,7 @@
       "file_type": "code",
       "norm_label": "resetdesktopvirtualrows()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L787"
+      "source_location": "L788"
     },
     {
       "id": "resources_js_pages_leads_index_quickupdatesignature",
@@ -2871,7 +2871,7 @@
       "file_type": "code",
       "norm_label": "quickupdatesignature()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L360"
+      "source_location": "L361"
     },
     {
       "id": "resources_js_pages_leads_index_toquickupdatefields",
@@ -2883,7 +2883,7 @@
       "file_type": "code",
       "norm_label": "toquickupdatefields()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L331"
+      "source_location": "L332"
     },
     {
       "id": "resources_js_pages_leads_index_observedesktopviewport",
@@ -2895,7 +2895,7 @@
       "file_type": "code",
       "norm_label": "observedesktopviewport()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L801"
+      "source_location": "L802"
     },
     {
       "id": "resources_js_pages_leads_index_updatedesktopviewport",
@@ -2907,7 +2907,7 @@
       "file_type": "code",
       "norm_label": "updatedesktopviewport()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L769"
+      "source_location": "L770"
     },
     {
       "id": "tests_unit_dailyleadtabparsertest_dailyleadtabparsertest_dailyrow",
@@ -7239,7 +7239,7 @@
       "file_type": "code",
       "norm_label": "addcollaboratorselected()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L678"
+      "source_location": "L679"
     },
     {
       "id": "resources_js_pages_leads_index_addcollaboratorselectednow",
@@ -7251,7 +7251,7 @@
       "file_type": "code",
       "norm_label": "addcollaboratorselectednow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L669"
+      "source_location": "L670"
     },
     {
       "id": "resources_js_pages_leads_index_applyfilters",
@@ -7263,7 +7263,7 @@
       "file_type": "code",
       "norm_label": "applyfilters()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L549"
+      "source_location": "L550"
     },
     {
       "id": "resources_js_pages_leads_index_applyfiltersnow",
@@ -7275,7 +7275,7 @@
       "file_type": "code",
       "norm_label": "applyfiltersnow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L517"
+      "source_location": "L518"
     },
     {
       "id": "resources_js_pages_leads_index_assignselected",
@@ -7287,7 +7287,7 @@
       "file_type": "code",
       "norm_label": "assignselected()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L668"
+      "source_location": "L669"
     },
     {
       "id": "resources_js_pages_leads_index_assignselectednow",
@@ -7299,7 +7299,7 @@
       "file_type": "code",
       "norm_label": "assignselectednow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L659"
+      "source_location": "L660"
     },
     {
       "id": "resources_js_pages_leads_index_clearfilters",
@@ -7311,7 +7311,7 @@
       "file_type": "code",
       "norm_label": "clearfilters()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L550"
+      "source_location": "L551"
     },
     {
       "id": "resources_js_pages_leads_index_createlead",
@@ -7323,7 +7323,7 @@
       "file_type": "code",
       "norm_label": "createlead()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L609"
+      "source_location": "L610"
     },
     {
       "id": "resources_js_pages_leads_index_createleadnow",
@@ -7335,7 +7335,7 @@
       "file_type": "code",
       "norm_label": "createleadnow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L602"
+      "source_location": "L603"
     },
     {
       "id": "resources_js_pages_leads_index_guardunsavedchanges",
@@ -7347,7 +7347,7 @@
       "file_type": "code",
       "norm_label": "guardunsavedchanges()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L432"
+      "source_location": "L433"
     },
     {
       "id": "resources_js_pages_leads_index_importcsv",
@@ -7359,7 +7359,7 @@
       "file_type": "code",
       "norm_label": "importcsv()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L575"
+      "source_location": "L576"
     },
     {
       "id": "resources_js_pages_leads_index_importcsvnow",
@@ -7371,7 +7371,7 @@
       "file_type": "code",
       "norm_label": "importcsvnow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L570"
+      "source_location": "L571"
     },
     {
       "id": "resources_js_pages_leads_index_openarchivedialog",
@@ -7383,7 +7383,7 @@
       "file_type": "code",
       "norm_label": "openarchivedialog()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L724"
+      "source_location": "L725"
     },
     {
       "id": "resources_js_pages_leads_index_opendeletedialog",
@@ -7395,7 +7395,7 @@
       "file_type": "code",
       "norm_label": "opendeletedialog()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L736"
+      "source_location": "L737"
     },
     {
       "id": "resources_js_pages_leads_index_startassisting",
@@ -7407,7 +7407,7 @@
       "file_type": "code",
       "norm_label": "startassisting()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L620"
+      "source_location": "L621"
     },
     {
       "id": "resources_js_pages_leads_index_startassistingnow",
@@ -7419,7 +7419,7 @@
       "file_type": "code",
       "norm_label": "startassistingnow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L610"
+      "source_location": "L611"
     },
     {
       "id": "resources_js_pages_leads_index_stopassisting",
@@ -7431,7 +7431,7 @@
       "file_type": "code",
       "norm_label": "stopassisting()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L631"
+      "source_location": "L632"
     },
     {
       "id": "resources_js_pages_leads_index_stopassistingnow",
@@ -7443,7 +7443,7 @@
       "file_type": "code",
       "norm_label": "stopassistingnow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L622"
+      "source_location": "L623"
     },
     {
       "id": "resources_js_pages_leads_index_syncgooglesheet",
@@ -7455,7 +7455,7 @@
       "file_type": "code",
       "norm_label": "syncgooglesheet()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L595"
+      "source_location": "L596"
     },
     {
       "id": "resources_js_pages_leads_index_syncgooglesheetnow",
@@ -7467,7 +7467,7 @@
       "file_type": "code",
       "norm_label": "syncgooglesheetnow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L585"
+      "source_location": "L586"
     },
     {
       "id": "resources_js_pages_leads_index_togglearchive",
@@ -7479,7 +7479,7 @@
       "file_type": "code",
       "norm_label": "togglearchive()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L601"
+      "source_location": "L602"
     },
     {
       "id": "resources_js_pages_leads_index_togglearchivenow",
@@ -7491,7 +7491,7 @@
       "file_type": "code",
       "norm_label": "togglearchivenow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L599"
+      "source_location": "L600"
     },
     {
       "id": "resources_js_lib_flashtoast_initializeflashtoast",
@@ -7779,7 +7779,7 @@
       "file_type": "code",
       "norm_label": "beforeunload()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L739"
+      "source_location": "L740"
     },
     {
       "id": "resources_js_pages_leads_index_discardchangesandcontinue",
@@ -7791,7 +7791,7 @@
       "file_type": "code",
       "norm_label": "discardchangesandcontinue()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L509"
+      "source_location": "L510"
     },
     {
       "id": "resources_js_pages_leads_index_formatfollowup",
@@ -7803,7 +7803,7 @@
       "file_type": "code",
       "norm_label": "formatfollowup()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L657"
+      "source_location": "L658"
     },
     {
       "id": "resources_js_pages_leads_index_formatleaddate",
@@ -7815,7 +7815,7 @@
       "file_type": "code",
       "norm_label": "formatleaddate()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L649"
+      "source_location": "L650"
     },
     {
       "id": "resources_js_pages_leads_index_handlinglabel",
@@ -7827,7 +7827,7 @@
       "file_type": "code",
       "norm_label": "handlinglabel()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L642"
+      "source_location": "L643"
     },
     {
       "id": "resources_js_pages_leads_index_leadretryversion",
@@ -7839,7 +7839,7 @@
       "file_type": "code",
       "norm_label": "leadretryversion()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L498"
+      "source_location": "L499"
     },
     {
       "id": "resources_js_pages_leads_index_observedesktopleadrow",
@@ -7851,7 +7851,7 @@
       "file_type": "code",
       "norm_label": "observedesktopleadrow()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L772"
+      "source_location": "L773"
     },
     {
       "id": "resources_js_pages_leads_index_ondesktoptablescroll",
@@ -7863,7 +7863,7 @@
       "file_type": "code",
       "norm_label": "ondesktoptablescroll()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L784"
+      "source_location": "L785"
     },
     {
       "id": "resources_js_pages_leads_index_openmobileeditor",
@@ -7875,7 +7875,7 @@
       "file_type": "code",
       "norm_label": "openmobileeditor()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L690"
+      "source_location": "L691"
     },
     {
       "id": "resources_js_pages_leads_index_retryleadsave",
@@ -7887,7 +7887,7 @@
       "file_type": "code",
       "norm_label": "retryleadsave()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L500"
+      "source_location": "L501"
     },
     {
       "id": "resources_js_pages_leads_index_selectcsv",
@@ -7899,7 +7899,7 @@
       "file_type": "code",
       "norm_label": "selectcsv()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L596"
+      "source_location": "L597"
     },
     {
       "id": "resources_js_pages_leads_index_setmobileeditoropen",
@@ -7911,7 +7911,7 @@
       "file_type": "code",
       "norm_label": "setmobileeditoropen()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L694"
+      "source_location": "L695"
     },
     {
       "id": "resources_js_pages_leads_index_stagelabel",
@@ -7923,7 +7923,7 @@
       "file_type": "code",
       "norm_label": "stagelabel()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L633"
+      "source_location": "L634"
     },
     {
       "id": "resources_js_pages_leads_index_syncworkspacelayout",
@@ -7935,7 +7935,7 @@
       "file_type": "code",
       "norm_label": "syncworkspacelayout()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L748"
+      "source_location": "L749"
     },
     {
       "id": "resources_js_pages_leads_index_togglevisibleselection",
@@ -7947,7 +7947,7 @@
       "file_type": "code",
       "norm_label": "togglevisibleselection()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L707"
+      "source_location": "L708"
     },
     {
       "id": "resources_js_pages_leads_index_trackleadsavestate",
@@ -7959,7 +7959,7 @@
       "file_type": "code",
       "norm_label": "trackleadsavestate()",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L450"
+      "source_location": "L451"
     },
     {
       "id": "resources_js_components_twofactorrecoverycodes_togglerecoverycodesvisibility",
@@ -10910,7 +10910,7 @@
       "file_type": "code",
       "norm_label": "activefiltertext",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L399"
+      "source_location": "L400"
     },
     {
       "id": "package_overrides",
@@ -11306,7 +11306,7 @@
       "file_type": "code",
       "norm_label": "hasunsavedchanges",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L362"
+      "source_location": "L363"
     },
     {
       "id": "app_console_commands_markoverdueleadsforcrm",
@@ -19678,7 +19678,7 @@
       "file_type": "code",
       "norm_label": "desktopvirtualbottom",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L294"
+      "source_location": "L295"
     },
     {
       "id": "resources_js_pages_leads_index_desktopvirtualized",
@@ -19711,7 +19711,7 @@
       "file_type": "code",
       "norm_label": "desktopvirtualrange",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L259"
+      "source_location": "L260"
     },
     {
       "id": "resources_js_pages_leads_index_desktopvirtualtop",
@@ -19722,7 +19722,7 @@
       "file_type": "code",
       "norm_label": "desktopvirtualtop",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L291"
+      "source_location": "L292"
     },
     {
       "id": "resources_js_pages_leads_index_desktopvirtualversion",
@@ -19788,7 +19788,7 @@
       "file_type": "code",
       "norm_label": "hasfilters",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L370"
+      "source_location": "L371"
     },
     {
       "id": "resources_js_pages_leads_index_importform",
@@ -19799,7 +19799,7 @@
       "file_type": "code",
       "norm_label": "importform",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L299"
+      "source_location": "L300"
     },
     {
       "id": "resources_js_pages_leads_index_importhint",
@@ -19810,7 +19810,7 @@
       "file_type": "code",
       "norm_label": "importhint",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L394"
+      "source_location": "L395"
     },
     {
       "id": "resources_js_pages_leads_index_intent",
@@ -19964,7 +19964,7 @@
       "file_type": "code",
       "norm_label": "mobilesavefeedback",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L478"
+      "source_location": "L479"
     },
     {
       "id": "resources_js_pages_leads_index_mobileselectionmode",
@@ -19986,7 +19986,7 @@
       "file_type": "code",
       "norm_label": "newlead",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L308"
+      "source_location": "L309"
     },
     {
       "id": "resources_js_pages_leads_index_outcome",
@@ -20052,7 +20052,7 @@
       "file_type": "code",
       "norm_label": "selectedfile",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L389"
+      "source_location": "L390"
     },
     {
       "id": "resources_js_pages_leads_index_selectedleadids",
@@ -20096,7 +20096,7 @@
       "file_type": "code",
       "norm_label": "sheetsynclabel",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L577"
+      "source_location": "L578"
     },
     {
       "id": "resources_js_pages_leads_index_showadvancedfilters",
@@ -20118,7 +20118,7 @@
       "file_type": "code",
       "norm_label": "showingnewlead",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L330"
+      "source_location": "L331"
     },
     {
       "id": "resources_js_pages_leads_index_somevisibleselected",
@@ -20162,7 +20162,7 @@
       "file_type": "code",
       "norm_label": "syncingsheet",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L576"
+      "source_location": "L577"
     },
     {
       "id": "resources_js_pages_leads_index_virtualdesktopleads",
@@ -20173,7 +20173,7 @@
       "file_type": "code",
       "norm_label": "virtualdesktopleads",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L283"
+      "source_location": "L284"
     },
     {
       "id": "resources_js_pages_leads_index_visibleleadids",
@@ -24374,7 +24374,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L408",
+      "source_location": "L409",
       "weight": 1.0
     },
     {
@@ -24386,7 +24386,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L679",
+      "source_location": "L680",
       "weight": 1.0
     },
     {
@@ -24398,7 +24398,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L549",
+      "source_location": "L550",
       "weight": 1.0
     },
     {
@@ -24410,7 +24410,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L668",
+      "source_location": "L669",
       "weight": 1.0
     },
     {
@@ -24422,7 +24422,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L551",
+      "source_location": "L552",
       "weight": 1.0
     },
     {
@@ -24434,7 +24434,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L568",
+      "source_location": "L569",
       "weight": 1.0
     },
     {
@@ -24446,7 +24446,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L609",
+      "source_location": "L610",
       "weight": 1.0
     },
     {
@@ -24458,7 +24458,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L367",
+      "source_location": "L368",
       "weight": 1.0
     },
     {
@@ -24470,7 +24470,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L575",
+      "source_location": "L576",
       "weight": 1.0
     },
     {
@@ -24482,7 +24482,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L350",
+      "source_location": "L351",
       "weight": 1.0
     },
     {
@@ -24494,7 +24494,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L725",
+      "source_location": "L726",
       "weight": 1.0
     },
     {
@@ -24506,7 +24506,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L737",
+      "source_location": "L738",
       "weight": 1.0
     },
     {
@@ -24518,7 +24518,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L794",
+      "source_location": "L795",
       "weight": 1.0
     },
     {
@@ -24530,7 +24530,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L506",
+      "source_location": "L507",
       "weight": 1.0
     },
     {
@@ -24542,7 +24542,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L730",
+      "source_location": "L731",
       "weight": 1.0
     },
     {
@@ -24554,7 +24554,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L621",
+      "source_location": "L622",
       "weight": 1.0
     },
     {
@@ -24566,7 +24566,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L621",
+      "source_location": "L622",
       "weight": 1.0
     },
     {
@@ -24578,7 +24578,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L632",
+      "source_location": "L633",
       "weight": 1.0
     },
     {
@@ -24590,7 +24590,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L632",
+      "source_location": "L633",
       "weight": 1.0
     },
     {
@@ -24602,7 +24602,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L595",
+      "source_location": "L596",
       "weight": 1.0
     },
     {
@@ -24614,7 +24614,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L601",
+      "source_location": "L602",
       "weight": 1.0
     },
     {
@@ -24626,7 +24626,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L688",
+      "source_location": "L689",
       "weight": 1.0
     },
     {
@@ -26126,7 +26126,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L432",
+      "source_location": "L433",
       "weight": 1.0
     },
     {
@@ -26138,7 +26138,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L748",
+      "source_location": "L749",
       "weight": 1.0
     },
     {
@@ -26150,7 +26150,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L755",
+      "source_location": "L756",
       "weight": 1.0
     },
     {
@@ -26162,7 +26162,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L787",
+      "source_location": "L788",
       "weight": 1.0
     },
     {
@@ -56473,7 +56473,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L259",
+      "source_location": "L260",
       "weight": 1.0
     },
     {
@@ -56484,7 +56484,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L283",
+      "source_location": "L284",
       "weight": 1.0
     },
     {
@@ -56495,7 +56495,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L291",
+      "source_location": "L292",
       "weight": 1.0
     },
     {
@@ -56506,7 +56506,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L294",
+      "source_location": "L295",
       "weight": 1.0
     },
     {
@@ -56517,7 +56517,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L299",
+      "source_location": "L300",
       "weight": 1.0
     },
     {
@@ -56528,7 +56528,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L308",
+      "source_location": "L309",
       "weight": 1.0
     },
     {
@@ -56539,7 +56539,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L330",
+      "source_location": "L331",
       "weight": 1.0
     },
     {
@@ -56550,7 +56550,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L331",
+      "source_location": "L332",
       "weight": 1.0
     },
     {
@@ -56561,7 +56561,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L346",
+      "source_location": "L347",
       "weight": 1.0
     },
     {
@@ -56572,7 +56572,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L360",
+      "source_location": "L361",
       "weight": 1.0
     },
     {
@@ -56583,7 +56583,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L362",
+      "source_location": "L363",
       "weight": 1.0
     },
     {
@@ -56594,7 +56594,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L370",
+      "source_location": "L371",
       "weight": 1.0
     },
     {
@@ -56605,7 +56605,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L389",
+      "source_location": "L390",
       "weight": 1.0
     },
     {
@@ -56616,7 +56616,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L394",
+      "source_location": "L395",
       "weight": 1.0
     },
     {
@@ -56627,7 +56627,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L399",
+      "source_location": "L400",
       "weight": 1.0
     },
     {
@@ -56649,7 +56649,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L441",
+      "source_location": "L442",
       "weight": 1.0
     },
     {
@@ -56660,7 +56660,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L450",
+      "source_location": "L451",
       "weight": 1.0
     },
     {
@@ -56671,7 +56671,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L471",
+      "source_location": "L472",
       "weight": 1.0
     },
     {
@@ -56682,7 +56682,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L478",
+      "source_location": "L479",
       "weight": 1.0
     },
     {
@@ -56693,7 +56693,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L498",
+      "source_location": "L499",
       "weight": 1.0
     },
     {
@@ -56704,7 +56704,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L500",
+      "source_location": "L501",
       "weight": 1.0
     },
     {
@@ -56715,7 +56715,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L505",
+      "source_location": "L506",
       "weight": 1.0
     },
     {
@@ -56726,7 +56726,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L509",
+      "source_location": "L510",
       "weight": 1.0
     },
     {
@@ -56737,7 +56737,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L517",
+      "source_location": "L518",
       "weight": 1.0
     },
     {
@@ -56748,7 +56748,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L549",
+      "source_location": "L550",
       "weight": 1.0
     },
     {
@@ -56759,7 +56759,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L550",
+      "source_location": "L551",
       "weight": 1.0
     },
     {
@@ -56770,7 +56770,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L570",
+      "source_location": "L571",
       "weight": 1.0
     },
     {
@@ -56781,7 +56781,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L575",
+      "source_location": "L576",
       "weight": 1.0
     },
     {
@@ -56792,7 +56792,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L576",
+      "source_location": "L577",
       "weight": 1.0
     },
     {
@@ -56803,7 +56803,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L577",
+      "source_location": "L578",
       "weight": 1.0
     },
     {
@@ -56814,7 +56814,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L585",
+      "source_location": "L586",
       "weight": 1.0
     },
     {
@@ -56825,7 +56825,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L595",
+      "source_location": "L596",
       "weight": 1.0
     },
     {
@@ -56836,7 +56836,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L596",
+      "source_location": "L597",
       "weight": 1.0
     },
     {
@@ -56847,7 +56847,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L599",
+      "source_location": "L600",
       "weight": 1.0
     },
     {
@@ -56858,7 +56858,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L601",
+      "source_location": "L602",
       "weight": 1.0
     },
     {
@@ -56869,7 +56869,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L602",
+      "source_location": "L603",
       "weight": 1.0
     },
     {
@@ -56880,7 +56880,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L609",
+      "source_location": "L610",
       "weight": 1.0
     },
     {
@@ -56891,7 +56891,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L610",
+      "source_location": "L611",
       "weight": 1.0
     },
     {
@@ -56902,7 +56902,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L620",
+      "source_location": "L621",
       "weight": 1.0
     },
     {
@@ -56913,7 +56913,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L622",
+      "source_location": "L623",
       "weight": 1.0
     },
     {
@@ -56924,7 +56924,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L631",
+      "source_location": "L632",
       "weight": 1.0
     },
     {
@@ -56935,7 +56935,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L633",
+      "source_location": "L634",
       "weight": 1.0
     },
     {
@@ -56946,7 +56946,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L642",
+      "source_location": "L643",
       "weight": 1.0
     },
     {
@@ -56957,7 +56957,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L649",
+      "source_location": "L650",
       "weight": 1.0
     },
     {
@@ -56968,7 +56968,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L657",
+      "source_location": "L658",
       "weight": 1.0
     },
     {
@@ -56979,7 +56979,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L659",
+      "source_location": "L660",
       "weight": 1.0
     },
     {
@@ -56990,7 +56990,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L668",
+      "source_location": "L669",
       "weight": 1.0
     },
     {
@@ -57001,7 +57001,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L669",
+      "source_location": "L670",
       "weight": 1.0
     },
     {
@@ -57012,7 +57012,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L678",
+      "source_location": "L679",
       "weight": 1.0
     },
     {
@@ -57023,7 +57023,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L680",
+      "source_location": "L681",
       "weight": 1.0
     },
     {
@@ -57034,7 +57034,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L686",
+      "source_location": "L687",
       "weight": 1.0
     },
     {
@@ -57045,7 +57045,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L690",
+      "source_location": "L691",
       "weight": 1.0
     },
     {
@@ -57056,7 +57056,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L694",
+      "source_location": "L695",
       "weight": 1.0
     },
     {
@@ -57067,7 +57067,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L707",
+      "source_location": "L708",
       "weight": 1.0
     },
     {
@@ -57078,7 +57078,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L719",
+      "source_location": "L720",
       "weight": 1.0
     },
     {
@@ -57089,7 +57089,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L724",
+      "source_location": "L725",
       "weight": 1.0
     },
     {
@@ -57100,7 +57100,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L726",
+      "source_location": "L727",
       "weight": 1.0
     },
     {
@@ -57111,7 +57111,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L730",
+      "source_location": "L731",
       "weight": 1.0
     },
     {
@@ -57122,7 +57122,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L731",
+      "source_location": "L732",
       "weight": 1.0
     },
     {
@@ -57133,7 +57133,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L736",
+      "source_location": "L737",
       "weight": 1.0
     },
     {
@@ -57144,7 +57144,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L769",
+      "source_location": "L770",
       "weight": 1.0
     },
     {
@@ -57155,7 +57155,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L772",
+      "source_location": "L773",
       "weight": 1.0
     },
     {
@@ -57166,7 +57166,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L784",
+      "source_location": "L785",
       "weight": 1.0
     },
     {
@@ -63130,7 +63130,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L829",
+      "source_location": "L830",
       "weight": 1.0
     },
     {
@@ -63142,7 +63142,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L836",
+      "source_location": "L837",
       "weight": 1.0
     },
     {
@@ -63154,7 +63154,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L679",
+      "source_location": "L680",
       "weight": 1.0
     },
     {
@@ -63166,7 +63166,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L549",
+      "source_location": "L550",
       "weight": 1.0
     },
     {
@@ -63178,7 +63178,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L668",
+      "source_location": "L669",
       "weight": 1.0
     },
     {
@@ -63190,7 +63190,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L609",
+      "source_location": "L610",
       "weight": 1.0
     },
     {
@@ -63202,7 +63202,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L575",
+      "source_location": "L576",
       "weight": 1.0
     },
     {
@@ -63214,7 +63214,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L805",
+      "source_location": "L806",
       "weight": 1.0
     },
     {
@@ -63226,7 +63226,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L730",
+      "source_location": "L731",
       "weight": 1.0
     },
     {
@@ -63238,7 +63238,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L595",
+      "source_location": "L596",
       "weight": 1.0
     },
     {
@@ -63250,7 +63250,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L601",
+      "source_location": "L602",
       "weight": 1.0
     },
     {
@@ -63358,7 +63358,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L722",
+      "source_location": "L723",
       "weight": 1.0
     },
     {
@@ -63370,7 +63370,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L734",
+      "source_location": "L735",
       "weight": 1.0
     },
     {
@@ -63382,7 +63382,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "resources/js/pages/Leads/Index.vue",
-      "source_location": "L728",
+      "source_location": "L729",
       "weight": 1.0
     },
     {
@@ -63399,5 +63399,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "1078c2398a5b202e074cafa22291df0623e5d7b3"
+  "built_at_commit": "01c98a3dd8a1c583959e975eaa43db8a7f56c64f"
 }

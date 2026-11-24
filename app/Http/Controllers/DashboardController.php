@@ -165,7 +165,7 @@ class DashboardController extends Controller
             $collaboratorsByLead[$collaborator->lead_id][] = ['id' => (int) $collaborator->id, 'name' => (string) $collaborator->name];
         }
         $currentUserId = (int) $request->user()->id;
-        foreach ($leads->items() as $lead) {
+        foreach ($leads as $lead) {
             $lead->milestones = $milestonesByLead[$lead->id] ?? [];
             $lead->collaborators = $collaboratorsByLead[$lead->id] ?? [];
             $lead->cs_filter_match = $filteredCsUserId === null

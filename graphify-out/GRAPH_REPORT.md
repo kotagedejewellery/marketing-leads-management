@@ -1,7 +1,7 @@
 # Graph Report - marketing-leads  (2026-11-24)
 
 ## Corpus Check
-- 325 files · ~152,060 words
+- 325 files · ~152,079 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 25 file(s) not represented in the graph (top: (none) 19, .example 2, .neon 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1078c239`
+- Built from commit: `01c98a3d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -576,11 +576,11 @@ Nodes (3): zod, budgetOptions, leadSchema
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `vue` connect `vue` to `DialogContent.vue`, `LeadSaveFeedback.vue`, `reka-ui`, `Sidebar.vue`, `navigation-menu/index.ts`, `@lucide/vue`, `select/index.ts`, `Leads/Index.vue`, `types/index.ts`, `AlertError.vue`, `TwoFactorSetupModal.vue`, `NavigationMenu.vue`, `AppLayout.vue`, `package.json`, `button/index.ts`, `SelectContent.vue`, `Separator.vue`, `SidebarProvider.vue`, `AppSidebar.vue`, `Branches/Index.vue`, `AppHeader.vue`, `InputOTPSlot.vue`, `PasskeyRegister.vue`, `@vueuse/core`, `useAppearance.ts`, `UserInfo.vue`, `Show.vue`, `global.d.ts`, `LeadQuickUpdate.vue`, `LeadHistoryPopover.vue`, `SheetContent.vue`, `useCurrentUrl.ts`, `Alert.vue`, `SidebarMenuSkeleton.vue`, `@inertiajs/vue3`, `TwoFactorRecoveryCodes.vue`, `AvatarFallback.vue`, `Statistics.vue`?**
-  _High betweenness centrality (0.111) - this node is a cross-community bridge._
+  _High betweenness centrality (0.113) - this node is a cross-community bridge._
 - **Why does `User` connect `User` to `Laravel\Fortify\Features`, `EmailVerificationTest`, `PasswordResetTest.php`, `ProfileValidationRules`, `DatabaseSeeder.php`, `UserFactory.php`, `LeadManagementTest`, `LeadManagementTest.php`, `VerificationNotificationTest.php`, `FortifyServiceProvider.php`, `TestCase`, `SecurityTest.php`, `CreateNewUser.php`, `ResetUserPassword.php`, `AuthenticationTest`, `ProfileUpdateTest`, `DashboardTest.php`?**
   _High betweenness centrality (0.048) - this node is a cross-community bridge._
 - **Why does `@inertiajs/vue3` connect `@inertiajs/vue3` to `Leads/Index.vue`, `Breadcrumbs.vue`, `vue`, `types/index.ts`, `TwoFactorSetupModal.vue`, `AppLayout.vue`, `package.json`, `button/index.ts`, `Branches/Index.vue`, `AppSidebar.vue`, `AppHeader.vue`, `PasskeyRegister.vue`, `useAppearance.ts`, `Show.vue`, `LeadQuickUpdate.vue`, `LeadHistoryPopover.vue`, `useCurrentUrl.ts`, `TwoFactorRecoveryCodes.vue`, `Layout.vue`, `Statistics.vue`?**
-  _High betweenness centrality (0.040) - this node is a cross-community bridge._
+  _High betweenness centrality (0.036) - this node is a cross-community bridge._
 - **What connects `$schema`, `style`, `config` to the rest of the system?**
   _659 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Illuminate\Database\Schema\Blueprint` be split into smaller, more focused modules?**

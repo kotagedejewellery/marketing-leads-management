@@ -1440,9 +1440,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1795495263.7454364,
-    "seen": 1795495340.984929,
-    "ast_hash": "63691fa4045fb9fe40d57b6978c533dd",
+    "mtime": 1795495533.8891697,
+    "seen": 1795495591.895547,
+    "ast_hash": "d12f0181412219506dc6f1d9eb7b6682",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
@@ -1812,9 +1812,9 @@
     "semantic_hash": ""
   },
   "resources/js/components/LeadQuickUpdate.vue": {
-    "mtime": 1795495238.1058877,
-    "seen": 1795495340.9841301,
-    "ast_hash": "8e1c6f2aabb71718ca68395fc08bc12e",
+    "mtime": 1795495477.049368,
+    "seen": 1795495591.8947926,
+    "ast_hash": "6133bc593292d69c2f3a322b0e6c3c69",
     "semantic_hash": ""
   },
   "database/postgres/007_simplify_lead_milestones.sql": {

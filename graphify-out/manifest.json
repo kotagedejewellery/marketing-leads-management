@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/DashboardController.php": {
-    "mtime": 1795494178.1051986,
-    "seen": 1795494241.9884639,
-    "ast_hash": "02a761250bc6cc09eb193c3207f0a88b",
+    "mtime": 1795501690.1217477,
+    "seen": 1795501725.8339193,
+    "ast_hash": "64a5a175adb6a290d91dcf4d513012ad",
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
@@ -1440,9 +1440,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1795495533.8891697,
-    "seen": 1795495591.895547,
-    "ast_hash": "d12f0181412219506dc6f1d9eb7b6682",
+    "mtime": 1795495654.9161174,
+    "seen": 1795501725.834773,
+    "ast_hash": "d429a4cc70af5347ebf9ddcfd827a4c3",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {

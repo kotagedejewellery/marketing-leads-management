@@ -867,11 +867,11 @@ class LeadManagementTest extends TestCase
         $version = $initialResponse->inertiaPage()['version'];
 
         $this->get('/leads', [
-                'X-Inertia' => 'true',
-                'X-Inertia-Version' => $version,
-                'X-Inertia-Partial-Component' => 'Leads/Index',
-                'X-Inertia-Partial-Data' => 'flash',
-            ])
+            'X-Inertia' => 'true',
+            'X-Inertia-Version' => $version,
+            'X-Inertia-Partial-Component' => 'Leads/Index',
+            'X-Inertia-Partial-Data' => 'flash',
+        ])
             ->assertOk()
             ->assertHeader('X-Inertia', 'true')
             ->assertJsonMissingPath('props.leads');

@@ -42,6 +42,9 @@ const props = withDefaults(
         retrySaveVersion?: number;
         canMarkCrm?: boolean;
         showSaveFeedback?: boolean;
+        draft?: QuickUpdateFields;
+        savedDraft?: QuickUpdateFields;
+        persistentSaveState?: { state: SaveState; message: string };
     }>(),
     {
         variant: 'card',
@@ -56,7 +59,7 @@ const emit = defineEmits<{
 }>();
 const toDateTimeLocal = (value: string | null) =>
     value ? value.replace(' ', 'T').slice(0, 16) : '';
-const values = reactive<QuickUpdateFields>({
+const initialValues: QuickUpdateFields = {
     intent_buying: props.lead.intent_buying || '',
     usage_date: props.lead.usage_date || '',
     budget: props.lead.budget || '',
@@ -68,7 +71,8 @@ const values = reactive<QuickUpdateFields>({
     crm_taken_over: Boolean(props.lead.crm_taken_over_at),
     revision: props.lead.revision,
     milestones: [...props.lead.milestones],
-});
+};
+const values = reactive<QuickUpdateFields>(props.draft || initialValues);
 const groups = [
     {
         label: 'Cold',
@@ -121,7 +125,12 @@ const snapshot = (): QuickUpdateFields => ({
     milestones: [...values.milestones].sort(),
 });
 const signature = (payload: QuickUpdateFields) => JSON.stringify(payload);
-const savedValues = reactive<QuickUpdateFields>(snapshot());
+const savedValues = reactive<QuickUpdateFields>(props.savedDraft || snapshot());
+const persistSaveState = (state: SaveState, message = '') => {
+    if (!props.persistentSaveState) return;
+    props.persistentSaveState.state = state;
+    props.persistentSaveState.message = message;
+};
 const isDirty = computed(
     () => signature(snapshot()) !== signature(savedValues),
 );
@@ -173,7 +182,10 @@ watch(isDirty, (dirty) => emit('dirty-change', props.lead.id, dirty), {
 });
 watch(
     saveState,
-    (state) => emit('save-state', props.lead.id, state, saveError.value),
+    (state) => {
+        persistSaveState(state, saveError.value);
+        emit('save-state', props.lead.id, state, saveError.value);
+    },
     { immediate: true },
 );
 
@@ -191,6 +203,7 @@ const save = () => {
         saveError.value = values.outcome_factor
             ? 'Jelaskan faktor lainnya sebelum menyimpan.'
             : 'Pilih faktor hasil akhir sebelum menyimpan.';
+        persistSaveState('error', saveError.value);
 
         return;
     }
@@ -207,6 +220,7 @@ const save = () => {
     invalidField.value = null;
     let handled = false;
     router.patch(`/leads/${props.lead.id}`, payload, {
+        only: ['flash'],
         preserveScroll: true,
         preserveState: true,
         onSuccess: () => {
@@ -217,7 +231,9 @@ const save = () => {
             if (savedTimer) clearTimeout(savedTimer);
             savedTimer = setTimeout(() => {
                 hasSaved.value = false;
+                persistSaveState('idle');
             }, 3000);
+            persistSaveState('saved');
             handled = true;
         },
         onError: (errors) => {
@@ -230,12 +246,14 @@ const save = () => {
                 : message
                   ? `${field === 'budget' ? 'Budget' : 'Data'}: ${message}`
                   : 'Gagal menyimpan. Ubah kembali data untuk mencoba lagi.';
+            persistSaveState(saveState.value, saveError.value);
         },
         onFinish: () => {
             processing.value = false;
             if (!handled) {
                 saveError.value =
                     'Simpan gagal. Periksa koneksi lalu coba lagi.';
+                persistSaveState('error', saveError.value);
             }
             if (queued.value) {
                 queued.value = false;
@@ -255,6 +273,7 @@ const queueSave = (delay = 0) => {
         return;
     }
     waiting.value = true;
+    persistSaveState('saving');
     saveTimer = setTimeout(save, delay);
 };
 const saveImmediately = () => queueSave();
@@ -296,13 +315,22 @@ defineExpose({ flushPendingSave });
 watch(
     () => props.retrySaveVersion,
     (version, previous) => {
-        if (version !== previous && saveError.value) retrySave();
+        if (
+            version !== previous &&
+            (saveError.value || props.persistentSaveState?.state === 'error')
+        ) {
+            retrySave();
+        }
     },
 );
 
 onBeforeUnmount(() => {
     flushPendingSave();
-    if (savedTimer) clearTimeout(savedTimer);
+    if (savedTimer && !processing.value) {
+        clearTimeout(savedTimer);
+        persistSaveState('idle');
+    }
+    emit('dirty-change', props.lead.id, false);
     emit('save-state', props.lead.id, 'idle', '');
 });
 </script>

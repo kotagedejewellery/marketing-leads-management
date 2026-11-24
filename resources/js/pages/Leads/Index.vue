@@ -7,7 +7,15 @@ import {
     SlidersHorizontal,
     X,
 } from '@lucide/vue';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    reactive,
+    ref,
+    watch,
+} from 'vue';
 import LeadSaveFeedback from '@/components/LeadSaveFeedback.vue';
 import LeadHistoryPopover from '@/components/LeadHistoryPopover.vue';
 import LeadQuickUpdate from '@/components/LeadQuickUpdate.vue';
@@ -66,15 +74,29 @@ type Lead = {
 };
 type Page = {
     data: Lead[];
-    current_page: number;
-    last_page: number;
     total: number;
-    prev_page_url: string | null;
-    next_page_url: string | null;
 };
 type LeadSaveState = {
-    state: 'saving' | 'saved' | 'error' | 'conflict';
+    state: 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
     message: string;
+};
+type QuickUpdateFields = {
+    intent_buying: string;
+    usage_date: string;
+    budget: string;
+    keterangan: string;
+    outcome: string;
+    outcome_factor: string;
+    outcome_note: string;
+    next_follow_up_at: string;
+    crm_taken_over: boolean;
+    revision: number;
+    milestones: string[];
+};
+type LeadEditState = {
+    current: QuickUpdateFields;
+    saved: QuickUpdateFields;
+    saveState: LeadSaveState;
 };
 const props = defineProps<{
     leads: Page;
@@ -215,6 +237,66 @@ const leadSaveStates = ref(new Map<number, LeadSaveState>());
 const leadRetryVersions = ref(new Map<number, number>());
 const pendingDiscardAction = ref<(() => void) | null>(null);
 const isDesktopWorkspace = ref(false);
+const leadEditStates = ref(new Map<number, LeadEditState>());
+const desktopLeadViewport = ref<HTMLElement | null>(null);
+const desktopScrollTop = ref(0);
+const desktopViewportHeight = ref(0);
+const desktopRowHeights = new Map<number, number>();
+const desktopRowIndexes = new WeakMap<HTMLElement, number>();
+const desktopRowElements = new Map<number, HTMLElement>();
+const desktopVirtualVersion = ref(0);
+const desktopVirtualized = computed(() => props.leads.data.length > 100);
+const desktopVirtualMetrics = computed(() => {
+    void desktopVirtualVersion.value;
+    const offsets = [0];
+
+    props.leads.data.forEach((_, index) => {
+        // shortcut: unmeasured rows use 128px until visited; persist indexed heights if list volume outgrows the current operational scale.
+        offsets.push(offsets[index] + (desktopRowHeights.get(index) || 128));
+    });
+
+    return { offsets, total: offsets.at(-1) || 0 };
+});
+const desktopVirtualRange = computed(() => {
+    const total = props.leads.data.length;
+    if (!desktopVirtualized.value) return { start: 0, end: total };
+
+    const { offsets } = desktopVirtualMetrics.value;
+    const viewportEnd =
+        desktopScrollTop.value + Math.max(desktopViewportHeight.value, 800);
+    let firstVisible = 0;
+    while (
+        firstVisible < total &&
+        offsets[firstVisible + 1] < desktopScrollTop.value
+    ) {
+        firstVisible++;
+    }
+    let lastVisible = firstVisible;
+    while (lastVisible < total && offsets[lastVisible] < viewportEnd) {
+        lastVisible++;
+    }
+
+    return {
+        start: Math.max(0, firstVisible - 6),
+        end: Math.min(total, lastVisible + 6),
+    };
+});
+const virtualDesktopLeads = computed(() =>
+    props.leads.data
+        .slice(desktopVirtualRange.value.start, desktopVirtualRange.value.end)
+        .map((lead, offset) => ({
+            lead,
+            index: desktopVirtualRange.value.start + offset,
+        })),
+);
+const desktopVirtualTop = computed(
+    () => desktopVirtualMetrics.value.offsets[desktopVirtualRange.value.start],
+);
+const desktopVirtualBottom = computed(
+    () =>
+        desktopVirtualMetrics.value.total -
+        desktopVirtualMetrics.value.offsets[desktopVirtualRange.value.end],
+);
 const importForm = useForm<{
     csv_file: File | null;
     import_mode: 'all_leads' | 'daily_tabs';
@@ -247,7 +329,45 @@ const newLead = useForm({
     milestone: '',
 });
 const showingNewLead = ref(false);
-const hasUnsavedChanges = computed(() => dirtyLeadIds.value.size > 0);
+const toQuickUpdateFields = (lead: Lead): QuickUpdateFields => ({
+    intent_buying: lead.intent_buying || '',
+    usage_date: lead.usage_date || '',
+    budget: lead.budget || '',
+    keterangan: lead.keterangan || '',
+    outcome: lead.outcome || '',
+    outcome_factor: lead.outcome_factor || '',
+    outcome_note: lead.outcome_note || '',
+    next_follow_up_at: lead.next_follow_up_at
+        ? lead.next_follow_up_at.replace(' ', 'T').slice(0, 16)
+        : '',
+    crm_taken_over: Boolean(lead.crm_taken_over_at),
+    revision: lead.revision,
+    milestones: [...lead.milestones].sort(),
+});
+const leadEditState = (lead: Lead) => {
+    const existing = leadEditStates.value.get(lead.id);
+    if (existing) return existing;
+
+    const current = toQuickUpdateFields(lead);
+    const state = {
+        current: reactive(current),
+        saved: reactive({ ...current, milestones: [...current.milestones] }),
+        saveState: reactive<LeadSaveState>({ state: 'idle', message: '' }),
+    };
+    leadEditStates.value = new Map(leadEditStates.value).set(lead.id, state);
+
+    return state;
+};
+const quickUpdateSignature = (values: QuickUpdateFields) =>
+    JSON.stringify({ ...values, milestones: [...values.milestones].sort() });
+const hasUnsavedChanges = computed(
+    () =>
+        dirtyLeadIds.value.size > 0 ||
+        Array.from(leadEditStates.value.values()).some(
+            ({ current, saved }) =>
+                quickUpdateSignature(current) !== quickUpdateSignature(saved),
+        ),
+);
 const hasFilters = computed(() =>
     Boolean(
         q.value ||
@@ -349,7 +469,13 @@ const trackLeadSaveState = (
         mobileEditorLead.value = null;
     }
 };
-const leadSaveState = (leadId: number) => leadSaveStates.value.get(leadId);
+const leadSaveState = (leadId: number) => {
+    const persistentState = leadEditStates.value.get(leadId)?.saveState;
+
+    return persistentState?.state !== 'idle'
+        ? persistentState
+        : leadSaveStates.value.get(leadId);
+};
 const mobileSaveFeedback = computed(() => {
     const state = mobileEditorLead.value
         ? leadSaveState(mobileEditorLead.value.id)
@@ -384,6 +510,7 @@ const resolveLeadConflict = (leadId: number) => {
 const discardChangesAndContinue = () => {
     const action = pendingDiscardAction.value;
     dirtyLeadIds.value = new Set();
+    leadEditStates.value = new Map();
     pendingDiscardAction.value = null;
     discardChangesDialogOpen.value = false;
     action?.();
@@ -624,6 +751,62 @@ const syncWorkspaceLayout = () => {
         isDesktopWorkspace.value = desktopBreakpoint.matches;
     }
 };
+let desktopRowResizeObserver: ResizeObserver | undefined;
+let desktopViewportResizeObserver: ResizeObserver | undefined;
+const createDesktopRowResizeObserver = () => {
+    desktopRowResizeObserver = new ResizeObserver((entries) => {
+        let changed = false;
+        entries.forEach((entry) => {
+            const index = desktopRowIndexes.get(entry.target as HTMLElement);
+            const height = Math.ceil(entry.contentRect.height);
+            if (index === undefined || height <= 0) return;
+            if (desktopRowHeights.get(index) === height) return;
+            desktopRowHeights.set(index, height);
+            changed = true;
+        });
+        if (changed) desktopVirtualVersion.value++;
+    });
+};
+const updateDesktopViewport = () => {
+    desktopViewportHeight.value = desktopLeadViewport.value?.clientHeight || 0;
+};
+const observeDesktopLeadRow = (index: number, element: unknown) => {
+    const previous = desktopRowElements.get(index);
+    if (previous && previous !== element) {
+        desktopRowResizeObserver?.unobserve(previous);
+        desktopRowElements.delete(index);
+    }
+    if (!(element instanceof HTMLElement)) return;
+
+    desktopRowElements.set(index, element);
+    desktopRowIndexes.set(element, index);
+    desktopRowResizeObserver?.observe(element);
+};
+const onDesktopTableScroll = (event: Event) => {
+    desktopScrollTop.value = (event.currentTarget as HTMLElement).scrollTop;
+};
+const resetDesktopVirtualRows = () => {
+    desktopRowResizeObserver?.disconnect();
+    desktopRowResizeObserver = undefined;
+    desktopRowElements.clear();
+    desktopRowHeights.clear();
+    desktopVirtualVersion.value++;
+    desktopScrollTop.value = 0;
+    createDesktopRowResizeObserver();
+    nextTick(() => {
+        if (desktopLeadViewport.value) {
+            desktopLeadViewport.value.scrollTop = 0;
+        }
+    });
+};
+const observeDesktopViewport = () => {
+    desktopViewportResizeObserver?.disconnect();
+    if (!desktopLeadViewport.value) return;
+
+    desktopViewportResizeObserver = new ResizeObserver(updateDesktopViewport);
+    desktopViewportResizeObserver.observe(desktopLeadViewport.value);
+    updateDesktopViewport();
+};
 watch(hasUnsavedChanges, (isDirty) => {
     if (!isDirty) {
         syncWorkspaceLayout();
@@ -635,7 +818,19 @@ watch(
         if (mode === 'all_leads') importForm.branch_id = '';
     },
 );
+watch(
+    () => props.leads.data,
+    () => {
+        leadEditStates.value = new Map();
+        resetDesktopVirtualRows();
+    },
+);
+watch(isDesktopWorkspace, () => {
+    desktopScrollTop.value = 0;
+    nextTick(observeDesktopViewport);
+});
 onMounted(() => {
+    createDesktopRowResizeObserver();
     desktopBreakpoint = window.matchMedia('(min-width: 1280px)');
     desktopBreakpoint.addEventListener('change', syncWorkspaceLayout);
     syncWorkspaceLayout();
@@ -653,6 +848,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', beforeUnload);
     desktopBreakpoint?.removeEventListener('change', syncWorkspaceLayout);
+    desktopRowResizeObserver?.disconnect();
+    desktopViewportResizeObserver?.disconnect();
     removeNavigationGuard?.();
 });
 </script>
@@ -691,7 +888,7 @@ onBeforeUnmount(() => {
                 </button>
                 <p class="text-[#62665b]">
                     <strong class="text-[#22231f]">{{ leads.total }}</strong>
-                    lead {{ archiveMode ? 'diarsipkan' : 'ditemukan' }}
+                    lead {{ archiveMode ? 'arsip' : 'ditampilkan' }}
                 </p>
             </div>
         </div>
@@ -1253,7 +1450,7 @@ onBeforeUnmount(() => {
         >
             <p class="text-sm text-kgj-muted">
                 <strong class="text-kgj-ink">{{ leads.data.length }}</strong>
-                lead di halaman ini
+                lead ditampilkan
             </p>
             <button
                 class="kgj-button-secondary"
@@ -1277,7 +1474,7 @@ onBeforeUnmount(() => {
                     type="checkbox"
                     @change="toggleVisibleSelection"
                 />
-                Pilih semua {{ visibleLeadIds.length }} lead pada halaman ini
+                Pilih hingga 100 dari {{ visibleLeadIds.length }} lead
             </label>
             <p
                 v-if="mobileSelectionMode"
@@ -1301,7 +1498,7 @@ onBeforeUnmount(() => {
                     type="checkbox"
                     @change="toggleVisibleSelection"
                 />
-                Pilih semua {{ visibleLeadIds.length }} lead pada halaman ini
+                Pilih hingga 100 dari {{ visibleLeadIds.length }} lead
             </label>
         </div>
         <form
@@ -1423,10 +1620,11 @@ onBeforeUnmount(() => {
         </form>
 
         <div v-if="!isDesktopWorkspace" class="mt-3 grid gap-3">
+            <!-- shortcut: CSS skips offscreen paint while keeping inline editor state mounted; use a state-backed virtual list when lead volume makes interaction slow. -->
             <article
                 v-for="lead in leads.data"
                 :key="lead.id"
-                class="rounded-2xl border border-kgj-line bg-kgj-paper p-4 shadow-[0_8px_22px_rgba(58,48,31,0.06)]"
+                class="rounded-2xl border border-kgj-line bg-kgj-paper p-4 shadow-[0_8px_22px_rgba(58,48,31,0.06)] [contain-intrinsic-size:auto_18rem] [content-visibility:auto]"
             >
                 <div class="flex items-start gap-3">
                     <label
@@ -1678,6 +1876,11 @@ onBeforeUnmount(() => {
                         :outcome-factors="outcomeFactors"
                         :can-mark-crm="isAdmin"
                         :show-save-feedback="false"
+                        :draft="leadEditState(mobileEditorLead).current"
+                        :saved-draft="leadEditState(mobileEditorLead).saved"
+                        :persistent-save-state="
+                            leadEditState(mobileEditorLead).saveState
+                        "
                         :retry-save-version="
                             leadRetryVersion(mobileEditorLead.id)
                         "
@@ -1690,7 +1893,9 @@ onBeforeUnmount(() => {
 
         <div
             v-if="isDesktopWorkspace"
+            ref="desktopLeadViewport"
             class="kgj-table mt-6 max-h-[calc(100dvh-18rem)] overflow-auto"
+            @scroll.passive="onDesktopTableScroll"
         >
             <table
                 class="w-full min-w-[2490px] border-separate border-spacing-0 text-sm"
@@ -1731,8 +1936,24 @@ onBeforeUnmount(() => {
                     </tr>
                 </thead>
                 <tbody>
-                    <template v-for="lead in leads.data" :key="lead.id">
-                        <tr class="group border-t border-[#e7eae5]">
+                    <tr v-if="desktopVirtualTop" aria-hidden="true">
+                        <td
+                            :colspan="archiveMode ? 5 : 14"
+                            class="h-0 p-0"
+                            :style="{ height: `${desktopVirtualTop}px` }"
+                        />
+                    </tr>
+                    <template
+                        v-for="{ lead, index } in virtualDesktopLeads"
+                        :key="lead.id"
+                    >
+                        <tr
+                            :ref="
+                                (element) =>
+                                    observeDesktopLeadRow(index, element)
+                            "
+                            class="group border-t border-[#e7eae5]"
+                        >
                             <td
                                 class="sticky left-0 z-10 w-14 min-w-14 bg-kgj-paper p-4 group-hover:bg-[#fcfaf5]"
                             >
@@ -1873,6 +2094,11 @@ onBeforeUnmount(() => {
                                 :lead="lead"
                                 :outcome-factors="outcomeFactors"
                                 :can-mark-crm="isAdmin"
+                                :draft="leadEditState(lead).current"
+                                :saved-draft="leadEditState(lead).saved"
+                                :persistent-save-state="
+                                    leadEditState(lead).saveState
+                                "
                                 :retry-save-version="leadRetryVersion(lead.id)"
                                 @dirty-change="trackDirtyLead"
                                 @save-state="trackLeadSaveState"
@@ -1886,6 +2112,13 @@ onBeforeUnmount(() => {
                             </td>
                         </tr>
                     </template>
+                    <tr v-if="desktopVirtualBottom" aria-hidden="true">
+                        <td
+                            :colspan="archiveMode ? 5 : 14"
+                            class="h-0 p-0"
+                            :style="{ height: `${desktopVirtualBottom}px` }"
+                        />
+                    </tr>
                     <tr v-if="!leads.data.length">
                         <td
                             :colspan="archiveMode ? 5 : 14"
@@ -1902,29 +2135,6 @@ onBeforeUnmount(() => {
             </table>
         </div>
 
-        <nav
-            v-if="leads.last_page > 1"
-            class="mt-6 flex items-center justify-between text-sm"
-            aria-label="Halaman leads"
-        >
-            <span class="text-[#62665b]"
-                >Halaman {{ leads.current_page }} dari
-                {{ leads.last_page }}</span
-            >
-            <div class="flex gap-2">
-                <Link
-                    v-if="leads.prev_page_url"
-                    :href="leads.prev_page_url"
-                    class="min-h-11 border border-[#cfc6b5] px-3 py-3"
-                    >Sebelumnya</Link
-                ><Link
-                    v-if="leads.next_page_url"
-                    :href="leads.next_page_url"
-                    class="min-h-11 border border-[#cfc6b5] px-3 py-3"
-                    >Berikutnya</Link
-                >
-            </div>
-        </nav>
         <Dialog v-model:open="discardChangesDialogOpen">
             <DialogContent>
                 <DialogHeader

@@ -146,7 +146,7 @@ class DashboardController extends Controller
         }
         $this->restrictToVisibleLeads($query, $request, 'l');
 
-        $leads = $query->paginate(20)->withQueryString();
+        $leads = $query->get();
         $leadIds = $leads->pluck('id')->all();
         $milestonesByLead = [];
         foreach (DB::table('lead_milestones')->whereIn('lead_id', $leadIds)->where('is_active', true)->orderBy('milestone')->get(['lead_id', 'milestone']) as $milestone) {
@@ -200,7 +200,10 @@ class DashboardController extends Controller
         }
 
         return Inertia::render('Leads/Index', [
-            'leads' => $leads,
+            'leads' => [
+                'data' => $leads,
+                'total' => $leads->count(),
+            ],
             'filters' => $request->only('q', 'branch', 'source_branch_missing', 'stage', 'outcome', 'outcome_factor', 'queue', 'intent', 'budget', 'lead_date_from', 'lead_date_to', 'lead_date_status', 'follow_up', 'handling', 'crm', 'cs_user_id', 'archived'),
             'archiveMode' => $showArchived,
             'branches' => $request->user()->role === 'admin' ? DB::table('branches')->orderBy('name')->get(['id', 'name']) : [],

@@ -750,6 +750,27 @@ class LeadManagementTest extends TestCase
             );
     }
 
+    public function test_lead_list_returns_every_matching_lead_without_pagination(): void
+    {
+        $admin = $this->user('admin');
+
+        foreach (range(1, 21) as $number) {
+            \DB::table('leads')->insert([
+                'contact_raw' => sprintf('+628510000%04d', $number),
+                'contact_key' => sprintf('phone:628510000%04d', $number),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $this->actingAs($admin)->get('/leads')
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Leads/Index')
+                ->where('leads.total', 21)
+                ->has('leads.data', 21),
+            );
+    }
+
     public function test_cs_can_view_the_five_latest_activity_entries_for_an_assigned_lead(): void
     {
         $cs = $this->user('cs');
@@ -827,6 +848,27 @@ class LeadManagementTest extends TestCase
             'keterangan' => 'Update dari daftar lead.',
             'next_follow_up_at' => '2026-12-20 10:00:00',
         ]);
+    }
+
+    public function test_inline_lead_autosave_partial_reload_does_not_return_the_lead_list(): void
+    {
+        $admin = $this->user('admin');
+        \DB::table('leads')->insert([
+            'contact_raw' => '+6285100000997',
+            'contact_key' => 'phone:6285100000997',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->get('/leads', [
+                'X-Inertia' => 'true',
+                'X-Inertia-Partial-Component' => 'Leads/Index',
+                'X-Inertia-Partial-Data' => 'flash',
+            ])
+            ->assertOk()
+            ->assertHeader('X-Inertia', 'true')
+            ->assertJsonMissingPath('props.leads');
     }
 
     public function test_budget_updates_only_accept_the_supported_ranges(): void

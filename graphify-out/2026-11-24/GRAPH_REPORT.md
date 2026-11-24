@@ -1,17 +1,17 @@
 # Graph Report - marketing-leads  (2026-11-24)
 
 ## Corpus Check
-- 325 files · ~152,079 words
+- 325 files · ~152,094 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 25 file(s) not represented in the graph (top: (none) 19, .example 2, .neon 1)
 
 ## Summary
-- 1941 nodes · 3523 edges · 153 communities (96 shown, 57 thin omitted)
+- 1942 nodes · 3525 edges · 151 communities (94 shown, 57 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 24 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `01c98a3d`
+- Built from commit: `f305a1aa`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -85,7 +85,6 @@
 - config
 - EmailVerificationTest
 - guardUnsavedChanges
-- @inertiajs/vue3
 - PasswordResetTest.php
 - psr-4
 - laravel
@@ -99,7 +98,7 @@
 - FortifyServiceProvider.php
 - GLOSSARY.md
 - artisan
-- Layout.vue
+- @inertiajs/vue3
 - deploy-production.sh
 - migrate-postgres.sh
 - resources_js_actions_laravel_passkeys_http_controllers_passkeyconfirmationcontroller
@@ -128,7 +127,6 @@
 - clearSelection
 - scripts
 - ProfileUpdateTest
-- Statistics.vue
 - queueSave
 - vite.config.ts
 - DialogContent.vue
@@ -181,11 +179,11 @@
 ## Import Cycles
 - None detected.
 
-## Communities (153 total, 57 thin omitted)
+## Communities (151 total, 57 thin omitted)
 
 ### Community 0 - "Illuminate\Database\Schema\Blueprint"
 Cohesion: 0.11
-Nodes (16): {closure#1}(), {closure#2}(), {closure#3}(), {closure#1}(), {closure#2}(), Illuminate\Database\Schema\Blueprint, {closure#3}(), {closure#5}() (+8 more)
+Nodes (16): {closure#1}(), {closure#2}(), {closure#3}(), {closure#1}(), {closure#2}(), Illuminate\Database\Schema\Blueprint, {closure#3}(), {closure#7}() (+8 more)
 
 ### Community 1 - "reka-ui"
 Cohesion: 0.06
@@ -241,7 +239,7 @@ Nodes (3): DashboardController, Illuminate\Http\Request, Inertia\Response
 
 ### Community 14 - "LeadManagementTest.php"
 Cohesion: 0.13
-Nodes (26): Illuminate\Http\Client\Request, Illuminate\Http\UploadedFile, Inertia\Testing\AssertableInertia, Mockery, OpenSpout\Common\Entity\Row, OpenSpout\Writer\XLSX\Writer, {closure#10}(), {closure#11}() (+18 more)
+Nodes (26): Illuminate\Http\Client\Request, Illuminate\Http\UploadedFile, Inertia\Testing\AssertableInertia, Mockery, OpenSpout\Common\Entity\Row, OpenSpout\Writer\XLSX\Writer, {closure#16}(), {closure#10}() (+18 more)
 
 ### Community 15 - "AppLayout.vue"
 Cohesion: 0.09
@@ -328,8 +326,8 @@ Cohesion: 0.07
 Nodes (23): @vueuse/core, delegatedProps, forwardedProps, props, delegatedProps, forwardedProps, props, emits (+15 more)
 
 ### Community 37 - "useAppearance.ts"
-Cohesion: 0.12
-Nodes (20): vue-sonner, { appearance, updateAppearance }, tabs, props, appearance, getStoredAppearance(), handleSystemThemeChange(), initializeTheme() (+12 more)
+Cohesion: 0.05
+Nodes (34): vue-sonner, pages, { appearance, updateAppearance }, tabs, props, appearance, getStoredAppearance(), handleSystemThemeChange() (+26 more)
 
 ### Community 38 - "aliases"
 Cohesion: 0.12
@@ -417,7 +415,7 @@ Nodes (8): currentUrlReactive, page, useCurrentUrl(), isCurrentOrParentUrl(), is
 
 ### Community 63 - "DashboardTest.php"
 Cohesion: 0.12
-Nodes (14): {closure#1}(), {closure#10}(), {closure#11}(), {closure#12}(), {closure#13}(), {closure#14}(), {closure#15}(), {closure#16}() (+6 more)
+Nodes (15): {closure#1}(), {closure#10}(), {closure#11}(), {closure#12}(), {closure#13}(), {closure#14}(), {closure#15}(), {closure#17}() (+7 more)
 
 ### Community 64 - "tooltip/index.ts"
 Cohesion: 0.22
@@ -438,10 +436,6 @@ Nodes (7): pestphp/pest-plugin, php-http/discovery, config, allow-plugins, optim
 ### Community 69 - "guardUnsavedChanges"
 Cohesion: 0.10
 Nodes (22): addCollaboratorSelected(), addCollaboratorSelectedNow(), applyFilters(), applyFiltersNow(), assignSelected(), assignSelectedNow(), clearFilters(), createLead() (+14 more)
-
-### Community 70 - "@inertiajs/vue3"
-Cohesion: 0.13
-Nodes (11): @inertiajs/vue3, pages, page, { title = '', description = '' }, initializeFlashToast(), priorityRows, props, resources_js_routes_index (+3 more)
 
 ### Community 72 - "psr-4"
 Cohesion: 0.40
@@ -483,9 +477,9 @@ Nodes (19): ref_routes_two_factor, { hasSetupData, clearTwoFactorAuthData }, Pro
 Cohesion: 0.09
 Nodes (16): LoginResponse, LogoutResponse, {closure#1}(), {closure#10}(), {closure#11}(), {closure#2}(), {closure#3}(), {closure#4}() (+8 more)
 
-### Community 84 - "Layout.vue"
-Cohesion: 0.13
-Nodes (13): resources_js_components_ui_dropdown_menu_index_dropdownmenugroup, resources_js_components_ui_dropdown_menu_index_dropdownmenuitem, resources_js_components_ui_dropdown_menu_index_dropdownmenulabel, resources_js_components_ui_dropdown_menu_index_dropdownmenuseparator, Props, { isCurrentOrParentUrl }, sidebarNavItems, resources_js_routes_appearance_index (+5 more)
+### Community 84 - "@inertiajs/vue3"
+Cohesion: 0.09
+Nodes (20): @inertiajs/vue3, resources_js_components_ui_dropdown_menu_index_dropdownmenugroup, resources_js_components_ui_dropdown_menu_index_dropdownmenuitem, resources_js_components_ui_dropdown_menu_index_dropdownmenulabel, resources_js_components_ui_dropdown_menu_index_dropdownmenuseparator, Props, page, { title = '', description = '' } (+12 more)
 
 ### Community 116 - "Project agent rules"
 Cohesion: 0.25
@@ -510,10 +504,6 @@ Nodes (6): archiveSelected(), clearSelection(), destroySelected(), restoreSelect
 ### Community 122 - "scripts"
 Cohesion: 0.29
 Nodes (7): scripts, build, build:ssr, check, check:fix, dev, types:check
-
-### Community 124 - "Statistics.vue"
-Cohesion: 0.13
-Nodes (10): branch, outcomeDateFrom, outcomeDateTo, outcomePeriodText, outcomeReports, props, selectedBranchName, stages (+2 more)
 
 ### Community 126 - "queueSave"
 Cohesion: 0.33
@@ -575,12 +565,12 @@ Nodes (3): zod, budgetOptions, leadSchema
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `vue` connect `vue` to `DialogContent.vue`, `LeadSaveFeedback.vue`, `reka-ui`, `Sidebar.vue`, `navigation-menu/index.ts`, `@lucide/vue`, `select/index.ts`, `Leads/Index.vue`, `types/index.ts`, `AlertError.vue`, `TwoFactorSetupModal.vue`, `NavigationMenu.vue`, `AppLayout.vue`, `package.json`, `button/index.ts`, `SelectContent.vue`, `Separator.vue`, `SidebarProvider.vue`, `AppSidebar.vue`, `Branches/Index.vue`, `AppHeader.vue`, `InputOTPSlot.vue`, `PasskeyRegister.vue`, `@vueuse/core`, `useAppearance.ts`, `UserInfo.vue`, `Show.vue`, `global.d.ts`, `LeadQuickUpdate.vue`, `LeadHistoryPopover.vue`, `SheetContent.vue`, `useCurrentUrl.ts`, `Alert.vue`, `SidebarMenuSkeleton.vue`, `@inertiajs/vue3`, `TwoFactorRecoveryCodes.vue`, `AvatarFallback.vue`, `Statistics.vue`?**
-  _High betweenness centrality (0.113) - this node is a cross-community bridge._
+- **Why does `vue` connect `vue` to `DialogContent.vue`, `LeadSaveFeedback.vue`, `reka-ui`, `Sidebar.vue`, `navigation-menu/index.ts`, `@lucide/vue`, `select/index.ts`, `Leads/Index.vue`, `types/index.ts`, `AlertError.vue`, `TwoFactorSetupModal.vue`, `NavigationMenu.vue`, `AppLayout.vue`, `package.json`, `button/index.ts`, `SelectContent.vue`, `Separator.vue`, `SidebarProvider.vue`, `AppSidebar.vue`, `Branches/Index.vue`, `AppHeader.vue`, `InputOTPSlot.vue`, `PasskeyRegister.vue`, `@vueuse/core`, `useAppearance.ts`, `UserInfo.vue`, `Show.vue`, `global.d.ts`, `LeadQuickUpdate.vue`, `LeadHistoryPopover.vue`, `SheetContent.vue`, `useCurrentUrl.ts`, `Alert.vue`, `SidebarMenuSkeleton.vue`, `TwoFactorRecoveryCodes.vue`, `AvatarFallback.vue`?**
+  _High betweenness centrality (0.115) - this node is a cross-community bridge._
 - **Why does `User` connect `User` to `Laravel\Fortify\Features`, `EmailVerificationTest`, `PasswordResetTest.php`, `ProfileValidationRules`, `DatabaseSeeder.php`, `UserFactory.php`, `LeadManagementTest`, `LeadManagementTest.php`, `VerificationNotificationTest.php`, `FortifyServiceProvider.php`, `TestCase`, `SecurityTest.php`, `CreateNewUser.php`, `ResetUserPassword.php`, `AuthenticationTest`, `ProfileUpdateTest`, `DashboardTest.php`?**
-  _High betweenness centrality (0.048) - this node is a cross-community bridge._
-- **Why does `@inertiajs/vue3` connect `@inertiajs/vue3` to `Leads/Index.vue`, `Breadcrumbs.vue`, `vue`, `types/index.ts`, `TwoFactorSetupModal.vue`, `AppLayout.vue`, `package.json`, `button/index.ts`, `Branches/Index.vue`, `AppSidebar.vue`, `AppHeader.vue`, `PasskeyRegister.vue`, `useAppearance.ts`, `Show.vue`, `LeadQuickUpdate.vue`, `LeadHistoryPopover.vue`, `useCurrentUrl.ts`, `TwoFactorRecoveryCodes.vue`, `Layout.vue`, `Statistics.vue`?**
-  _High betweenness centrality (0.036) - this node is a cross-community bridge._
+  _High betweenness centrality (0.049) - this node is a cross-community bridge._
+- **Why does `@inertiajs/vue3` connect `@inertiajs/vue3` to `PasskeyRegister.vue`, `useAppearance.ts`, `Leads/Index.vue`, `Breadcrumbs.vue`, `vue`, `types/index.ts`, `TwoFactorSetupModal.vue`, `Show.vue`, `LeadQuickUpdate.vue`, `AppLayout.vue`, `LeadHistoryPopover.vue`, `TwoFactorRecoveryCodes.vue`, `package.json`, `button/index.ts`, `Branches/Index.vue`, `AppSidebar.vue`, `AppHeader.vue`, `useCurrentUrl.ts`?**
+  _High betweenness centrality (0.037) - this node is a cross-community bridge._
 - **What connects `$schema`, `style`, `config` to the rest of the system?**
   _659 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Illuminate\Database\Schema\Blueprint` be split into smaller, more focused modules?**

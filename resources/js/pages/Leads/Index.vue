@@ -240,6 +240,7 @@ const isDesktopWorkspace = ref(false);
 const leadEditStates = ref(new Map<number, LeadEditState>());
 const desktopLeadViewport = ref<HTMLElement | null>(null);
 const desktopScrollTop = ref(0);
+const desktopScrolledHorizontally = ref(false);
 const desktopViewportHeight = ref(0);
 const desktopRowHeights = new Map<number, number>();
 const desktopRowIndexes = new WeakMap<HTMLElement, number>();
@@ -297,6 +298,32 @@ const desktopVirtualBottom = computed(
         desktopVirtualMetrics.value.total -
         desktopVirtualMetrics.value.offsets[desktopVirtualRange.value.end],
 );
+const desktopVisibleLeadRange = computed(() => {
+    const total = props.leads.data.length;
+    if (!total) return null;
+
+    if (!desktopVirtualized.value) return { start: 1, end: total };
+
+    const { offsets } = desktopVirtualMetrics.value;
+    const viewportEnd =
+        desktopScrollTop.value + Math.max(desktopViewportHeight.value, 800);
+    let firstVisible = 0;
+    while (
+        firstVisible < total &&
+        offsets[firstVisible + 1] < desktopScrollTop.value
+    ) {
+        firstVisible++;
+    }
+    let lastVisible = firstVisible;
+    while (lastVisible < total && offsets[lastVisible] < viewportEnd) {
+        lastVisible++;
+    }
+
+    return {
+        start: firstVisible + 1,
+        end: Math.max(firstVisible + 1, lastVisible),
+    };
+});
 const importForm = useForm<{
     csv_file: File | null;
     import_mode: 'all_leads' | 'daily_tabs';
@@ -783,7 +810,9 @@ const observeDesktopLeadRow = (index: number, element: unknown) => {
     desktopRowResizeObserver?.observe(element);
 };
 const onDesktopTableScroll = (event: Event) => {
-    desktopScrollTop.value = (event.currentTarget as HTMLElement).scrollTop;
+    const viewport = event.currentTarget as HTMLElement;
+    desktopScrollTop.value = viewport.scrollTop;
+    desktopScrolledHorizontally.value = viewport.scrollLeft > 0;
 };
 const resetDesktopVirtualRows = () => {
     desktopRowResizeObserver?.disconnect();
@@ -792,6 +821,7 @@ const resetDesktopVirtualRows = () => {
     desktopRowHeights.clear();
     desktopVirtualVersion.value++;
     desktopScrollTop.value = 0;
+    desktopScrolledHorizontally.value = false;
     createDesktopRowResizeObserver();
     nextTick(() => {
         if (desktopLeadViewport.value) {
@@ -1892,9 +1922,41 @@ onBeforeUnmount(() => {
         </Sheet>
 
         <div
+            v-if="isDesktopWorkspace && desktopVisibleLeadRange"
+            class="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-kgj-muted"
+        >
+            <p>
+                Menampilkan baris
+                <strong class="font-semibold text-kgj-ink"
+                    >{{ desktopVisibleLeadRange.start }}–{{
+                        desktopVisibleLeadRange.end
+                    }}</strong
+                >
+                dari {{ leads.data.length }} lead
+            </p>
+            <p
+                class="rounded-full border border-[#e3d9c6] bg-[#faf7ef] px-3 py-1 font-semibold text-[#665a43]"
+            >
+                {{
+                    desktopScrolledHorizontally
+                        ? 'Kolom lanjutan terbuka'
+                        : 'Geser horizontal untuk kolom lanjutan'
+                }}
+            </p>
+        </div>
+
+        <div
             v-if="isDesktopWorkspace"
             ref="desktopLeadViewport"
-            class="kgj-table mt-6 max-h-[calc(100dvh-18rem)] overflow-auto"
+            class="kgj-lead-ledger kgj-table mt-4 max-h-[calc(100dvh-18rem)] overflow-auto"
+            :class="{
+                'kgj-lead-ledger--scrolled': desktopScrolledHorizontally,
+            }"
+            :aria-label="
+                desktopVisibleLeadRange
+                    ? `Tabel lead, baris ${desktopVisibleLeadRange.start} sampai ${desktopVisibleLeadRange.end} dari ${leads.data.length}`
+                    : 'Tabel lead'
+            "
             @scroll.passive="onDesktopTableScroll"
         >
             <table
@@ -1915,7 +1977,7 @@ onBeforeUnmount(() => {
                             Lead
                         </th>
                         <th
-                            class="sticky left-[17.5rem] z-40 w-44 min-w-44 bg-[#f8f5ee] p-4"
+                            class="kgj-lead-ledger__sticky-edge sticky left-[17.5rem] z-40 w-44 min-w-44 bg-[#f8f5ee] p-4"
                         >
                             CS / Cabang
                         </th>
@@ -1992,7 +2054,7 @@ onBeforeUnmount(() => {
                                 />
                             </td>
                             <td
-                                class="sticky left-[17.5rem] z-10 w-44 min-w-44 overflow-hidden bg-kgj-paper p-4 group-hover:bg-[#fcfaf5]"
+                                class="kgj-lead-ledger__sticky-edge sticky left-[17.5rem] z-10 w-44 min-w-44 overflow-hidden bg-kgj-paper p-4 group-hover:bg-[#fcfaf5]"
                             >
                                 <span
                                     class="block truncate"

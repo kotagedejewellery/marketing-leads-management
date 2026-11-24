@@ -264,6 +264,32 @@
     .kgj-table tbody td {
         @apply border-t border-[#eee9df];
     }
+    .kgj-lead-ledger {
+        scrollbar-width: thin;
+        scrollbar-color: #aa8a55 #f4f0e7;
+    }
+    .kgj-lead-ledger::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+    }
+    .kgj-lead-ledger::-webkit-scrollbar-track {
+        background: #f4f0e7;
+        border-radius: 999px;
+    }
+    .kgj-lead-ledger::-webkit-scrollbar-thumb {
+        background: #aa8a55;
+        border: 2px solid #f4f0e7;
+        border-radius: 999px;
+    }
+    .kgj-lead-ledger::-webkit-scrollbar-thumb:hover {
+        background: #8a6b2d;
+    }
+    .kgj-lead-ledger__sticky-edge {
+        transition: box-shadow 160ms ease-out;
+    }
+    .kgj-lead-ledger--scrolled .kgj-lead-ledger__sticky-edge {
+        box-shadow: 12px 0 18px -16px rgba(58, 48, 31, 0.72);
+    }
     .kgj-status {
         @apply inline-flex items-center gap-1.5 rounded-full border border-current/15 px-2.5 py-1 text-xs font-bold tracking-wide;
     }

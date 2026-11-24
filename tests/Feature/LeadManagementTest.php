@@ -860,9 +860,15 @@ class LeadManagementTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $this->actingAs($admin)
-            ->get('/leads', [
+        $initialResponse = $this->actingAs($admin)->get('/leads');
+        $initialResponse->assertInertia(
+            fn (Assert $page) => $page->component('Leads/Index'),
+        );
+        $version = $initialResponse->inertiaPage()['version'];
+
+        $this->get('/leads', [
                 'X-Inertia' => 'true',
+                'X-Inertia-Version' => $version,
                 'X-Inertia-Partial-Component' => 'Leads/Index',
                 'X-Inertia-Partial-Data' => 'flash',
             ])

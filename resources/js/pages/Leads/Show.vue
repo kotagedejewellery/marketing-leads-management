@@ -125,6 +125,41 @@ const stageLabel = (value: string | null) =>
 const outcomeOptions = computed(() =>
     Object.entries(props.outcomeFactors[form.outcome] || {}),
 );
+const hasClosingMilestone = computed(() =>
+    form.milestones.includes('closing_repeat'),
+);
+const hasFinalClosing = computed(
+    () => hasClosingMilestone.value && form.outcome === 'closing',
+);
+const setClosingOutcome = () => {
+    const wasClosing = form.outcome === 'closing';
+    form.outcome = 'closing';
+    if (
+        !wasClosing ||
+        !Object.keys(props.outcomeFactors.closing || {}).includes(
+            form.outcome_factor,
+        )
+    ) {
+        form.outcome_factor = '';
+        form.outcome_note = '';
+    }
+};
+const changeMilestone = (milestone: string) => {
+    if (milestone !== 'closing_repeat') return;
+    if (hasClosingMilestone.value) {
+        setClosingOutcome();
+
+        return;
+    }
+    if (form.outcome === 'closing' && form.outcome_factor) {
+        form.milestones.push('closing_repeat');
+
+        return;
+    }
+    form.outcome = '';
+    form.outcome_factor = '';
+    form.outcome_note = '';
+};
 const changeOutcome = () => {
     if (!form.outcome) {
         form.outcome_factor = '';
@@ -132,10 +167,26 @@ const changeOutcome = () => {
 
         return;
     }
+    if (form.outcome === 'closing' && !hasClosingMilestone.value) {
+        form.milestones.push('closing_repeat');
+    }
+    if (form.outcome === 'loss') {
+        form.milestones = form.milestones.filter(
+            (milestone) => milestone !== 'closing_repeat',
+        );
+    }
     if (!outcomeOptions.value.some(([key]) => key === form.outcome_factor)) {
         form.outcome_factor = '';
         form.outcome_note = '';
     }
+};
+const reopenClosing = () => {
+    form.outcome = '';
+    form.outcome_factor = '';
+    form.outcome_note = '';
+    form.milestones = form.milestones.filter(
+        (milestone) => milestone !== 'closing_repeat',
+    );
 };
 const focusFirstError = () => {
     const field = formFields.find((key) => form.errors[key]);
@@ -146,7 +197,14 @@ function save() {
     const result = leadSchema.safeParse(form.data());
     if (!result.success) {
         clientError.value = 'Periksa kembali data lead sebelum menyimpan.';
-        nextTick(() => document.getElementById('intent_buying')?.focus());
+        const field = result.error.issues[0]?.path[0];
+        nextTick(() =>
+            document
+                .getElementById(
+                    typeof field === 'string' ? field : 'intent_buying',
+                )
+                ?.focus(),
+        );
         return;
     }
     clientError.value = '';
@@ -403,7 +461,13 @@ function stopAssisting() {
             </div>
             <fieldset class="kgj-surface grid gap-4 p-5 md:grid-cols-2">
                 <legend class="px-1 font-semibold">Hasil akhir</legend>
-                <label class="grid gap-2 text-sm font-semibold"
+                <p
+                    v-if="hasFinalClosing"
+                    class="rounded-lg bg-[#e7f0e8] px-3 py-2 text-sm font-semibold text-[#49654e]"
+                >
+                    Hasil akhir: Closing
+                </p>
+                <label v-else class="grid gap-2 text-sm font-semibold"
                     >Status hasil
                     <select
                         id="outcome"
@@ -469,6 +533,14 @@ function stopAssisting() {
                         >{{ form.errors.outcome_note }}</span
                     >
                 </label>
+                <button
+                    v-if="hasFinalClosing && form.outcome_factor"
+                    class="inline-flex min-h-11 items-center justify-self-start text-sm font-semibold text-[#62665b] underline underline-offset-4"
+                    type="button"
+                    @click="reopenClosing"
+                >
+                    Buka kembali hasil akhir
+                </button>
             </fieldset>
             <section
                 v-if="isAdmin && lead.source_branch_id !== null"
@@ -560,6 +632,7 @@ function stopAssisting() {
                             class="size-4 accent-[#8a6b2d]"
                             type="checkbox"
                             :value="item[0]"
+                            @change="changeMilestone(item[0])"
                         />{{ item[1] }}</label
                     >
                 </div>

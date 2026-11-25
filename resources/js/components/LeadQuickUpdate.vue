@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import LeadHistoryPopover from '@/components/LeadHistoryPopover.vue';
 import { budgetOptions } from '@/lib/lead-options';
 
@@ -32,7 +32,7 @@ type QuickUpdateFields = {
     milestones: string[];
 };
 type QuickUpdatePayload = { inline: true } & Partial<QuickUpdateFields>;
-type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
+type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict';
 
 const props = withDefaults(
     defineProps<{
@@ -110,6 +110,7 @@ const hasSaved = ref(false);
 const saveError = ref('');
 const hasConflict = ref(false);
 const invalidField = ref<string | null>(null);
+const outcomeFactorInput = ref<HTMLSelectElement | null>(null);
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let savedTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -136,10 +137,17 @@ const persistSaveState = (state: SaveState, message = '') => {
 const isDirty = computed(
     () => signature(snapshot()) !== signature(savedValues),
 );
+const awaitingClosingFactor = computed(
+    () =>
+        values.milestones.includes('closing_repeat') &&
+        values.outcome === 'closing' &&
+        !values.outcome_factor,
+);
 const isInvalid = (field: string) => invalidField.value === field;
 const saveState = computed<SaveState>(() => {
     if (hasConflict.value) return 'conflict';
     if (saveError.value) return 'error';
+    if (awaitingClosingFactor.value) return 'pending';
     if (processing.value || waiting.value || isDirty.value) return 'saving';
     return hasSaved.value ? 'saved' : 'idle';
 });
@@ -283,6 +291,51 @@ const saveAfterTyping = () => queueSave(650);
 const outcomeOptions = computed(() =>
     Object.entries(props.outcomeFactors[values.outcome] || {}),
 );
+const hasClosingMilestone = computed(() =>
+    values.milestones.includes('closing_repeat'),
+);
+const hasFinalClosing = computed(
+    () => hasClosingMilestone.value && values.outcome === 'closing',
+);
+const hasSavedClosing = computed(
+    () => hasFinalClosing.value && savedValues.outcome === 'closing',
+);
+const setClosingOutcome = () => {
+    const wasClosing = values.outcome === 'closing';
+    values.outcome = 'closing';
+    if (
+        !wasClosing ||
+        !Object.keys(props.outcomeFactors.closing || {}).includes(
+            values.outcome_factor,
+        )
+    ) {
+        values.outcome_factor = '';
+        values.outcome_note = '';
+    }
+    void nextTick(() => outcomeFactorInput.value?.focus());
+};
+const changeMilestone = (milestone: string) => {
+    if (milestone !== 'closing_repeat') {
+        saveImmediately();
+
+        return;
+    }
+    if (hasClosingMilestone.value) {
+        setClosingOutcome();
+        if (values.outcome_factor) saveImmediately();
+
+        return;
+    }
+    if (hasSavedClosing.value) {
+        values.milestones.push('closing_repeat');
+
+        return;
+    }
+    values.outcome = '';
+    values.outcome_factor = '';
+    values.outcome_note = '';
+    saveImmediately();
+};
 const changeOutcome = () => {
     if (!values.outcome) {
         values.outcome_factor = '';
@@ -291,10 +344,27 @@ const changeOutcome = () => {
 
         return;
     }
+    if (values.outcome === 'closing' && !hasClosingMilestone.value) {
+        values.milestones.push('closing_repeat');
+    }
+    if (values.outcome === 'loss') {
+        values.milestones = values.milestones.filter(
+            (milestone) => milestone !== 'closing_repeat',
+        );
+    }
     if (!outcomeOptions.value.some(([key]) => key === values.outcome_factor)) {
         values.outcome_factor = '';
         values.outcome_note = '';
     }
+};
+const reopenClosing = () => {
+    values.outcome = '';
+    values.outcome_factor = '';
+    values.outcome_note = '';
+    values.milestones = values.milestones.filter(
+        (milestone) => milestone !== 'closing_repeat',
+    );
+    saveImmediately();
 };
 const saveOutcome = () => {
     if (
@@ -352,7 +422,7 @@ onBeforeUnmount(() => {
                         type="checkbox"
                         :value="value"
                         :aria-label="label"
-                        @change="saveImmediately"
+                        @change="changeMilestone(value)"
                     />
                     <span>{{ label }}</span>
                 </label>
@@ -360,7 +430,14 @@ onBeforeUnmount(() => {
         </td>
         <td class="min-w-72 p-3 align-middle">
             <div class="grid gap-2">
+                <p
+                    v-if="hasFinalClosing"
+                    class="rounded-lg bg-[#e7f0e8] px-3 py-2 text-sm font-semibold text-[#49654e]"
+                >
+                    Hasil akhir: Closing
+                </p>
                 <select
+                    v-else
                     v-model="values.outcome"
                     class="kgj-input w-full"
                     aria-label="Hasil akhir lead"
@@ -374,6 +451,7 @@ onBeforeUnmount(() => {
                 </select>
                 <select
                     v-if="values.outcome"
+                    ref="outcomeFactorInput"
                     v-model="values.outcome_factor"
                     class="kgj-input w-full"
                     :aria-label="
@@ -400,6 +478,12 @@ onBeforeUnmount(() => {
                         {{ label }}
                     </option>
                 </select>
+                <p
+                    v-if="awaitingClosingFactor"
+                    class="text-xs font-medium text-[#665a43]"
+                >
+                    Pilih faktor Closing untuk menyimpan hasil akhir.
+                </p>
                 <input
                     v-if="values.outcome_factor === 'other'"
                     v-model="values.outcome_note"
@@ -411,6 +495,14 @@ onBeforeUnmount(() => {
                     @input="saveAfterTyping"
                     @blur="saveOutcome"
                 />
+                <button
+                    v-if="hasSavedClosing"
+                    class="inline-flex min-h-11 items-center justify-self-start text-xs font-semibold text-[#62665b] underline underline-offset-4"
+                    type="button"
+                    @click="reopenClosing"
+                >
+                    Buka kembali hasil akhir
+                </button>
             </div>
         </td>
         <td class="min-w-40 p-3 align-middle">
@@ -473,17 +565,6 @@ onBeforeUnmount(() => {
                 @blur="saveImmediately"
             />
         </td>
-        <td class="min-w-48 p-3 align-middle">
-            <input
-                v-model="values.next_follow_up_at"
-                class="kgj-input w-full"
-                type="datetime-local"
-                aria-label="Tindak lanjut berikutnya"
-                :aria-invalid="isInvalid('next_follow_up_at')"
-                :aria-describedby="saveError ? errorId : undefined"
-                @change="saveImmediately"
-            />
-        </td>
         <td class="min-w-40 p-3 align-middle text-sm">
             <LeadHistoryPopover :lead-id="lead.id" label="Riwayat" />
             <label
@@ -527,7 +608,7 @@ onBeforeUnmount(() => {
                         class="size-4 accent-kgj-gold"
                         type="checkbox"
                         :value="value"
-                        @change="saveImmediately"
+                        @change="changeMilestone(value)"
                     />
                     {{ label }}
                 </label>
@@ -540,7 +621,13 @@ onBeforeUnmount(() => {
                 values.outcome ? 'rounded-xl border border-kgj-line p-4' : ''
             "
         >
-            <label class="grid gap-2 text-sm font-semibold"
+            <p
+                v-if="hasFinalClosing"
+                class="rounded-lg bg-[#e7f0e8] px-3 py-2 text-sm font-semibold text-[#49654e]"
+            >
+                Hasil akhir: Closing
+            </p>
+            <label class="grid gap-2 text-sm font-semibold" v-else
                 >Status hasil
                 <select
                     v-model="values.outcome"
@@ -562,6 +649,7 @@ onBeforeUnmount(() => {
                         : 'Faktor Loss'
                 }}
                 <select
+                    ref="outcomeFactorInput"
                     v-model="values.outcome_factor"
                     class="kgj-input"
                     :aria-invalid="isInvalid('outcome_factor')"
@@ -576,6 +664,12 @@ onBeforeUnmount(() => {
                         {{ label }}
                     </option>
                 </select>
+                <span
+                    v-if="awaitingClosingFactor"
+                    class="font-normal text-[#665a43]"
+                >
+                    Pilih faktor Closing untuk menyimpan hasil akhir.
+                </span>
             </label>
             <label
                 v-if="values.outcome_factor === 'other'"
@@ -590,6 +684,14 @@ onBeforeUnmount(() => {
                     @blur="saveOutcome"
                 />
             </label>
+            <button
+                v-if="hasSavedClosing"
+                class="inline-flex min-h-11 items-center justify-self-start text-sm font-semibold text-[#62665b] underline underline-offset-4"
+                type="button"
+                @click="reopenClosing"
+            >
+                Buka kembali hasil akhir
+            </button>
         </div>
 
         <div class="mt-4 grid gap-4 sm:grid-cols-2">
@@ -666,7 +768,8 @@ onBeforeUnmount(() => {
             class="mt-4 text-sm"
             :class="{
                 'text-kgj-muted': saveState === 'idle',
-                'text-kgj-gold-deep': saveState === 'saving',
+                'text-kgj-gold-deep':
+                    saveState === 'pending' || saveState === 'saving',
                 'text-[#49654e]': saveState === 'saved',
                 'text-kgj-rose':
                     saveState === 'error' || saveState === 'conflict',
@@ -674,11 +777,13 @@ onBeforeUnmount(() => {
             role="status"
         >
             {{
-                saveState === 'saving'
-                    ? 'Menyimpan perubahan...'
-                    : saveState === 'saved'
-                      ? 'Tersimpan otomatis.'
-                      : saveError || 'Perubahan disimpan otomatis.'
+                saveState === 'pending'
+                    ? 'Pilih faktor Closing untuk melanjutkan.'
+                    : saveState === 'saving'
+                      ? 'Menyimpan perubahan...'
+                      : saveState === 'saved'
+                        ? 'Tersimpan otomatis.'
+                        : saveError || 'Perubahan disimpan otomatis.'
             }}
         </p>
 

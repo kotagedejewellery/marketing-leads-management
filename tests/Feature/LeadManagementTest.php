@@ -295,7 +295,11 @@ class LeadManagementTest extends TestCase
         ])->assertRedirect('/leads');
 
         $leadId = (int) \DB::table('leads')->where('contact_key', 'phone:6285177771999')->value('id');
-        $this->assertDatabaseHas('leads', ['id' => $leadId, 'current_stage' => 'closing_repeat']);
+        $this->assertDatabaseHas('leads', [
+            'id' => $leadId,
+            'current_stage' => 'closing_repeat',
+            'outcome' => null,
+        ]);
         $this->assertDatabaseHas('lead_milestones', ['lead_id' => $leadId, 'milestone' => 'closing_repeat', 'is_active' => true]);
 
         $this->actingAs($admin)->from('/leads')->patch("/leads/{$leadId}", [
@@ -382,6 +386,83 @@ class LeadManagementTest extends TestCase
             'id' => $leadId,
             'outcome_factor' => 'slow_response',
             'outcome_recorded_at' => $recordedAt,
+        ]);
+    }
+
+    public function test_closing_outcome_keeps_the_closing_repeat_milestone_active(): void
+    {
+        $cs = $this->user('cs');
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285112345699',
+            'contact_key' => 'phone:6285112345699',
+            'assigned_user_id' => $cs->id,
+            'outcome' => 'closing',
+            'outcome_factor' => 'offline_experience',
+            'revision' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \DB::table('lead_milestones')->insert([
+            'lead_id' => $leadId,
+            'milestone' => 'closing_repeat',
+            'is_active' => true,
+            'marked_at' => now(),
+        ]);
+
+        $this->actingAs($cs)->from('/leads')->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'revision' => 0,
+            'milestones' => ['offline'],
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', [
+            'id' => $leadId,
+            'current_stage' => 'closing_repeat',
+        ]);
+        $this->assertDatabaseHas('lead_milestones', [
+            'lead_id' => $leadId,
+            'milestone' => 'closing_repeat',
+            'is_active' => true,
+        ]);
+    }
+
+    public function test_loss_outcome_deactivates_the_closing_repeat_milestone(): void
+    {
+        $cs = $this->user('cs');
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285112345700',
+            'contact_key' => 'phone:6285112345700',
+            'assigned_user_id' => $cs->id,
+            'outcome' => 'closing',
+            'outcome_factor' => 'offline_experience',
+            'current_stage' => 'closing_repeat',
+            'revision' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \DB::table('lead_milestones')->insert([
+            'lead_id' => $leadId,
+            'milestone' => 'closing_repeat',
+            'is_active' => true,
+            'marked_at' => now(),
+        ]);
+
+        $this->actingAs($cs)->from('/leads')->patch("/leads/{$leadId}", [
+            'inline' => true,
+            'revision' => 0,
+            'outcome' => 'loss',
+            'outcome_factor' => 'ghosting',
+        ])->assertRedirect('/leads');
+
+        $this->assertDatabaseHas('leads', [
+            'id' => $leadId,
+            'outcome' => 'loss',
+            'current_stage' => null,
+        ]);
+        $this->assertDatabaseHas('lead_milestones', [
+            'lead_id' => $leadId,
+            'milestone' => 'closing_repeat',
+            'is_active' => false,
         ]);
     }
 

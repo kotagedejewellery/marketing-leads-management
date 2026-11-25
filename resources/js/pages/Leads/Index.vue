@@ -77,7 +77,7 @@ type Page = {
     total: number;
 };
 type LeadSaveState = {
-    state: 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
+    state: 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict';
     message: string;
 };
 type QuickUpdateFields = {
@@ -136,6 +136,11 @@ const props = defineProps<{
 }>();
 const page = usePage();
 const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
+const ownerLabel = (lead: Lead) => lead.owner_name || 'Belum ditugaskan';
+const ownerTitle = (lead: Lead) =>
+    isAdmin.value && lead.branch_name
+        ? `${ownerLabel(lead)} · Cabang: ${lead.branch_name}`
+        : ownerLabel(lead);
 const q = ref(props.filters.q || '');
 const branch = ref(props.filters.branch || '');
 const sourceBranchMissing = ref(props.filters.source_branch_missing || '');
@@ -477,7 +482,7 @@ const trackDirtyLead = (leadId: number, isDirty: boolean) => {
 };
 const trackLeadSaveState = (
     leadId: number,
-    state: 'idle' | 'saving' | 'saved' | 'error' | 'conflict',
+    state: 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict',
     message: string,
 ) => {
     const next = new Map(leadSaveStates.value);
@@ -510,6 +515,12 @@ const mobileSaveFeedback = computed(() => {
 
     if (state?.state === 'saving') {
         return { message: 'Menyimpan perubahan…', tone: 'text-kgj-gold-deep' };
+    }
+    if (state?.state === 'pending') {
+        return {
+            message: 'Pilih faktor Closing untuk melanjutkan.',
+            tone: 'text-kgj-gold-deep',
+        };
     }
     if (state?.state === 'saved') {
         return { message: 'Tersimpan otomatis', tone: 'text-[#49654e]' };
@@ -1674,7 +1685,7 @@ onBeforeUnmount(() => {
                         />
                     </label>
                     <div class="min-w-0 flex-1">
-                        <Link :href="`/leads/${lead.id}`" class="block">
+                        <div class="block">
                             <strong class="block truncate text-base">{{
                                 lead.name || lead.contact_raw
                             }}</strong>
@@ -1682,7 +1693,7 @@ onBeforeUnmount(() => {
                                 class="mt-1 block truncate text-sm text-kgj-muted"
                                 >{{ lead.phone || lead.contact_raw }}</span
                             >
-                        </Link>
+                        </div>
                     </div>
                     <span
                         class="shrink-0 text-right text-xs font-semibold tracking-wide text-[#8a6b2d] uppercase"
@@ -1703,12 +1714,12 @@ onBeforeUnmount(() => {
                         </dd>
                     </div>
                     <div>
-                        <dt class="text-xs text-kgj-muted">CS / cabang</dt>
-                        <dd class="mt-1 truncate font-medium">
-                            {{ lead.owner_name || 'Belum ditugaskan' }}
-                        </dd>
-                        <dd class="truncate text-xs text-kgj-muted">
-                            {{ lead.branch_name || '—' }}
+                        <dt class="text-xs text-kgj-muted">Nama CS</dt>
+                        <dd
+                            class="mt-1 truncate font-medium"
+                            :title="ownerTitle(lead)"
+                        >
+                            {{ ownerLabel(lead) }}
                         </dd>
                     </div>
                     <div v-if="!isAdmin">
@@ -1975,7 +1986,7 @@ onBeforeUnmount(() => {
             @scroll.passive="onDesktopTableScroll"
         >
             <table
-                class="w-full min-w-[2490px] border-separate border-spacing-0 text-sm"
+                class="w-full min-w-[2300px] border-separate border-spacing-0 text-sm"
             >
                 <thead
                     class="sticky top-0 z-30 text-left text-xs tracking-wider text-[#62665b] uppercase"
@@ -1994,7 +2005,7 @@ onBeforeUnmount(() => {
                         <th
                             class="kgj-lead-ledger__sticky-edge sticky left-[17.5rem] z-40 w-44 min-w-44 bg-[#f8f5ee] p-4"
                         >
-                            CS / Cabang
+                            Nama CS
                         </th>
                         <th class="w-40 min-w-40 p-4">Tanggal lead</th>
                         <template v-if="!archiveMode">
@@ -2006,7 +2017,6 @@ onBeforeUnmount(() => {
                             <th class="p-4">Waktu pakai</th>
                             <th class="p-4">Budget</th>
                             <th class="p-4">Keterangan</th>
-                            <th class="p-4">Follow-up</th>
                             <th class="p-4">Riwayat</th>
                         </template>
                         <th v-else class="p-4">Detail</th>
@@ -2015,7 +2025,7 @@ onBeforeUnmount(() => {
                 <tbody>
                     <tr v-if="desktopVirtualTop" aria-hidden="true">
                         <td
-                            :colspan="archiveMode ? 5 : 14"
+                            :colspan="archiveMode ? 5 : 13"
                             class="h-0 p-0"
                             :style="{ height: `${desktopVirtualTop}px` }"
                         />
@@ -2049,11 +2059,10 @@ onBeforeUnmount(() => {
                             <td
                                 class="sticky left-14 z-10 w-56 min-w-56 overflow-hidden bg-kgj-paper p-4 font-semibold group-hover:bg-[#fcfaf5]"
                             >
-                                <Link
-                                    :href="`/leads/${lead.id}`"
-                                    class="block truncate hover:underline"
+                                <strong
+                                    class="block truncate"
                                     :title="lead.name || lead.contact_raw"
-                                    >{{ lead.name || lead.contact_raw }}</Link
+                                    >{{ lead.name || lead.contact_raw }}</strong
                                 ><small
                                     class="mt-1 block truncate font-normal text-[#62665b]"
                                     :title="lead.phone || lead.contact_raw"
@@ -2073,16 +2082,8 @@ onBeforeUnmount(() => {
                             >
                                 <span
                                     class="block truncate"
-                                    :title="
-                                        lead.owner_name || 'Belum ditugaskan'
-                                    "
-                                    >{{
-                                        lead.owner_name || 'Belum ditugaskan'
-                                    }}</span
-                                ><small
-                                    class="mt-1 block truncate text-[#62665b]"
-                                    :title="lead.branch_name || '—'"
-                                    >{{ lead.branch_name || '—' }}</small
+                                    :title="ownerTitle(lead)"
+                                    >{{ ownerLabel(lead) }}</span
                                 ><small
                                     v-if="lead.cs_filter_match"
                                     class="mt-1 block truncate font-semibold text-kgj-gold-deep"
@@ -2204,14 +2205,14 @@ onBeforeUnmount(() => {
                     </template>
                     <tr v-if="desktopVirtualBottom" aria-hidden="true">
                         <td
-                            :colspan="archiveMode ? 5 : 14"
+                            :colspan="archiveMode ? 5 : 13"
                             class="h-0 p-0"
                             :style="{ height: `${desktopVirtualBottom}px` }"
                         />
                     </tr>
                     <tr v-if="!leads.data.length">
                         <td
-                            :colspan="archiveMode ? 5 : 14"
+                            :colspan="archiveMode ? 5 : 13"
                             class="p-12 text-center text-[#62665b]"
                         >
                             {{

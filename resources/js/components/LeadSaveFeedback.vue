@@ -2,7 +2,7 @@
 import { CheckCircle2, CircleAlert, LoaderCircle } from '@lucide/vue';
 import { computed } from 'vue';
 
-type SaveState = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
+type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict';
 
 const props = defineProps<{
     state?: SaveState;
@@ -11,6 +11,9 @@ const props = defineProps<{
 const emit = defineEmits<{ retry: []; resolveConflict: [] }>();
 
 const label = computed(() => {
+    if (props.state === 'pending') {
+        return props.message || 'Pilih faktor Closing untuk melanjutkan.';
+    }
     if (props.state === 'saving') return 'Menyimpan…';
     if (props.state === 'saved') return 'Tersimpan';
     return props.message || 'Gagal menyimpan';
@@ -24,7 +27,9 @@ const label = computed(() => {
         :class="
             state === 'error' || state === 'conflict'
                 ? 'text-kgj-rose'
-                : 'text-[#62665b]'
+                : state === 'pending'
+                  ? 'text-kgj-gold-deep'
+                  : 'text-[#62665b]'
         "
         role="status"
         aria-live="polite"

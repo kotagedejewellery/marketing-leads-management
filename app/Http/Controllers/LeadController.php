@@ -523,8 +523,17 @@ class LeadController extends Controller
         $selected = array_key_exists('milestones', $data)
             ? $data['milestones']
             : DB::table('lead_milestones')->where('lead_id', $lead)->where('is_active', true)->pluck('milestone')->all();
-        if (($data['outcome'] ?? null) === 'closing' && ! in_array('closing_repeat', $selected, true)) {
+        $effectiveOutcome = array_key_exists('outcome', $data)
+            ? $data['outcome']
+            : $record->outcome;
+        if ($effectiveOutcome === 'closing' && ! in_array('closing_repeat', $selected, true)) {
             $selected[] = 'closing_repeat';
+        }
+        if ($effectiveOutcome === 'loss') {
+            $selected = array_values(array_filter(
+                $selected,
+                static fn (string $milestone): bool => $milestone !== 'closing_repeat',
+            ));
         }
         $selected = array_values(array_unique($selected));
         $isAdmin = $request->user()->role === 'admin';

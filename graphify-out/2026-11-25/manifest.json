@@ -36,9 +36,9 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1795079363.8406167,
-    "seen": 1795494241.9884653,
-    "ast_hash": "4b2a1fc5e84ff9feaa187999533b1bcc",
+    "mtime": 1795600118.882447,
+    "seen": 1795600211.1673079,
+    "ast_hash": "d1c07677f0162a4a1424bb408bfe252d",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -456,9 +456,9 @@
     "semantic_hash": ""
   },
   "resources/js/components/PasswordInput.vue": {
-    "mtime": 1794378909.730927,
-    "seen": 1794378976.3978286,
-    "ast_hash": "1d90c451f4e8443e11c317fc471f1cb9",
+    "mtime": 1795596160.2760673,
+    "seen": 1795596522.0036745,
+    "ast_hash": "ee08eeec699e0b3253e1a9b887e6f7ba",
     "semantic_hash": ""
   },
   "resources/js/components/PlaceholderPattern.vue": {
@@ -1440,15 +1440,15 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1795593485.5081148,
-    "seen": 1795593650.3585792,
-    "ast_hash": "450838d5ea14c5711677c5559b95cfcb",
+    "mtime": 1795600024.70146,
+    "seen": 1795600211.1679556,
+    "ast_hash": "9a91459d90bdc0760ebd1a633b306a8e",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
-    "mtime": 1795059277.5772026,
-    "seen": 1795494241.9889,
-    "ast_hash": "dffcbfe7b4ff6af184035aa541db0828",
+    "mtime": 1795600094.1049156,
+    "seen": 1795600211.1679575,
+    "ast_hash": "1158c32aace383693848498207448be4",
     "semantic_hash": ""
   },
   "resources/js/pages/Statistics.vue": {
@@ -1476,9 +1476,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/auth/Login.vue": {
-    "mtime": 1795595338.540188,
-    "seen": 1795595696.617856,
-    "ast_hash": "5f7f604f78d03ce35cac08c8ff386ea4",
+    "mtime": 1795596158.5148504,
+    "seen": 1795596522.004277,
+    "ast_hash": "e3e39947878349586328a7842c4d8139",
     "semantic_hash": ""
   },
   "resources/js/pages/auth/Register.vue": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {
-    "mtime": 1795503227.859289,
-    "seen": 1795505205.159429,
-    "ast_hash": "b4fac855f519ea8ac40a97e688817820",
+    "mtime": 1795600138.6416204,
+    "seen": 1795600211.168049,
+    "ast_hash": "85a68b6aa03fa868a7a5efd8a000566a",
     "semantic_hash": ""
   },
   "tests/Feature/Settings/ProfileUpdateTest.php": {
@@ -1812,9 +1812,9 @@
     "semantic_hash": ""
   },
   "resources/js/components/LeadQuickUpdate.vue": {
-    "mtime": 1795593677.810714,
-    "seen": 1795593785.6498654,
-    "ast_hash": "c8a8348a8b7c616da080888c759a015e",
+    "mtime": 1795600148.387593,
+    "seen": 1795600211.1675167,
+    "ast_hash": "d3bc4215c909e8df6275b813cb74b30a",
     "semantic_hash": ""
   },
   "database/postgres/007_simplify_lead_milestones.sql": {
@@ -2027,10 +2027,10 @@
     "ast_hash": "3fd58b9f199a4fdb2d64e9ed28b859c2",
     "semantic_hash": ""
   },
-  "public/brand/kotagede-jewellery-lockup.svg": {
-    "mtime": 1795595299.309344,
-    "seen": 1795595696.6179569,
-    "ast_hash": "ac5776040d05a04eb1070e706ef1d885",
+  ".impeccable/critique/2026-11-25T08-39-06Z__resources-js-pages-auth-login-vue.md": {
+    "mtime": 1795596210.290889,
+    "seen": 1795596522.0044224,
+    "ast_hash": "bdd7b4f9fb091cd41373ee7f22df3516",
     "semantic_hash": ""
   }
 }

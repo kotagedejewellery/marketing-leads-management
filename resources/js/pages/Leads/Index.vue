@@ -1753,8 +1753,22 @@ onBeforeUnmount(() => {
                     >
                     <span
                         v-if="lead.source_conflict_at"
-                        class="rounded-full bg-[#fff3f1] px-2 py-1 text-kgj-rose"
-                        >Juga masuk dari
+                        :class="
+                            isAdmin
+                                ? 'bg-[#fff4df] text-kgj-gold-deep'
+                                : 'bg-[#f3f0e8] text-[#665a43]'
+                        "
+                        :title="
+                            isAdmin
+                                ? `Perlu review: nomor juga tercatat di ${lead.source_conflict_branch_name || 'cabang lain'}.`
+                                : `Nomor juga tercatat di ${lead.source_conflict_branch_name || 'cabang lain'}. Sumber dan penanganan Anda tidak berubah.`
+                        "
+                        class="rounded-full px-2 py-1"
+                        >{{
+                            isAdmin
+                                ? 'Perlu review: juga di'
+                                : 'Nomor juga tercatat di'
+                        }}
                         {{
                             lead.source_conflict_branch_name || 'cabang lain'
                         }}</span
@@ -1905,6 +1919,7 @@ onBeforeUnmount(() => {
                         :lead="mobileEditorLead"
                         :outcome-factors="outcomeFactors"
                         :can-mark-crm="isAdmin"
+                        :show-history="false"
                         :show-save-feedback="false"
                         :draft="leadEditState(mobileEditorLead).current"
                         :saved-draft="leadEditState(mobileEditorLead).saved"
@@ -2081,9 +2096,22 @@ onBeforeUnmount(() => {
                                     }}</small
                                 ><small
                                     v-if="lead.source_conflict_at"
-                                    class="mt-1 block truncate font-semibold text-kgj-rose"
-                                    :title="`Nomor juga masuk dari ${lead.source_conflict_branch_name || 'cabang lain'}`"
-                                    >Lintas:
+                                    :class="
+                                        isAdmin
+                                            ? 'text-kgj-gold-deep'
+                                            : 'text-[#665a43]'
+                                    "
+                                    :title="
+                                        isAdmin
+                                            ? `Perlu review: nomor juga tercatat di ${lead.source_conflict_branch_name || 'cabang lain'}.`
+                                            : `Nomor juga tercatat di ${lead.source_conflict_branch_name || 'cabang lain'}. Sumber dan penanganan Anda tidak berubah.`
+                                    "
+                                    class="mt-1 block truncate font-semibold"
+                                    >{{
+                                        isAdmin
+                                            ? 'Perlu review: juga di'
+                                            : 'Tercatat juga di'
+                                    }}
                                     {{
                                         lead.source_conflict_branch_name ||
                                         'cabang lain'

@@ -41,6 +41,7 @@ const props = withDefaults(
         variant?: 'card' | 'table';
         retrySaveVersion?: number;
         canMarkCrm?: boolean;
+        showHistory?: boolean;
         showSaveFeedback?: boolean;
         draft?: QuickUpdateFields;
         savedDraft?: QuickUpdateFields;
@@ -50,6 +51,7 @@ const props = withDefaults(
         variant: 'card',
         retrySaveVersion: 0,
         canMarkCrm: false,
+        showHistory: true,
         showSaveFeedback: true,
     },
 );
@@ -681,9 +683,11 @@ onBeforeUnmount(() => {
         </p>
 
         <div
+            v-if="showHistory || canMarkCrm"
             class="mt-4 flex flex-col gap-3 border-t border-[#e7dfcf] pt-4 sm:flex-row sm:items-center sm:justify-between"
         >
             <LeadHistoryPopover
+                v-if="showHistory"
                 :lead-id="lead.id"
                 label="Lihat riwayat"
                 align="start"
@@ -702,9 +706,9 @@ onBeforeUnmount(() => {
                 />
                 Diambil alih CRM
             </label>
-            <span v-if="saveError" :id="errorId" class="sr-only" role="status">
-                {{ saveError }}
-            </span>
         </div>
+        <span v-if="saveError" :id="errorId" class="sr-only" role="status">
+            {{ saveError }}
+        </span>
     </section>
 </template>

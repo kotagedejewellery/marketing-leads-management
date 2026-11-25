@@ -1,17 +1,17 @@
 # Graph Report - marketing-leads  (2026-11-25)
 
 ## Corpus Check
-- 325 files · ~152,313 words
+- 326 files · ~152,847 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 25 file(s) not represented in the graph (top: (none) 19, .example 2, .neon 1)
 
 ## Summary
-- 1944 nodes · 3527 edges · 145 communities (90 shown, 55 thin omitted)
+- 1953 nodes · 3535 edges · 147 communities (93 shown, 54 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 24 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `bf4e2922`
+- Built from commit: `2dff728d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -26,16 +26,16 @@
 - SelectContent.vue
 - Leads/Index.vue
 - User
-- lib/utils.ts
+- vue
 - types/index.ts
 - TwoFactorSetupModal.vue
 - Illuminate\Http\Request
 - LeadManagementTest.php
-- DeleteUser.vue
+- AppLayout.vue
 - DashboardController.php
 - TestCase
 - package.json
-- resources_js_components_ui_button_index_button
+- button/index.ts
 - Branches/Index.vue
 - SidebarProvider.vue
 - compilerOptions
@@ -46,16 +46,16 @@
 - InputOTPSlot.vue
 - web.php
 - leads
-- useAppearance.ts
+- 2026-11-25T08-39-06Z__resources-js-pages-auth-login-vue.md
 - PasswordValidationRules
 - LeadImportService
 - PasskeyRegister.vue
 - KGJ Leads
 - dependencies
 - PopoverContent.vue
-- @inertiajs/vue3
+- useAppearance.ts
 - aliases
-- UserMenuContent.vue
+- UserInfo.vue
 - scripts
 - GoogleSheetSyncService.php
 - Show.vue
@@ -85,7 +85,7 @@
 - config
 - EmailVerificationTest
 - guardUnsavedChanges
-- resources_js_routes_index
+- @inertiajs/vue3
 - PasswordResetTest
 - psr-4
 - laravel
@@ -99,7 +99,7 @@
 - FortifyServiceProvider.php
 - GLOSSARY.md
 - artisan
-- button/index.ts
+- Layout.vue
 - deploy-production.sh
 - migrate-postgres.sh
 - resources_js_actions_laravel_passkeys_http_controllers_passkeyconfirmationcontroller
@@ -135,16 +135,18 @@
 - LeadSaveFeedback.vue
 - outcomeLabel
 - overrides
-- Input.vue
+- Breadcrumbs.vue
 - resolveLeadConflict
-- Sonner.vue
+- UserMenuContent.vue
 - isDirty
 - AlertError.vue
+- lead-options.ts
 - createDesktopRowResizeObserver
 - hasUnsavedChanges
 - LeadEditState
 - observeDesktopViewport
-- vue
+- Login.vue
+- TooltipContent.vue
 
 ## God Nodes (most connected - your core abstractions)
 1. `vue` - 130 edges
@@ -173,7 +175,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (145 total, 55 thin omitted)
+## Communities (147 total, 54 thin omitted)
 
 ### Community 0 - "Illuminate\Database\Schema\Blueprint"
 Cohesion: 0.11
@@ -215,25 +217,25 @@ Nodes (72): resources_js_components_ui_sheet_index_sheetdescription, allVisibleS
 Cohesion: 0.10
 Nodes (9): User, Illuminate\Database\Eloquent\Factories\HasFactory, Illuminate\Foundation\Auth\User, Illuminate\Notifications\Notifiable, Illuminate\Support\Carbon, Laravel\Fortify\Contracts\PasskeyUser, Laravel\Fortify\PasskeyAuthenticatable, Laravel\Fortify\TwoFactorAuthenticatable (+1 more)
 
-### Community 10 - "lib/utils.ts"
-Cohesion: 0.06
-Nodes (35): props, props, props, props, props, props, props, props (+27 more)
+### Community 10 - "vue"
+Cohesion: 0.05
+Nodes (49): vue, props, props, props, props, props, props, props (+41 more)
 
 ### Community 11 - "types/index.ts"
-Cohesion: 0.10
-Nodes (21): className, Props, Props, Props, resources_js_components_ui_breadcrumb_index_breadcrumb, resources_js_components_ui_breadcrumb_index_breadcrumbitem, resources_js_components_ui_breadcrumb_index_breadcrumblink, resources_js_components_ui_breadcrumb_index_breadcrumblist (+13 more)
+Cohesion: 0.16
+Nodes (13): className, Props, Props, resources_js_components_ui_sidebar_index_sidebarinset, resources_js_components_ui_sidebar_index_sidebarprovider, resources_js_components_ui_sidebar_index_sidebartrigger, resources_js_components_ui_sonner_index_toaster, Props (+5 more)
 
 ### Community 12 - "TwoFactorSetupModal.vue"
-Cohesion: 0.10
-Nodes (17): ref_routes_two_factor_login, code, { copy, copied }, isOpen, modalConfig, pinInputContainerRef, Props, { qrCodeSvg, manualSetupKey, clearSetupData, fetchSetupData, errors } (+9 more)
+Cohesion: 0.09
+Nodes (20): ref_routes_two_factor_login, code, { copy, copied }, isOpen, modalConfig, pinInputContainerRef, Props, { qrCodeSvg, manualSetupKey, clearSetupData, fetchSetupData, errors } (+12 more)
 
 ### Community 14 - "LeadManagementTest.php"
 Cohesion: 0.13
 Nodes (26): Illuminate\Http\Client\Request, Illuminate\Http\UploadedFile, Inertia\Testing\AssertableInertia, Mockery, OpenSpout\Common\Entity\Row, OpenSpout\Writer\XLSX\Writer, {closure#16}(), {closure#10}() (+18 more)
 
-### Community 15 - "DeleteUser.vue"
+### Community 15 - "AppLayout.vue"
 Cohesion: 0.15
-Nodes (18): passwordInput, emit, handleDelete(), isDeleting, props, resources_js_components_ui_dialog_index_dialog, resources_js_components_ui_dialog_index_dialogclose, resources_js_components_ui_dialog_index_dialogcontent (+10 more)
+Nodes (15): emit, handleDelete(), isDeleting, props, resources_js_components_ui_dialog_index_dialogclose, resources_js_components_ui_dialog_index_dialogcontent, resources_js_components_ui_dialog_index_dialogdescription, resources_js_components_ui_dialog_index_dialogfooter (+7 more)
 
 ### Community 16 - "DashboardController.php"
 Cohesion: 0.15
@@ -247,9 +249,9 @@ Nodes (11): Illuminate\Foundation\Testing\RefreshDatabase, Illuminate\Foundation
 Cohesion: 0.09
 Nodes (21): private, $schema, type, clsx, concurrently, @inertiajs/vite, @laravel/multiplex, @laravel/vite-plugin-wayfinder (+13 more)
 
-### Community 19 - "resources_js_components_ui_button_index_button"
+### Community 19 - "button/index.ts"
 Cohesion: 0.11
-Nodes (25): ref_actions_laravel_passkeys_http_controllers_passkeyconfirmationcontroller, ref_inertiajs_core, ref_routes_register, ref_routes_verification, resources_js_actions_app_http_controllers_settings_profilecontroller, Props, { verify, isLoading, error, isSupported }, inputRef (+17 more)
+Nodes (26): ref_actions_laravel_passkeys_http_controllers_passkeyconfirmationcontroller, ref_inertiajs_core, ref_routes_register, ref_routes_verification, resources_js_actions_app_http_controllers_settings_profilecontroller, passwordInput, Props, { verify, isLoading, error, isSupported } (+18 more)
 
 ### Community 20 - "Branches/Index.vue"
 Cohesion: 0.10
@@ -265,7 +267,7 @@ Nodes (21): compilerOptions, allowJs, esModuleInterop, forceConsistentCasingInFi
 
 ### Community 23 - "AppSidebar.vue"
 Cohesion: 0.11
-Nodes (23): footerNavItems, mainNavItems, Props, { isCurrentUrl }, { isMobile, state }, page, user, resources_js_components_ui_dropdown_menu_index_dropdownmenu (+15 more)
+Nodes (24): footerNavItems, mainNavItems, Props, { isCurrentUrl }, { isMobile, state }, page, user, resources_js_components_ui_dropdown_menu_index_dropdownmenu (+16 more)
 
 ### Community 25 - "AppHeader.vue"
 Cohesion: 0.09
@@ -283,9 +285,9 @@ Nodes (6): EnsureAdmin, HandleAppearance, Closure, Illuminate\Support\Facades\Ro
 Cohesion: 0.07
 Nodes (28): branches, lead_activity, lead_activity_lead_created_idx, lead_milestones, leads, leads_assigned_user_idx, leads_outcome_idx, leads_updated_at_idx (+20 more)
 
-### Community 30 - "useAppearance.ts"
-Cohesion: 0.15
-Nodes (18): { appearance, updateAppearance }, tabs, appearance, getStoredAppearance(), handleSystemThemeChange(), initializeTheme(), mediaQuery(), prefersDark() (+10 more)
+### Community 30 - "2026-11-25T08-39-06Z__resources-js-pages-auth-login-vue.md"
+Cohesion: 0.25
+Nodes (7): Design Health Score, Design Specificity Verdict, Minor Observations, Overall Impression, Persona Red Flags, Priority Issues, What's Working
 
 ### Community 31 - "PasswordValidationRules"
 Cohesion: 0.05
@@ -311,17 +313,17 @@ Nodes (17): dependencies, class-variance-authority, clsx, @inertiajs/vite, @iner
 Cohesion: 0.40
 Nodes (4): delegatedProps, emits, forwarded, props
 
-### Community 37 - "@inertiajs/vue3"
-Cohesion: 0.09
-Nodes (16): @inertiajs/vue3, pages, initializeFlashToast(), priorityRows, props, branch, outcomeDateFrom, outcomeDateTo (+8 more)
+### Community 37 - "useAppearance.ts"
+Cohesion: 0.05
+Nodes (34): vue-sonner, pages, { appearance, updateAppearance }, tabs, props, appearance, getStoredAppearance(), handleSystemThemeChange() (+26 more)
 
 ### Community 38 - "aliases"
 Cohesion: 0.12
 Nodes (15): aliases, components, composables, lib, ui, utils, iconLibrary, $schema (+7 more)
 
-### Community 39 - "UserMenuContent.vue"
-Cohesion: 0.12
-Nodes (16): resources_js_components_ui_avatar_index_avatar, resources_js_components_ui_avatar_index_avatarfallback, resources_js_components_ui_avatar_index_avatarimage, resources_js_components_ui_dropdown_menu_index_dropdownmenugroup, resources_js_components_ui_dropdown_menu_index_dropdownmenuitem, resources_js_components_ui_dropdown_menu_index_dropdownmenulabel, resources_js_components_ui_dropdown_menu_index_dropdownmenuseparator, { getInitials } (+8 more)
+### Community 39 - "UserInfo.vue"
+Cohesion: 0.19
+Nodes (11): resources_js_components_ui_avatar_index_avatar, resources_js_components_ui_avatar_index_avatarfallback, resources_js_components_ui_avatar_index_avatarimage, { getInitials }, Props, showAvatar, getInitial(), getInitials() (+3 more)
 
 ### Community 40 - "scripts"
 Cohesion: 0.14
@@ -333,7 +335,7 @@ Nodes (8): {closure#2}(), {closure#8}(), Google\Auth\Credentials\ServiceAccountC
 
 ### Community 42 - "Show.vue"
 Cohesion: 0.07
-Nodes (23): zod, budgetOptions, leadSchema, archiveDialogOpen, assisting, clientError, collaboratorForm, deleteDialogOpen (+15 more)
+Nodes (20): archiveDialogOpen, assisting, clientError, collaboratorForm, deleteDialogOpen, displayContact, displayName, focusFirstError() (+12 more)
 
 ### Community 43 - "global.d.ts"
 Cohesion: 0.22
@@ -431,9 +433,9 @@ Nodes (4): Illuminate\Auth\Events\Verified, Illuminate\Support\Facades\Event, Il
 Cohesion: 0.10
 Nodes (22): addCollaboratorSelected(), addCollaboratorSelectedNow(), applyFilters(), applyFiltersNow(), assignSelected(), assignSelectedNow(), clearFilters(), createLead() (+14 more)
 
-### Community 70 - "resources_js_routes_index"
-Cohesion: 0.16
-Nodes (8): Props, page, { title = '', description = '' }, resources_js_routes_index, resources_js_routes_index_dashboard, resources_js_routes_index_home, resources_js_routes_index_login, resources_js_routes_index_register
+### Community 70 - "@inertiajs/vue3"
+Cohesion: 0.20
+Nodes (8): @inertiajs/vue3, Props, page, { title = '', description = '' }, resources_js_routes_index, resources_js_routes_index_home, resources_js_routes_index_login, resources_js_routes_index_register
 
 ### Community 72 - "psr-4"
 Cohesion: 0.40
@@ -471,9 +473,9 @@ Nodes (19): ref_routes_two_factor, { hasSetupData, clearTwoFactorAuthData }, Pro
 Cohesion: 0.10
 Nodes (15): LoginResponse, LogoutResponse, {closure#1}(), {closure#10}(), {closure#11}(), {closure#2}(), {closure#3}(), {closure#4}() (+7 more)
 
-### Community 84 - "button/index.ts"
-Cohesion: 0.10
-Nodes (17): ref_actions_laravel_passkeys_http_controllers_passkeyregistrationcontroller, resources_js_actions_app_http_controllers_settings_securitycontroller, Props, Props, resources_js_components_ui_separator_index_separator, { isCurrentOrParentUrl }, sidebarNavItems, Props (+9 more)
+### Community 84 - "Layout.vue"
+Cohesion: 0.11
+Nodes (14): ref_actions_laravel_passkeys_http_controllers_passkeyregistrationcontroller, resources_js_actions_app_http_controllers_settings_securitycontroller, Props, Props, resources_js_components_ui_separator_index_separator, props, { isCurrentOrParentUrl }, sidebarNavItems (+6 more)
 
 ### Community 116 - "Project agent rules"
 Cohesion: 0.25
@@ -500,8 +502,8 @@ Cohesion: 0.29
 Nodes (7): scripts, build, build:ssr, check, check:fix, dev, types:check
 
 ### Community 124 - "Accounts/Index.vue"
-Cohesion: 0.20
-Nodes (8): Account, accountToToggle, cancel(), editingId, form, needsBranch, props, save()
+Cohesion: 0.17
+Nodes (10): resources_js_components_ui_dialog_index_dialog, resources_js_components_ui_dialog_index_dialogheader, Account, accountToToggle, cancel(), editingId, form, needsBranch (+2 more)
 
 ### Community 126 - "queueSave"
 Cohesion: 0.33
@@ -519,9 +521,13 @@ Nodes (5): emits, forwarded, props, forwardedProps, props
 Cohesion: 0.40
 Nodes (4): emit, label, props, SaveState
 
-### Community 132 - "Input.vue"
-Cohesion: 0.50
-Nodes (3): emits, modelValue, props
+### Community 132 - "Breadcrumbs.vue"
+Cohesion: 0.25
+Nodes (7): Props, resources_js_components_ui_breadcrumb_index_breadcrumb, resources_js_components_ui_breadcrumb_index_breadcrumbitem, resources_js_components_ui_breadcrumb_index_breadcrumblink, resources_js_components_ui_breadcrumb_index_breadcrumblist, resources_js_components_ui_breadcrumb_index_breadcrumbpage, resources_js_components_ui_breadcrumb_index_breadcrumbseparator
+
+### Community 137 - "UserMenuContent.vue"
+Cohesion: 0.25
+Nodes (6): resources_js_components_ui_dropdown_menu_index_dropdownmenugroup, resources_js_components_ui_dropdown_menu_index_dropdownmenuitem, resources_js_components_ui_dropdown_menu_index_dropdownmenulabel, resources_js_components_ui_dropdown_menu_index_dropdownmenuseparator, Props, resources_js_routes_profile_index
 
 ### Community 138 - "isDirty"
 Cohesion: 0.67
@@ -531,26 +537,34 @@ Nodes (3): isDirty, signature(), snapshot()
 Cohesion: 0.33
 Nodes (5): Props, uniqueErrors, resources_js_components_ui_alert_index_alert, resources_js_components_ui_alert_index_alertdescription, resources_js_components_ui_alert_index_alerttitle
 
-### Community 148 - "vue"
-Cohesion: 0.08
-Nodes (18): vue, props, props, props, props, props, props, props (+10 more)
+### Community 140 - "lead-options.ts"
+Cohesion: 0.50
+Nodes (3): zod, budgetOptions, leadSchema
+
+### Community 145 - "Login.vue"
+Cohesion: 0.40
+Nodes (3): emailInput, form, passwordInput
+
+### Community 148 - "TooltipContent.vue"
+Cohesion: 0.25
+Nodes (6): Props, ButtonVariants, delegatedProps, emits, forwarded, props
 
 ## Knowledge Gaps
-- **661 isolated node(s):** `$schema`, `style`, `config`, `css`, `baseColor` (+656 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 956 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **55 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **669 isolated node(s):** `$schema`, `style`, `config`, `css`, `baseColor` (+664 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 964 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **54 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `vue` connect `vue` to `LeadSaveFeedback.vue`, `reka-ui`, `Sidebar.vue`, `Input.vue`, `@vueuse/core`, `@lucide/vue`, `SelectContent.vue`, `Leads/Index.vue`, `lib/utils.ts`, `types/index.ts`, `AlertError.vue`, `TwoFactorSetupModal.vue`, `DeleteUser.vue`, `package.json`, `resources_js_components_ui_button_index_button`, `Branches/Index.vue`, `SidebarProvider.vue`, `AppSidebar.vue`, `AppHeader.vue`, `InputOTPSlot.vue`, `useAppearance.ts`, `PasskeyRegister.vue`, `PopoverContent.vue`, `@inertiajs/vue3`, `UserMenuContent.vue`, `Show.vue`, `global.d.ts`, `LeadQuickUpdate.vue`, `LeadHistoryPopover.vue`, `dialog/index.ts`, `SheetContent.vue`, `useCurrentUrl.ts`, `Badge.vue`, `SidebarMenuSkeleton.vue`, `resources_js_routes_index`, `TwoFactorRecoveryCodes.vue`, `AvatarFallback.vue`, `Accounts/Index.vue`?**
+- **Why does `vue` connect `vue` to `LeadSaveFeedback.vue`, `reka-ui`, `Sidebar.vue`, `@vueuse/core`, `@lucide/vue`, `SelectContent.vue`, `Leads/Index.vue`, `types/index.ts`, `AlertError.vue`, `TwoFactorSetupModal.vue`, `AppLayout.vue`, `Login.vue`, `package.json`, `button/index.ts`, `TooltipContent.vue`, `SidebarProvider.vue`, `Branches/Index.vue`, `AppSidebar.vue`, `AppHeader.vue`, `InputOTPSlot.vue`, `PasskeyRegister.vue`, `PopoverContent.vue`, `useAppearance.ts`, `UserInfo.vue`, `Show.vue`, `global.d.ts`, `LeadQuickUpdate.vue`, `LeadHistoryPopover.vue`, `dialog/index.ts`, `SheetContent.vue`, `useCurrentUrl.ts`, `Badge.vue`, `SidebarMenuSkeleton.vue`, `@inertiajs/vue3`, `TwoFactorRecoveryCodes.vue`, `Layout.vue`, `AvatarFallback.vue`, `Accounts/Index.vue`?**
   _High betweenness centrality (0.111) - this node is a cross-community bridge._
 - **Why does `User` connect `User` to `EmailVerificationTest`, `PasswordResetTest`, `DatabaseSeeder.php`, `UserFactory.php`, `LeadManagementTest`, `LeadManagementTest.php`, `Laravel\Fortify\Features`, `FortifyServiceProvider.php`, `TestCase`, `SecurityTest.php`, `AuthenticationTest`, `ProfileUpdateTest`, `DashboardTest.php`, `PasswordValidationRules`?**
-  _High betweenness centrality (0.046) - this node is a cross-community bridge._
-- **Why does `@inertiajs/vue3` connect `@inertiajs/vue3` to `Leads/Index.vue`, `lib/utils.ts`, `types/index.ts`, `TwoFactorSetupModal.vue`, `DeleteUser.vue`, `package.json`, `resources_js_components_ui_button_index_button`, `Branches/Index.vue`, `AppSidebar.vue`, `AppHeader.vue`, `UserMenuContent.vue`, `Show.vue`, `LeadQuickUpdate.vue`, `LeadHistoryPopover.vue`, `useCurrentUrl.ts`, `resources_js_routes_index`, `TwoFactorRecoveryCodes.vue`, `button/index.ts`, `Accounts/Index.vue`?**
   _High betweenness centrality (0.041) - this node is a cross-community bridge._
+- **Why does `@inertiajs/vue3` connect `@inertiajs/vue3` to `Breadcrumbs.vue`, `Leads/Index.vue`, `UserMenuContent.vue`, `vue`, `types/index.ts`, `TwoFactorSetupModal.vue`, `AppLayout.vue`, `Login.vue`, `package.json`, `button/index.ts`, `Branches/Index.vue`, `AppSidebar.vue`, `AppHeader.vue`, `useAppearance.ts`, `Show.vue`, `LeadQuickUpdate.vue`, `LeadHistoryPopover.vue`, `useCurrentUrl.ts`, `TwoFactorRecoveryCodes.vue`, `Layout.vue`, `Accounts/Index.vue`?**
+  _High betweenness centrality (0.035) - this node is a cross-community bridge._
 - **What connects `$schema`, `style`, `config` to the rest of the system?**
-  _661 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _669 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Illuminate\Database\Schema\Blueprint` be split into smaller, more focused modules?**
   _Cohesion score 0.11255411255411256 - nodes in this community are weakly interconnected._
 - **Should `reka-ui` be split into smaller, more focused modules?**

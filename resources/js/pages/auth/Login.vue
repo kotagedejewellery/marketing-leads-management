@@ -7,9 +7,15 @@ import { Toaster } from '@/components/ui/sonner';
 
 const form = useForm({ email: '', password: '', remember: false });
 const emailInput = ref<HTMLInputElement | null>(null);
+const passwordInput = ref<InstanceType<typeof PasswordInput> | null>(null);
 const submit = () =>
     form.post('/login', {
-        onError: () => nextTick(() => emailInput.value?.focus()),
+        onError: (errors) =>
+            nextTick(() => {
+                if (errors.email) return emailInput.value?.focus();
+
+                passwordInput.value?.focus();
+            }),
         onFinish: () => form.reset('password'),
     });
 </script>
@@ -17,26 +23,24 @@ const submit = () =>
 <template>
     <Head title="Masuk | Lead Control" />
     <main
-        class="relative isolate flex min-h-screen overflow-hidden bg-[#e9e0cd] px-4 py-6 text-kgj-ink sm:p-8"
+        class="relative isolate grid min-h-dvh place-items-center overflow-x-hidden bg-[#e9e0cd] p-4 text-kgj-ink sm:p-8"
     >
         <div
             aria-hidden="true"
             class="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_42%,#fffdf8_0%,#f3e8d3_44%,#e3cea2_100%)]"
         />
-        <section
-            class="flex w-full flex-1 items-center justify-center py-12 sm:py-16"
-        >
+        <section class="w-full max-w-[30rem]">
             <div
-                class="w-full max-w-[30rem] rounded-2xl bg-kgj-paper p-7 shadow-[0_24px_60px_rgba(69,54,29,0.18)] sm:p-10"
+                class="w-full rounded-2xl bg-kgj-paper p-6 shadow-[0_24px_60px_rgba(69,54,29,0.18)] sm:p-10"
             >
                 <img
-                    class="mx-auto h-auto w-36 sm:w-40"
-                    src="/brand/kotagede-jewellery-lockup.svg"
+                    class="mx-auto h-auto w-28 mix-blend-multiply sm:w-40"
+                    src="/brand/kotagede-jewellery.png"
                     alt="Kotagede Jewellery"
-                    width="2460"
-                    height="1860"
+                    width="2792"
+                    height="2308"
                 />
-                <div class="mt-5 text-center">
+                <div class="mt-4 text-center sm:mt-5">
                     <h1
                         class="text-3xl font-semibold tracking-[-.035em] sm:text-[2rem]"
                     >
@@ -48,7 +52,10 @@ const submit = () =>
                         Gunakan akun kerja Anda untuk melanjutkan.
                     </p>
                 </div>
-                <form class="mt-9 space-y-5" @submit.prevent="submit">
+                <form
+                    class="mt-6 space-y-4 sm:mt-9 sm:space-y-5"
+                    @submit.prevent="submit"
+                >
                     <label class="block text-sm font-semibold">
                         Alamat email
                         <span class="relative mt-2 block">
@@ -62,7 +69,6 @@ const submit = () =>
                                 type="email"
                                 autocomplete="email"
                                 required
-                                autofocus
                                 :aria-invalid="Boolean(form.errors.email)"
                                 :aria-describedby="
                                     form.errors.email
@@ -84,6 +90,7 @@ const submit = () =>
                                 class="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-kgj-muted"
                             />
                             <PasswordInput
+                                ref="passwordInput"
                                 id="password"
                                 v-model="form.password"
                                 class="kgj-input w-full pr-12 pl-10"

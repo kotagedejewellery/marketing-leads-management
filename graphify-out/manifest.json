@@ -456,9 +456,9 @@
     "semantic_hash": ""
   },
   "resources/js/components/PasswordInput.vue": {
-    "mtime": 1794378909.730927,
-    "seen": 1794378976.3978286,
-    "ast_hash": "1d90c451f4e8443e11c317fc471f1cb9",
+    "mtime": 1795596160.2760673,
+    "seen": 1795596522.0036745,
+    "ast_hash": "ee08eeec699e0b3253e1a9b887e6f7ba",
     "semantic_hash": ""
   },
   "resources/js/components/PlaceholderPattern.vue": {
@@ -1440,9 +1440,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1795504980.0455728,
-    "seen": 1795505205.1593535,
-    "ast_hash": "71298569e449c8b4817203a3d370d7cd",
+    "mtime": 1795598284.6474419,
+    "seen": 1795598322.9224432,
+    "ast_hash": "932cd3aea9cca80bf535882484fadfd6",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
@@ -1476,9 +1476,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/auth/Login.vue": {
-    "mtime": 1795592290.3805847,
-    "seen": 1795592560.4465265,
-    "ast_hash": "55f23ebdd39c368d6bbd30c8999a726e",
+    "mtime": 1795596158.5148504,
+    "seen": 1795596522.004277,
+    "ast_hash": "e3e39947878349586328a7842c4d8139",
     "semantic_hash": ""
   },
   "resources/js/pages/auth/Register.vue": {
@@ -1812,9 +1812,9 @@
     "semantic_hash": ""
   },
   "resources/js/components/LeadQuickUpdate.vue": {
-    "mtime": 1795495477.049368,
-    "seen": 1795495591.8947926,
-    "ast_hash": "6133bc593292d69c2f3a322b0e6c3c69",
+    "mtime": 1795593677.810714,
+    "seen": 1795593785.6498654,
+    "ast_hash": "c8a8348a8b7c616da080888c759a015e",
     "semantic_hash": ""
   },
   "database/postgres/007_simplify_lead_milestones.sql": {
@@ -2027,10 +2027,10 @@
     "ast_hash": "3fd58b9f199a4fdb2d64e9ed28b859c2",
     "semantic_hash": ""
   },
-  "public/brand/kotagede-jewellery-lockup.svg": {
-    "mtime": 1795592288.948428,
-    "seen": 1795592560.446673,
-    "ast_hash": "2280d4677c4cef3045f7896c90c68a4c",
+  ".impeccable/critique/2026-11-25T08-39-06Z__resources-js-pages-auth-login-vue.md": {
+    "mtime": 1795596210.290889,
+    "seen": 1795596522.0044224,
+    "ast_hash": "bdd7b4f9fb091cd41373ee7f22df3516",
     "semantic_hash": ""
   }
 }

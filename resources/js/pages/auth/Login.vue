@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
-import { ArrowRight, LockKeyhole, LogIn, Mail } from '@lucide/vue';
+import { ArrowRight, LockKeyhole, Mail } from '@lucide/vue';
 import { nextTick, ref } from 'vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Toaster } from '@/components/ui/sonner';
@@ -15,7 +15,7 @@ const submit = () =>
 </script>
 
 <template>
-    <Head title="Masuk" />
+    <Head title="Masuk | Lead Control" />
     <main
         class="relative isolate flex min-h-screen overflow-hidden bg-[#e9e0cd] px-4 py-6 text-kgj-ink sm:p-8"
     >
@@ -29,16 +29,18 @@ const submit = () =>
             <div
                 class="w-full max-w-[30rem] rounded-2xl bg-kgj-paper p-7 shadow-[0_24px_60px_rgba(69,54,29,0.18)] sm:p-10"
             >
-                <div
-                    class="mx-auto flex size-12 items-center justify-center rounded-xl bg-[#f1e3c4] text-kgj-gold-deep shadow-[0_8px_18px_rgba(115,80,30,0.14)]"
-                >
-                    <LogIn class="size-5" />
-                </div>
+                <img
+                    class="mx-auto h-auto w-36 sm:w-40"
+                    src="/brand/kotagede-jewellery-lockup.svg"
+                    alt="Kotagede Jewellery"
+                    width="2460"
+                    height="1860"
+                />
                 <div class="mt-5 text-center">
                     <h1
                         class="text-3xl font-semibold tracking-[-.035em] sm:text-[2rem]"
                     >
-                        Masuk ke Leads
+                        Masuk ke Lead Control
                     </h1>
                     <p
                         class="mx-auto mt-3 max-w-[31ch] text-sm leading-6 text-kgj-muted"
@@ -119,11 +121,7 @@ const submit = () =>
                         type="submit"
                         :disabled="form.processing"
                     >
-                        {{
-                            form.processing
-                                ? 'Memeriksa akun...'
-                                : 'Masuk ke dashboard'
-                        }}
+                        {{ form.processing ? 'Memeriksa akun...' : 'Masuk' }}
                         <ArrowRight v-if="!form.processing" class="size-4" />
                     </button>
                 </form>

@@ -1476,9 +1476,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/auth/Login.vue": {
-    "mtime": 1794379016.0665548,
-    "seen": 1794379033.7752035,
-    "ast_hash": "f0381a197adc7f26ecf7de95b390fee1",
+    "mtime": 1795592290.3805847,
+    "seen": 1795592560.4465265,
+    "ast_hash": "55f23ebdd39c368d6bbd30c8999a726e",
     "semantic_hash": ""
   },
   "resources/js/pages/auth/Register.vue": {
@@ -2025,6 +2025,12 @@
     "mtime": 1795055814.275777,
     "seen": 1795494241.9889953,
     "ast_hash": "3fd58b9f199a4fdb2d64e9ed28b859c2",
+    "semantic_hash": ""
+  },
+  "public/brand/kotagede-jewellery-lockup.svg": {
+    "mtime": 1795592288.948428,
+    "seen": 1795592560.446673,
+    "ast_hash": "2280d4677c4cef3045f7896c90c68a4c",
     "semantic_hash": ""
   }
 }

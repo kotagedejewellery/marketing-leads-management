@@ -239,8 +239,8 @@
     .kgj-input:-webkit-autofill,
     .kgj-input:-webkit-autofill:hover,
     .kgj-input:-webkit-autofill:focus {
-        -webkit-text-fill-color: var(--kgj-ink);
-        -webkit-box-shadow: 0 0 0 1000px var(--kgj-paper) inset;
+        -webkit-text-fill-color: var(--kgj-ink) !important;
+        -webkit-box-shadow: 0 0 0 1000px var(--kgj-paper) inset !important;
         caret-color: var(--kgj-ink);
     }
     .kgj-button-primary {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\GoogleSheetSyncService;
+use App\Support\CsName;
 use App\Support\LeadBudgetRanges;
 use App\Support\LeadOutcomeFactors;
 use Illuminate\Database\Query\Builder;
@@ -35,7 +36,7 @@ class DashboardController extends Controller
             ->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')
             ->leftJoin('branches as source_b', 'source_b.id', '=', 'l.source_branch_id')
             ->leftJoin('branches as conflict_b', 'conflict_b.id', '=', 'l.source_conflict_branch_id')
-            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.assigned_user_id', 'l.source_branch_id', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.outcome', 'l.outcome_factor', 'l.outcome_note', 'l.outcome_recorded_at', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
+            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.assigned_user_id', 'l.owner_resolution', 'l.imported_cs_name', 'l.source_branch_id', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.outcome', 'l.outcome_factor', 'l.outcome_note', 'l.outcome_recorded_at', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
             ->orderByDesc('l.updated_at');
 
         $showArchived = $request->boolean('archived');
@@ -137,6 +138,7 @@ class DashboardController extends Controller
         if ($request->filled('queue')) {
             match ($request->string('queue')->toString()) {
                 'unassigned' => $request->user()->role === 'admin' ? $query->whereNull('l.assigned_user_id') : null,
+                'awaiting_account' => $request->user()->role === 'admin' ? $query->where('l.owner_resolution', 'awaiting_account') : null,
                 'needs_qualification' => $query->where(fn (Builder $builder) => $builder->whereNull('l.intent_buying')->orWhereNull('l.usage_date')->orWhereNull('l.budget')),
                 'follow_up_due' => $query->whereNotNull('l.next_follow_up_at')->where('l.next_follow_up_at', '<=', now()),
                 'crm_taken_over' => $query->whereNotNull('l.crm_taken_over_at'),
@@ -235,7 +237,7 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function branches(): Response
+    public function branches(Request $request): Response
     {
         $csByBranch = DB::table('users')
             ->where('role', 'cs')
@@ -255,18 +257,22 @@ class DashboardController extends Controller
                 $lastRunsByBranch[$branchId] = $run;
             }
         }
+        $sourceEventsByBranch = DB::table('branch_source_events as event')
+            ->leftJoin('users as actor', 'actor.id', '=', 'event.actor_id')
+            ->orderByDesc('event.created_at')
+            ->get(['event.id', 'event.branch_id', 'event.action', 'event.previous_spreadsheet_id', 'event.spreadsheet_id', 'event.detail', 'event.created_at', 'actor.name as actor_name'])
+            ->groupBy('branch_id');
         $branches = DB::table('branches')
             ->orderBy('name')
             ->get(['id', 'name', 'default_import_user_id', 'google_spreadsheet_id', 'google_sheets_synced_at', 'google_sheets_sync_error'])
-            ->map(function (object $branch) use ($csByBranch, $lastRunsByBranch): object {
+            ->map(function (object $branch) use ($csByBranch, $lastRunsByBranch, $sourceEventsByBranch): object {
                 $branch->cs_accounts = array_values($csByBranch->get($branch->id, collect())->all());
                 $hasDefaultImportCs = collect($branch->cs_accounts)->contains(
                     fn (object $account): bool => (int) data_get($account, 'id') === (int) $branch->default_import_user_id,
                 );
                 $branch->import_status = match (true) {
                     ! $branch->google_spreadsheet_id => 'Sumber Google Sheets belum diatur',
-                    $branch->cs_accounts === [] => 'Butuh akun CS aktif',
-                    ! $hasDefaultImportCs => 'Pilih CS default impor',
+                    ! $hasDefaultImportCs => 'Nama CS kosong perlu fallback impor',
                     default => 'Siap impor',
                 };
                 $lastRun = $lastRunsByBranch[(int) $branch->id] ?? null;
@@ -281,22 +287,72 @@ class DashboardController extends Controller
                         'error' => $lastRun->error,
                     ]
                     : null;
+                $branch->source_events = $sourceEventsByBranch
+                    ->get($branch->id, collect())
+                    ->take(5)
+                    ->values()
+                    ->all();
 
                 return $branch;
             });
 
-        return Inertia::render('Branches/Index', ['branches' => $branches]);
+        return Inertia::render('Branches/Index', [
+            'branches' => $branches,
+            'source_preview' => $request->session()->get('source_preview'),
+        ]);
     }
 
     public function accounts(): Response
     {
-        return Inertia::render('Accounts/Index', ['accounts' => DB::table('users as u')->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')->orderByDesc('u.active')->orderBy('u.name')->get(['u.id', 'u.name', 'u.email', 'u.role', 'u.branch_id', 'u.active', 'b.name as branch_name']), 'branches' => DB::table('branches')->orderBy('name')->get(['id', 'name'])]);
+        $accounts = DB::table('users as u')->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')->orderByDesc('u.active')->orderBy('u.name')->get(['u.id', 'u.name', 'u.email', 'u.role', 'u.branch_id', 'u.active', 'b.name as branch_name']);
+        $aliasesByUser = DB::table('cs_source_name_aliases')->orderBy('source_name')->get(['user_id', 'source_name', 'source_name_key'])->groupBy('user_id');
+        $sourceNameOwners = [];
+        foreach ($accounts as $account) {
+            $account->source_name_aliases = $aliasesByUser->get($account->id, collect())->pluck('source_name')->values()->all();
+            if ($account->role !== 'cs' || ! $account->active || ! $account->branch_id) {
+                continue;
+            }
+            $keys = collect([CsName::key((string) $account->name)])
+                ->concat($aliasesByUser->get($account->id, collect())->pluck('source_name_key')->map(fn (string $key): string => CsName::key($key)))
+                ->unique();
+            foreach ($keys as $key) {
+                $sourceNameOwners[(int) $account->branch_id.'|'.$key][(int) $account->id] = true;
+            }
+        }
+        $awaitingByAccount = [];
+        $reconcilableByAccount = [];
+        foreach (DB::table('leads')->whereNotNull('source_branch_id')->whereNotNull('imported_cs_name')->whereNull('archived_at')->get(['assigned_user_id', 'owner_resolution', 'source_branch_id', 'imported_cs_name']) as $lead) {
+            $owners = array_keys($sourceNameOwners[(int) $lead->source_branch_id.'|'.CsName::key((string) $lead->imported_cs_name)] ?? []);
+            if (count($owners) !== 1) {
+                continue;
+            }
+            $accountId = (int) $owners[0];
+            if ($lead->owner_resolution === 'awaiting_account' && $lead->assigned_user_id === null) {
+                $awaitingByAccount[$accountId] = ($awaitingByAccount[$accountId] ?? 0) + 1;
+            } elseif ($lead->owner_resolution !== 'source_matched' || (int) $lead->assigned_user_id !== $accountId) {
+                $reconcilableByAccount[$accountId] = ($reconcilableByAccount[$accountId] ?? 0) + 1;
+            }
+        }
+        $accounts->each(function (object $account) use ($awaitingByAccount, $reconcilableByAccount): void {
+            $account->awaiting_lead_count = $account->role === 'cs' && $account->active
+                ? ($awaitingByAccount[$account->id] ?? 0)
+                : 0;
+            $account->reconcilable_lead_count = $account->role === 'cs' && $account->active
+                ? ($reconcilableByAccount[$account->id] ?? 0)
+                : 0;
+        });
+
+        return Inertia::render('Accounts/Index', ['accounts' => $accounts, 'branches' => DB::table('branches')->orderBy('name')->get(['id', 'name'])]);
     }
 
     public function storeBranch(Request $request): RedirectResponse
     {
         $data = $this->branchData($request);
-        DB::table('branches')->insert(['name' => $data['name'], 'google_spreadsheet_id' => $data['google_spreadsheet_id'], 'created_at' => now()]);
+        $this->assertSpreadsheetBelongsToBranch($data['google_spreadsheet_id'], null);
+        $branchId = DB::table('branches')->insertGetId(['name' => $data['name'], 'google_spreadsheet_id' => $data['google_spreadsheet_id'], 'created_at' => now()]);
+        if ($data['google_spreadsheet_id']) {
+            $this->recordSourceEvent($branchId, $request->user()->id, 'connected', null, $data['google_spreadsheet_id'], 'Spreadsheet sumber terhubung saat cabang dibuat.');
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Cabang ditambahkan.']);
 
@@ -310,7 +366,11 @@ class DashboardController extends Controller
             throw ValidationException::withMessages(['password' => 'Kata sandi wajib diisi.']);
         }
         DB::transaction(function () use ($data): void {
-            DB::table('users')->insert(['name' => $data['name'], 'email' => $data['email'], 'password_hash' => bcrypt($data['password']), 'role' => $data['role'], 'branch_id' => $data['role'] === 'cs' ? $data['branch_id'] : null, 'created_at' => now()]);
+            $accountId = DB::table('users')->insertGetId(['name' => $data['name'], 'email' => $data['email'], 'password_hash' => bcrypt($data['password']), 'role' => $data['role'], 'branch_id' => $data['role'] === 'cs' ? $data['branch_id'] : null, 'created_at' => now()]);
+            if ($data['role'] === 'cs') {
+                $this->assertCsSourceNamesAvailable($data['branch_id'], $accountId, [$data['name'], ...$data['source_name_aliases']]);
+                $this->syncCsSourceNameAliases($accountId, $data['branch_id'], $data['name'], $data['source_name_aliases']);
+            }
             $this->ensureBranchDefaultImportCs($data['role'] === 'cs' ? $data['branch_id'] : null);
         });
 
@@ -323,11 +383,116 @@ class DashboardController extends Controller
     {
         $record = DB::table('branches')->where('id', $branch)->first() ?? abort(404);
         $data = $this->branchData($request, $record->id);
+        if ($data['google_spreadsheet_id'] !== $record->google_spreadsheet_id) {
+            throw ValidationException::withMessages(['google_spreadsheet_id' => 'Gunakan tindakan Ganti spreadsheet sumber agar data lead tetap terlindungi.']);
+        }
         DB::table('branches')->where('id', $branch)->update($data);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Cabang diperbarui.']);
 
         return back();
+    }
+
+    public function replaceBranchGoogleSheet(Request $request, GoogleSheetSyncService $sync, int $branch): RedirectResponse
+    {
+        $record = DB::table('branches')->where('id', $branch)->first() ?? abort(404);
+        $data = $request->validate([
+            'google_spreadsheet_id' => ['required', 'string', 'max:128', Rule::unique('branches', 'google_spreadsheet_id')->ignore($record->id)],
+        ]);
+        $spreadsheetId = trim((string) $data['google_spreadsheet_id']);
+        if ($spreadsheetId === '') {
+            throw ValidationException::withMessages(['google_spreadsheet_id' => 'ID Google Spreadsheet wajib diisi.']);
+        }
+        $this->assertSpreadsheetBelongsToBranch($spreadsheetId, $record->id);
+
+        try {
+            $summary = $sync->replaceSource($request->user()->id, $record->id, $spreadsheetId);
+        } catch (\RuntimeException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
+
+            return back();
+        }
+
+        Inertia::flash('toast', ['type' => $summary['partial'] ? 'warning' : 'success', 'message' => "Spreadsheet sumber diperbarui: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui. Data kerja CS tetap dipertahankan."]);
+
+        return back();
+    }
+
+    public function previewBranchGoogleSheet(Request $request, GoogleSheetSyncService $sync, int $branch): RedirectResponse
+    {
+        $record = DB::table('branches')->where('id', $branch)->first() ?? abort(404);
+        $data = $request->validate([
+            'google_spreadsheet_id' => ['required', 'string', 'max:128', Rule::unique('branches', 'google_spreadsheet_id')->ignore($record->id)],
+        ]);
+        $spreadsheetId = trim((string) $data['google_spreadsheet_id']);
+        if ($spreadsheetId === '') {
+            throw ValidationException::withMessages(['google_spreadsheet_id' => 'ID Google Spreadsheet wajib diisi.']);
+        }
+        $this->assertSpreadsheetBelongsToBranch($spreadsheetId, $record->id);
+
+        try {
+            $preview = $sync->previewReplacement($record->id, $spreadsheetId);
+        } catch (\RuntimeException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
+
+            return back();
+        }
+
+        return back()->with('source_preview', [...$preview, 'branch_id' => $record->id, 'spreadsheet_id' => $spreadsheetId]);
+    }
+
+    private function assertSpreadsheetBelongsToBranch(?string $spreadsheetId, ?int $branchId): void
+    {
+        if (! $spreadsheetId) {
+            return;
+        }
+
+        $sourceBranch = DB::table('branch_source_events as event')
+            ->join('branches as branch', 'branch.id', '=', 'event.branch_id')
+            ->where('event.spreadsheet_id', $spreadsheetId)
+            ->whereIn('event.action', ['connected', 'replaced'])
+            ->when($branchId, fn ($query) => $query->where('event.branch_id', '!=', $branchId))
+            ->orderBy('branch.name')
+            ->value('branch.name');
+        $sourceBranch ??= DB::table('lead_source_occurrences as occurrence')
+            ->join('branches as branch', 'branch.id', '=', 'occurrence.source_branch_id')
+            ->where('occurrence.spreadsheet_id', $spreadsheetId)
+            ->when($branchId, fn ($query) => $query->where('occurrence.source_branch_id', '!=', $branchId))
+            ->orderBy('branch.name')
+            ->value('branch.name');
+        if ($sourceBranch) {
+            throw ValidationException::withMessages(['google_spreadsheet_id' => "Spreadsheet ini memiliki riwayat sumber lead di cabang {$sourceBranch}. Gunakan alur pindah sumber khusus agar atribusi lead tetap tepat."]);
+        }
+    }
+
+    public function disconnectBranchGoogleSheet(Request $request, GoogleSheetSyncService $sync, int $branch): RedirectResponse
+    {
+        abort_unless(DB::table('branches')->where('id', $branch)->exists(), 404);
+
+        try {
+            $sync->disconnect($request->user()->id, $branch);
+        } catch (\RuntimeException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
+
+            return back();
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => 'Koneksi Google Sheets diputus. Lead dan riwayat yang sudah tersimpan tetap ada.']);
+
+        return back();
+    }
+
+    private function recordSourceEvent(int $branchId, ?int $actorId, string $action, ?string $previousSpreadsheetId, ?string $spreadsheetId, ?string $detail = null): void
+    {
+        DB::table('branch_source_events')->insert([
+            'branch_id' => $branchId,
+            'actor_id' => $actorId,
+            'action' => $action,
+            'previous_spreadsheet_id' => $previousSpreadsheetId,
+            'spreadsheet_id' => $spreadsheetId,
+            'detail' => $detail,
+            'created_at' => now(),
+        ]);
     }
 
     /** @return array{name: string, google_spreadsheet_id: string|null, default_import_user_id: int|null} */
@@ -343,7 +508,7 @@ class DashboardController extends Controller
             throw ValidationException::withMessages(['default_import_user_id' => 'Pilih akun CS aktif dari cabang ini.']);
         }
         if ($branchId && ! $defaultImportUserId && DB::table('users')->where('branch_id', $branchId)->where('role', 'cs')->where('active', true)->exists()) {
-            throw ValidationException::withMessages(['default_import_user_id' => 'Pilih CS default impor untuk cabang ini.']);
+            throw ValidationException::withMessages(['default_import_user_id' => 'Pilih CS fallback impor untuk cabang ini.']);
         }
 
         return ['name' => (string) $data['name'], 'google_spreadsheet_id' => trim((string) ($data['google_spreadsheet_id'] ?? '')) ?: null, 'default_import_user_id' => $defaultImportUserId];
@@ -410,6 +575,9 @@ class DashboardController extends Controller
         )) {
             throw ValidationException::withMessages(['branch_id' => 'Pindahkan atau lepaskan penugasan lead aktif sebelum memindahkan cabang CS.']);
         }
+        if ($data['role'] === 'cs') {
+            $this->assertCsSourceNamesAvailable($data['branch_id'], $record->id, [$data['name'], ...$data['source_name_aliases']]);
+        }
 
         DB::transaction(function () use ($record, $data, $active, $request): void {
             $updates = ['name' => $data['name'], 'email' => $data['email'], 'role' => $data['role'], 'branch_id' => $data['role'] === 'cs' ? $data['branch_id'] : null, 'active' => $active];
@@ -421,7 +589,7 @@ class DashboardController extends Controller
                 $now = now();
                 $primaryLeadIds = DB::table('leads')->where('assigned_user_id', $record->id)->pluck('id')->all();
                 $collaboratorLeadIds = DB::table('lead_collaborators')->where('user_id', $record->id)->whereNull('removed_at')->pluck('lead_id')->all();
-                DB::table('leads')->whereIn('id', $primaryLeadIds)->update(['assigned_user_id' => null, 'updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+                DB::table('leads')->whereIn('id', $primaryLeadIds)->update(['assigned_user_id' => null, 'owner_resolution' => 'unassigned', 'updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
                 DB::table('lead_collaborators')->where('user_id', $record->id)->whereNull('removed_at')->update(['removed_at' => $now]);
                 DB::table('leads')->whereIn('id', $collaboratorLeadIds)->update(['updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
                 $activity = [];
@@ -435,6 +603,11 @@ class DashboardController extends Controller
                     DB::table('lead_activity')->insert($activity);
                 }
             }
+            if ($data['role'] === 'cs') {
+                $this->syncCsSourceNameAliases($record->id, $data['branch_id'], $data['name'], $data['source_name_aliases']);
+            } else {
+                DB::table('cs_source_name_aliases')->where('user_id', $record->id)->delete();
+            }
             $this->ensureBranchDefaultImportCs($record->branch_id ? (int) $record->branch_id : null);
             $this->ensureBranchDefaultImportCs($data['role'] === 'cs' ? $data['branch_id'] : null);
         });
@@ -444,8 +617,107 @@ class DashboardController extends Controller
         return back();
     }
 
+    public function linkAwaitingLeadsToAccount(Request $request, int $account): RedirectResponse
+    {
+        $record = DB::table('users')->where('id', $account)->where('role', 'cs')->where('active', true)->first(['id', 'name', 'branch_id']) ?? abort(404);
+        $sourceNameKeys = $this->sourceNameKeysForAccount($record);
+        $this->assertSourceNameKeysUnambiguous($record, $sourceNameKeys);
+        $leads = DB::transaction(function () use ($record, $sourceNameKeys, $request) {
+            $leads = DB::table('leads')
+                ->where('source_branch_id', $record->branch_id)
+                ->where('owner_resolution', 'awaiting_account')
+                ->whereNull('assigned_user_id')
+                ->whereNull('archived_at')
+                ->lockForUpdate()
+                ->get(['id', 'imported_cs_name'])
+                ->filter(fn (object $lead): bool => in_array(CsName::key((string) $lead->imported_cs_name), $sourceNameKeys, true))
+                ->values();
+            if ($leads->isEmpty()) {
+                return $leads;
+            }
+
+            $ids = $leads->pluck('id')->all();
+            $now = now();
+            DB::table('leads')->whereIn('id', $ids)->where('owner_resolution', 'awaiting_account')->whereNull('assigned_user_id')->update([
+                'assigned_user_id' => $record->id,
+                'owner_resolution' => 'source_matched',
+                'updated_at' => $now,
+                'revision' => DB::raw('revision + 1'),
+            ]);
+            DB::table('lead_collaborators')->whereIn('lead_id', $ids)->where('user_id', $record->id)->whereNull('removed_at')->update(['removed_at' => $now]);
+            DB::table('lead_activity')->insert($leads->map(fn (object $lead): array => [
+                'lead_id' => $lead->id,
+                'actor_id' => $request->user()->id,
+                'action' => 'CS utama dihubungkan dari Nama CS sumber',
+                'detail' => "Nama CS sumber {$lead->imported_cs_name} dihubungkan ke akun {$record->name}. CS pendamping tidak diubah.",
+                'created_at' => $now,
+            ])->all());
+
+            return $leads;
+        });
+        if ($leads->isEmpty()) {
+            Inertia::flash('toast', ['type' => 'info', 'message' => 'Tidak ada lead menunggu yang cocok dengan nama akun ini.']);
+
+            return back();
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => "{$leads->count()} lead dihubungkan ke {$record->name}."]);
+
+        return back();
+    }
+
+    public function reconcileSourceLeadsToAccount(Request $request, int $account): RedirectResponse
+    {
+        $record = DB::table('users')->where('id', $account)->where('role', 'cs')->where('active', true)->first(['id', 'name', 'branch_id']) ?? abort(404);
+        $sourceNameKeys = $this->sourceNameKeysForAccount($record);
+        $this->assertSourceNameKeysUnambiguous($record, $sourceNameKeys);
+        $leads = DB::transaction(function () use ($record, $sourceNameKeys, $request) {
+            $leads = DB::table('leads')
+                ->where('source_branch_id', $record->branch_id)
+                ->whereNotNull('imported_cs_name')
+                ->whereNull('archived_at')
+                ->lockForUpdate()
+                ->get(['id', 'assigned_user_id', 'owner_resolution', 'imported_cs_name'])
+                ->filter(fn (object $lead): bool => in_array(CsName::key((string) $lead->imported_cs_name), $sourceNameKeys, true))
+                ->reject(fn (object $lead): bool => $lead->owner_resolution === 'awaiting_account' && $lead->assigned_user_id === null)
+                ->reject(fn (object $lead): bool => $lead->owner_resolution === 'source_matched' && (int) $lead->assigned_user_id === (int) $record->id)
+                ->values();
+            if ($leads->isEmpty()) {
+                return $leads;
+            }
+
+            $ids = $leads->pluck('id')->all();
+            $now = now();
+            DB::table('leads')->whereIn('id', $ids)->update([
+                'assigned_user_id' => $record->id,
+                'owner_resolution' => 'source_matched',
+                'updated_at' => $now,
+                'revision' => DB::raw('revision + 1'),
+            ]);
+            DB::table('lead_collaborators')->whereIn('lead_id', $ids)->where('user_id', $record->id)->whereNull('removed_at')->update(['removed_at' => $now]);
+            DB::table('lead_activity')->insert($leads->map(fn (object $lead): array => [
+                'lead_id' => $lead->id,
+                'actor_id' => $request->user()->id,
+                'action' => 'CS utama direkonsiliasi dari Nama CS sumber',
+                'detail' => "Nama CS sumber {$lead->imported_cs_name} ditetapkan ke akun {$record->name}. CS pendamping tidak diubah.",
+                'created_at' => $now,
+            ])->all());
+
+            return $leads;
+        });
+        if ($leads->isEmpty()) {
+            Inertia::flash('toast', ['type' => 'info', 'message' => 'Tidak ada lead historis yang perlu direkonsiliasi.']);
+
+            return back();
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => "{$leads->count()} lead historis direkonsiliasi ke {$record->name}."]);
+
+        return back();
+    }
+
     /**
-     * @return array{name: string, email: string, password: string|null, role: 'admin'|'cs', branch_id: int|null}
+     * @return array{name: string, email: string, password: string|null, role: 'admin'|'cs', branch_id: int|null, source_name_aliases: list<string>}
      */
     private function accountData(Request $request, ?int $accountId = null, bool $passwordRequired = false): array
     {
@@ -455,6 +727,7 @@ class DashboardController extends Controller
             'password' => [$passwordRequired ? 'required' : 'nullable', 'string', 'min:12'],
             'role' => ['required', 'in:admin,cs'],
             'branch_id' => ['nullable', 'exists:branches,id'],
+            'source_name_aliases' => ['nullable', 'string', 'max:1000'],
         ]);
         if ($data['role'] === 'cs') {
             if (! ($data['branch_id'] ?? false)) {
@@ -468,7 +741,89 @@ class DashboardController extends Controller
             'password' => isset($data['password']) ? (string) $data['password'] : null,
             'role' => $data['role'] === 'admin' ? 'admin' : 'cs',
             'branch_id' => isset($data['branch_id']) ? (int) $data['branch_id'] : null,
+            'source_name_aliases' => $data['role'] === 'cs' ? $this->sourceNameAliases((string) ($data['source_name_aliases'] ?? '')) : [],
         ];
+    }
+
+    /** @return list<string> */
+    private function sourceNameAliases(string $value): array
+    {
+        $aliases = [];
+        foreach (preg_split('/[\r\n,]+/', $value) ?: [] as $alias) {
+            $alias = trim($alias);
+            if ($alias !== '') {
+                $aliases[CsName::key($alias)] = $alias;
+            }
+        }
+
+        return array_values($aliases);
+    }
+
+    /** @param list<string> $sourceNames */
+    private function assertCsSourceNamesAvailable(?int $branchId, int $accountId, array $sourceNames): void
+    {
+        $keys = array_values(array_unique(array_map(fn (string $name): string => CsName::key($name), $sourceNames)));
+        $activeAccountConflict = DB::table('users')
+            ->where('branch_id', $branchId)
+            ->where('role', 'cs')
+            ->where('active', true)
+            ->where('id', '!=', $accountId)
+            ->get(['name'])
+            ->contains(fn (object $user): bool => in_array(CsName::key((string) $user->name), $keys, true));
+        $aliasConflict = DB::table('cs_source_name_aliases')
+            ->where('branch_id', $branchId)
+            ->where('user_id', '!=', $accountId)
+            ->whereIn('source_name_key', $keys)
+            ->exists();
+        if ($activeAccountConflict || $aliasConflict) {
+            throw ValidationException::withMessages(['source_name_aliases' => 'Nama sumber atau alias sudah dipakai akun CS lain pada cabang ini.']);
+        }
+    }
+
+    /** @param list<string> $aliases */
+    private function syncCsSourceNameAliases(int $accountId, ?int $branchId, string $accountName, array $aliases): void
+    {
+        DB::table('cs_source_name_aliases')->where('user_id', $accountId)->delete();
+        $accountNameKey = CsName::key($accountName);
+        $rows = collect($aliases)
+            ->filter(fn (string $alias): bool => CsName::key($alias) !== $accountNameKey)
+            ->map(fn (string $alias): array => [
+                'branch_id' => $branchId,
+                'user_id' => $accountId,
+                'source_name' => $alias,
+                'source_name_key' => CsName::key($alias),
+                'created_at' => now(),
+            ])->all();
+        if ($rows !== []) {
+            DB::table('cs_source_name_aliases')->insert($rows);
+        }
+    }
+
+    /** @return list<string> */
+    private function sourceNameKeysForAccount(object $account): array
+    {
+        return collect([CsName::key((string) $account->name)])
+            ->concat(DB::table('cs_source_name_aliases')->where('user_id', $account->id)->where('branch_id', $account->branch_id)->pluck('source_name_key')->map(fn (string $key): string => CsName::key($key)))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /** @param list<string> $sourceNameKeys */
+    private function assertSourceNameKeysUnambiguous(object $account, array $sourceNameKeys): void
+    {
+        $owners = [];
+        foreach (DB::table('users')->where('role', 'cs')->where('active', true)->where('branch_id', $account->branch_id)->get(['id', 'name']) as $user) {
+            $owners[CsName::key((string) $user->name)][(int) $user->id] = true;
+        }
+        foreach (DB::table('cs_source_name_aliases as alias')->join('users as user', 'user.id', '=', 'alias.user_id')->where('alias.branch_id', $account->branch_id)->where('user.role', 'cs')->where('user.active', true)->get(['alias.user_id', 'alias.source_name_key']) as $alias) {
+            $owners[CsName::key((string) $alias->source_name_key)][(int) $alias->user_id] = true;
+        }
+        foreach ($sourceNameKeys as $key) {
+            if (array_keys($owners[$key] ?? []) !== [(int) $account->id]) {
+                throw ValidationException::withMessages(['account' => 'Nama akun CS atau aliasnya ambigu pada cabang yang sama. Perbaiki pemetaan nama sumber terlebih dahulu.']);
+            }
+        }
     }
 
     private function ensureBranchDefaultImportCs(?int $branchId): void
@@ -678,7 +1033,9 @@ class DashboardController extends Controller
                     ->whereNull('c.removed_at');
             });
             if ($branchId > 0) {
-                $visible->orWhere("{$alias}.source_branch_id", $branchId);
+                $visible->orWhere(fn (Builder $teamLead) => $teamLead
+                    ->where("{$alias}.source_branch_id", $branchId)
+                    ->where("{$alias}.owner_resolution", '!=', 'awaiting_account'));
             }
         });
     }
@@ -692,7 +1049,7 @@ class DashboardController extends Controller
             'stage' => ['nullable', Rule::in(['clicked', 'asked', 'price_list', 'offline', 'online', 'closing_repeat'])],
             'outcome' => ['nullable', Rule::in(['closing', 'loss', 'pending'])],
             'outcome_factor' => ['nullable', Rule::in(array_keys(LeadOutcomeFactors::CLOSING + LeadOutcomeFactors::LOSS))],
-            'queue' => ['nullable', Rule::in(['unassigned', 'needs_qualification', 'follow_up_due', 'crm_taken_over', 'source_conflict'])],
+            'queue' => ['nullable', Rule::in(['unassigned', 'awaiting_account', 'needs_qualification', 'follow_up_due', 'crm_taken_over', 'source_conflict'])],
             'intent' => ['nullable', Rule::in(['Tunangan', 'Lamaran', 'Nikahan', 'Anniversary', 'Lainnya'])],
             'budget' => ['nullable', Rule::in(LeadBudgetRanges::OPTIONS)],
             'lead_date_from' => ['nullable', 'date', 'before_or_equal:lead_date_to'],

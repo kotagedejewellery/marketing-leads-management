@@ -7,12 +7,20 @@
 - **Tanggal sumber**: nilai tanggal sebagaimana tertulis pada data asal. Bila hanya berisi hari dalam bulan, nilainya tetap disimpan apa adanya dan bukan dianggap tanggal kalender lengkap.
 - **Tanggal lead**: tanggal kalender saat lead pertama kali tercatat pada sumber atau dibuat manual. Nilai ini berbeda dari waktu import dan hanya diisi ketika tanggal sumber lengkap.
 - **Keterangan awal**: status atau catatan lead dari data sumber. Nilai ini berbeda dari catatan internal yang dibuat CS di sistem.
-- **Sumber cabang**: cabang pemilik spreadsheet asal sebuah lead. Lead dari sumber cabang otomatis ditugaskan ke CS default impor cabang tersebut.
+- **Sumber cabang**: cabang pemilik spreadsheet asal sebuah lead. Sumber cabang menentukan batas pencocokan akun CS dan akses antrean tim, bukan otomatis CS utama. Lead Menunggu akun CS hanya dapat dilihat admin sampai memiliki CS utama.
+- **Spreadsheet sumber aktif**: spreadsheet Google yang saat ini dipakai sebuah cabang untuk sinkronisasi lead baru dan pembaruan data asal. Ini bukan sumber kebenaran untuk data kerja CS.
+- **Penggantian spreadsheet sumber**: perpindahan spreadsheet sumber aktif pada cabang yang sama. Admin memeriksa dampaknya terlebih dahulu; konfigurasi lama dipulihkan bila sumber baru gagal disinkronkan. Lead dengan kontak yang cocok tetap menjadi lead yang sama; data asalnya dapat diperbarui, sedangkan penugasan, catatan, milestone, dan hasil kerja CS tetap dipertahankan.
+- **Riwayat konfigurasi sumber**: catatan append-only tentang spreadsheet yang dihubungkan, diganti, gagal diganti, atau diputus pada sebuah cabang, termasuk pelaku dan waktu kejadian.
+- **Provenance sumber**: cabang yang mengimpor sebuah kemunculan data dari spreadsheet. Nilai ini terpisah dari cabang pemilik lead sehingga konflik nomor lintas cabang tidak mengubah asal spreadsheet.
 - **Konflik sumber cabang**: nomor yang sama muncul di spreadsheet cabang lain. Lead tetap dimiliki cabang asal dan admin perlu meninjau sebelum memindahkan penanggung jawab.
 - **CS utama**: CS penanggung jawab utama sebuah lead. Hanya ada satu CS utama pada satu waktu.
+- **Nama CS sumber**: nama CS sebagaimana tertulis pada spreadsheet. Nilai ini menjadi acuan penugasan awal melalui nama akun atau alias sumber, tetapi bukan akun pengguna dan tetap tersimpan sebagai data asal.
+- **Alias Nama CS sumber**: variasi nama pada spreadsheet yang secara eksplisit dipetakan admin ke satu akun CS aktif pada cabang yang sama.
 - **Akses tim cabang**: hak baca antrean lead dari sumber cabang yang sama. Akses ini tidak memberi hak mengubah lead sebelum CS memilih mulai membantu.
 - **CS pendamping**: CS yang secara eksplisit memilih mulai membantu atau ditambahkan admin untuk ikut menangani lead tanpa mengganti CS utama. CS pendamping dapat memperbarui lead dan dapat memilih selesai membantu saat tugasnya selesai.
-- **CS default impor**: salah satu CS aktif pada cabang yang menerima penugasan utama untuk lead baru dari spreadsheet cabang tersebut.
+- **CS fallback impor**: salah satu CS aktif pada cabang yang menerima lead baru dari spreadsheet hanya ketika Nama CS sumber kosong.
+- **Menunggu akun CS**: status lead dengan Nama CS sumber yang terisi tetapi belum cocok dengan satu akun CS aktif atau alias sumber yang unik pada cabang sumber. Lead belum memiliki CS utama, hanya dapat ditinjau admin, dan tidak otomatis menjadikan CS lain sebagai pendamping.
+- **Rekonsiliasi lead historis**: tindakan eksplisit admin untuk menetapkan ulang CS utama lead lama berdasarkan Nama CS sumber atau alias yang cocok. Tindakan ini tidak mengubah CS pendamping.
 - **Batas tindak lanjut**: waktu follow-up berikutnya yang ditetapkan CS pada sebuah lead. Lead yang melewati waktu ini tanpa aktivitas lanjutan akan ditandai CRM.
 - **Pengambilalihan CRM**: penanda otomatis bahwa lead melewati batas tindak lanjut tanpa aktivitas lanjutan. Penanda ini tidak mengganti CS utama dan dapat dibatalkan bila dibuat keliru.
 - **Hasil akhir lead**: hasil operasional terakhir yang dipilih CS, yaitu Closing atau Loss. Penetapan hasil akhir menghentikan follow-up dan membatalkan penanda Pengambilalihan CRM; Closing juga menandai tahap Closing / Repeat Order.

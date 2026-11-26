@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\GoogleSheetSyncService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
@@ -20,10 +21,12 @@ class DashboardTest extends TestCase
         Schema::create('leads', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('assigned_user_id')->nullable();
+            $table->string('owner_resolution')->default('manual');
             $table->unsignedBigInteger('source_branch_id')->nullable();
             $table->unsignedBigInteger('source_conflict_branch_id')->nullable();
             $table->timestamp('source_conflict_at')->nullable();
             $table->string('name')->nullable();
+            $table->string('imported_cs_name')->nullable();
             $table->string('current_stage')->nullable();
             $table->string('intent_buying')->nullable();
             $table->date('usage_date')->nullable();
@@ -79,6 +82,15 @@ class DashboardTest extends TestCase
             $table->text('google_sheets_sync_error')->nullable();
             $table->timestamp('created_at')->nullable();
         });
+        Schema::create('cs_source_name_aliases', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('branch_id');
+            $table->unsignedBigInteger('user_id');
+            $table->string('source_name');
+            $table->string('source_name_key');
+            $table->timestamp('created_at')->nullable();
+            $table->unique(['branch_id', 'source_name_key']);
+        });
         Schema::create('lead_sync_runs', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('branch_id')->nullable();
@@ -88,6 +100,25 @@ class DashboardTest extends TestCase
             $table->text('error')->nullable();
             $table->timestamp('created_at')->nullable();
             $table->timestamp('completed_at')->nullable();
+        });
+        Schema::create('lead_source_occurrences', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('lead_id');
+            $table->unsignedBigInteger('source_branch_id')->nullable();
+            $table->string('spreadsheet_id');
+            $table->string('source_tab');
+            $table->string('source_hash')->unique();
+            $table->timestamp('created_at')->nullable();
+        });
+        Schema::create('branch_source_events', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('branch_id');
+            $table->unsignedBigInteger('actor_id')->nullable();
+            $table->string('action');
+            $table->string('previous_spreadsheet_id')->nullable();
+            $table->string('spreadsheet_id')->nullable();
+            $table->text('detail')->nullable();
+            $table->timestamp('created_at')->nullable();
         });
     }
 
@@ -130,6 +161,188 @@ class DashboardTest extends TestCase
                 ->where('branches.0.last_sync.status', 'failed')
                 ->where('branches.0.last_sync.error', 'Tidak menemukan tab harian bernama angka, misalnya 1 sampai 31.'),
         );
+    }
+
+    public function test_admin_can_disconnect_a_branch_sheet_without_removing_its_leads(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $branchId = \DB::table('branches')->insertGetId([
+            'name' => 'Palagan',
+            'google_spreadsheet_id' => 'sheet-palagan',
+            'google_sheets_synced_at' => now(),
+            'google_sheets_sync_error' => 'Gagal lama',
+        ]);
+        \DB::table('leads')->insert([
+            'source_branch_id' => $branchId,
+            'name' => 'Lead tetap ada',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->from('/branches')->delete("/branches/{$branchId}/google-sheet")
+            ->assertRedirect('/branches');
+
+        $this->assertDatabaseHas('branches', [
+            'id' => $branchId,
+            'google_spreadsheet_id' => null,
+            'google_sheets_synced_at' => null,
+            'google_sheets_sync_error' => null,
+        ]);
+        $this->assertDatabaseHas('leads', [
+            'source_branch_id' => $branchId,
+            'name' => 'Lead tetap ada',
+        ]);
+        $this->assertDatabaseHas('branch_source_events', [
+            'branch_id' => $branchId,
+            'actor_id' => $admin->id,
+            'action' => 'disconnected',
+            'previous_spreadsheet_id' => 'sheet-palagan',
+        ]);
+    }
+
+    public function test_admin_must_use_source_replacement_to_change_a_branch_sheet(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $branchId = \DB::table('branches')->insertGetId([
+            'name' => 'Palagan',
+            'google_spreadsheet_id' => 'sheet-lama',
+        ]);
+
+        $this->actingAs($admin)->patch("/branches/{$branchId}", [
+            'name' => 'Palagan',
+            'google_spreadsheet_id' => 'sheet-baru',
+        ])->assertSessionHasErrors('google_spreadsheet_id');
+
+        $this->assertDatabaseHas('branches', [
+            'id' => $branchId,
+            'google_spreadsheet_id' => 'sheet-lama',
+        ]);
+    }
+
+    public function test_admin_can_request_a_branch_source_replacement(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $branchId = \DB::table('branches')->insertGetId([
+            'name' => 'Palagan',
+            'google_spreadsheet_id' => 'sheet-lama',
+        ]);
+        $sync = \Mockery::mock(GoogleSheetSyncService::class);
+        $sync->shouldReceive('replaceSource')
+            ->once()
+            ->with($admin->id, $branchId, 'sheet-baru')
+            ->andReturn([
+                'enriched' => 2,
+                'inserted' => 1,
+                'skipped' => 0,
+                'resurfaced' => 0,
+                'unassigned' => 0,
+                'needs_review' => 0,
+                'missing_dates' => 0,
+                'missing_source_fields' => 0,
+                'failed' => 0,
+                'partial' => 0,
+            ]);
+        $this->app->instance(GoogleSheetSyncService::class, $sync);
+
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/replace-google-sheet", [
+            'google_spreadsheet_id' => 'sheet-baru',
+        ])->assertRedirect('/branches');
+    }
+
+    public function test_admin_cannot_reuse_a_historical_sheet_for_a_different_branch(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $sourceBranchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $targetBranchId = \DB::table('branches')->insertGetId(['name' => 'Solo']);
+        $leadId = \DB::table('leads')->insertGetId([
+            'source_branch_id' => $sourceBranchId,
+            'name' => 'Lead asal Palagan',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \DB::table('lead_source_occurrences')->insert([
+            'lead_id' => $leadId,
+            'spreadsheet_id' => 'sheet-palagan-lama',
+            'source_tab' => '1',
+            'source_hash' => hash('sha256', 'sheet-palagan-lama'),
+            'created_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->post("/branches/{$targetBranchId}/replace-google-sheet", [
+            'google_spreadsheet_id' => 'sheet-palagan-lama',
+        ])->assertSessionHasErrors('google_spreadsheet_id');
+    }
+
+    public function test_admin_can_preview_a_branch_source_replacement_before_syncing(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $branchId = \DB::table('branches')->insertGetId([
+            'name' => 'Palagan',
+            'google_spreadsheet_id' => 'sheet-lama',
+        ]);
+        $preview = [
+            'rows' => 5,
+            'matching' => 3,
+            'new' => 1,
+            'updates' => 2,
+            'conflicts' => 1,
+            'missing_source_fields' => 0,
+            'failed_tabs' => 0,
+        ];
+        $sync = \Mockery::mock(GoogleSheetSyncService::class);
+        $sync->shouldReceive('previewReplacement')
+            ->once()
+            ->with($branchId, 'sheet-baru')
+            ->andReturn($preview);
+        $this->app->instance(GoogleSheetSyncService::class, $sync);
+
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/preview-google-sheet", [
+            'google_spreadsheet_id' => 'sheet-baru',
+        ])->assertRedirect('/branches')
+            ->assertSessionHas('source_preview', [...$preview, 'branch_id' => $branchId, 'spreadsheet_id' => 'sheet-baru']);
+    }
+
+    public function test_branch_can_reconnect_its_own_sheet_after_a_cross_branch_contact_conflict(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $palaganId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $soloId = \DB::table('branches')->insertGetId(['name' => 'Solo']);
+        $leadId = \DB::table('leads')->insertGetId([
+            'source_branch_id' => $soloId,
+            'name' => 'Lead asal Solo',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        \DB::table('lead_source_occurrences')->insert([
+            'lead_id' => $leadId,
+            'source_branch_id' => $palaganId,
+            'spreadsheet_id' => 'sheet-palagan',
+            'source_tab' => '1',
+            'source_hash' => hash('sha256', 'sheet-palagan'),
+            'created_at' => now(),
+        ]);
+        $sync = \Mockery::mock(GoogleSheetSyncService::class);
+        $sync->shouldReceive('replaceSource')
+            ->once()
+            ->with($admin->id, $palaganId, 'sheet-palagan')
+            ->andReturn([
+                'enriched' => 0,
+                'inserted' => 0,
+                'skipped' => 0,
+                'resurfaced' => 0,
+                'unassigned' => 0,
+                'needs_review' => 1,
+                'missing_dates' => 0,
+                'missing_source_fields' => 0,
+                'failed' => 0,
+                'partial' => 0,
+            ]);
+        $this->app->instance(GoogleSheetSyncService::class, $sync);
+
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$palaganId}/replace-google-sheet", [
+            'google_spreadsheet_id' => 'sheet-palagan',
+        ])->assertRedirect('/branches')
+            ->assertSessionHasNoErrors();
     }
 
     public function test_admin_dashboard_prioritizes_work_and_statistics_reports_data_quality(): void

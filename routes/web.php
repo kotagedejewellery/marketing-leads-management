@@ -32,11 +32,16 @@ Route::middleware('auth')->group(function () {
         Route::get('branches', [DashboardController::class, 'branches'])->name('branches.index');
         Route::post('branches', [DashboardController::class, 'storeBranch'])->name('branches.store');
         Route::patch('branches/{branch}', [DashboardController::class, 'updateBranch'])->name('branches.update');
+        Route::post('branches/{branch}/preview-google-sheet', [DashboardController::class, 'previewBranchGoogleSheet'])->name('branches.preview-google-sheet');
+        Route::post('branches/{branch}/replace-google-sheet', [DashboardController::class, 'replaceBranchGoogleSheet'])->name('branches.replace-google-sheet');
+        Route::delete('branches/{branch}/google-sheet', [DashboardController::class, 'disconnectBranchGoogleSheet'])->name('branches.disconnect-google-sheet');
         Route::delete('branches/{branch}', [DashboardController::class, 'destroyBranch'])->name('branches.destroy');
         Route::post('branches/{branch}/sync-google-sheet', [DashboardController::class, 'syncBranchGoogleSheet'])->name('branches.sync-google-sheet');
         Route::get('accounts', [DashboardController::class, 'accounts'])->name('accounts.index');
         Route::post('accounts', [DashboardController::class, 'storeAccount'])->name('accounts.store');
         Route::patch('accounts/{account}', [DashboardController::class, 'updateAccount'])->name('accounts.update');
+        Route::post('accounts/{account}/link-awaiting-leads', [DashboardController::class, 'linkAwaitingLeadsToAccount'])->name('accounts.link-awaiting-leads');
+        Route::post('accounts/{account}/reconcile-source-leads', [DashboardController::class, 'reconcileSourceLeadsToAccount'])->name('accounts.reconcile-source-leads');
     });
 });
 

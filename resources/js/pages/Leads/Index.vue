@@ -60,6 +60,8 @@ type Lead = {
     latest_activity_detail: string | null;
     latest_activity_at: string | null;
     owner_name: string | null;
+    owner_resolution: string;
+    imported_cs_name: string | null;
     branch_name: string | null;
     source_branch_id: number | null;
     cs_filter_match: string | null;
@@ -136,7 +138,11 @@ const props = defineProps<{
 }>();
 const page = usePage();
 const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
-const ownerLabel = (lead: Lead) => lead.owner_name || 'Belum ditugaskan';
+const ownerLabel = (lead: Lead) =>
+    lead.owner_name ||
+    (lead.owner_resolution === 'awaiting_account' && lead.imported_cs_name
+        ? `Menunggu akun: ${lead.imported_cs_name}`
+        : 'Belum ditugaskan');
 const ownerTitle = (lead: Lead) =>
     isAdmin.value && lead.branch_name
         ? `${ownerLabel(lead)} · Cabang: ${lead.branch_name}`
@@ -247,18 +253,26 @@ const desktopLeadViewport = ref<HTMLElement | null>(null);
 const desktopScrollTop = ref(0);
 const desktopScrolledHorizontally = ref(false);
 const desktopViewportHeight = ref(0);
+const desktopDensity = ref<'compact' | 'normal'>('compact');
 const desktopRowHeights = new Map<number, number>();
 const desktopRowIndexes = new WeakMap<HTMLElement, number>();
 const desktopRowElements = new Map<number, HTMLElement>();
 const desktopVirtualVersion = ref(0);
 const desktopVirtualized = computed(() => props.leads.data.length > 100);
+const desktopEstimatedRowHeight = computed(() =>
+    desktopDensity.value === 'compact' ? 104 : 128,
+);
 const desktopVirtualMetrics = computed(() => {
     void desktopVirtualVersion.value;
     const offsets = [0];
 
     props.leads.data.forEach((_, index) => {
-        // shortcut: unmeasured rows use 128px until visited; persist indexed heights if list volume outgrows the current operational scale.
-        offsets.push(offsets[index] + (desktopRowHeights.get(index) || 128));
+        // shortcut: unmeasured rows use the active density estimate until visited; persist indexed heights if list volume outgrows the current operational scale.
+        offsets.push(
+            offsets[index] +
+                (desktopRowHeights.get(index) ||
+                    desktopEstimatedRowHeight.value),
+        );
     });
 
     return { offsets, total: offsets.at(-1) || 0 };
@@ -825,20 +839,25 @@ const onDesktopTableScroll = (event: Event) => {
     desktopScrollTop.value = viewport.scrollTop;
     desktopScrolledHorizontally.value = viewport.scrollLeft > 0;
 };
-const resetDesktopVirtualRows = () => {
+const resetDesktopVirtualRows = (resetScroll = true) => {
     desktopRowResizeObserver?.disconnect();
     desktopRowResizeObserver = undefined;
     desktopRowElements.clear();
     desktopRowHeights.clear();
     desktopVirtualVersion.value++;
-    desktopScrollTop.value = 0;
-    desktopScrolledHorizontally.value = false;
+    if (resetScroll) desktopScrollTop.value = 0;
+    desktopScrolledHorizontally.value = resetScroll
+        ? false
+        : (desktopLeadViewport.value?.scrollLeft || 0) > 0;
     createDesktopRowResizeObserver();
-    nextTick(() => {
-        if (desktopLeadViewport.value) {
-            desktopLeadViewport.value.scrollTop = 0;
-        }
-    });
+    if (resetScroll) {
+        nextTick(() => {
+            if (desktopLeadViewport.value) {
+                desktopLeadViewport.value.scrollTop = 0;
+                desktopLeadViewport.value.scrollLeft = 0;
+            }
+        });
+    }
 };
 const observeDesktopViewport = () => {
     desktopViewportResizeObserver?.disconnect();
@@ -866,6 +885,7 @@ watch(
         resetDesktopVirtualRows();
     },
 );
+watch(desktopDensity, () => resetDesktopVirtualRows(false));
 watch(isDesktopWorkspace, () => {
     desktopScrollTop.value = 0;
     nextTick(observeDesktopViewport);
@@ -1222,6 +1242,7 @@ onBeforeUnmount(() => {
                 >
                     <option value="">Semua queue</option>
                     <option value="unassigned">Belum ditugaskan</option>
+                    <option value="awaiting_account">Menunggu akun CS</option>
                     <option value="needs_qualification">
                         Perlu kualifikasi
                     </option>
@@ -1960,22 +1981,57 @@ onBeforeUnmount(() => {
                 >
                 dari {{ leads.data.length }} lead
             </p>
-            <p
-                class="rounded-full border border-[#e3d9c6] bg-[#faf7ef] px-3 py-1 font-semibold text-[#665a43]"
-            >
-                {{
-                    desktopScrolledHorizontally
-                        ? 'Kolom lanjutan terbuka'
-                        : 'Geser horizontal untuk kolom lanjutan'
-                }}
-            </p>
+            <div class="flex flex-wrap items-center gap-2">
+                <div
+                    aria-label="Kepadatan tabel"
+                    class="inline-flex rounded-full border border-[#e3d9c6] bg-[#faf7ef] p-0.5 font-semibold text-[#665a43]"
+                    role="group"
+                >
+                    <button
+                        :aria-pressed="desktopDensity === 'compact'"
+                        :class="
+                            desktopDensity === 'compact'
+                                ? 'bg-white text-kgj-ink shadow-sm'
+                                : 'hover:text-kgj-ink'
+                        "
+                        class="min-h-11 rounded-full px-3 transition"
+                        type="button"
+                        @click="desktopDensity = 'compact'"
+                    >
+                        Rapat
+                    </button>
+                    <button
+                        :aria-pressed="desktopDensity === 'normal'"
+                        :class="
+                            desktopDensity === 'normal'
+                                ? 'bg-white text-kgj-ink shadow-sm'
+                                : 'hover:text-kgj-ink'
+                        "
+                        class="min-h-11 rounded-full px-3 transition"
+                        type="button"
+                        @click="desktopDensity = 'normal'"
+                    >
+                        Normal
+                    </button>
+                </div>
+                <p
+                    class="rounded-full border border-[#e3d9c6] bg-[#faf7ef] px-3 py-1 font-semibold text-[#665a43]"
+                >
+                    {{
+                        desktopScrolledHorizontally
+                            ? 'Kolom lanjutan terbuka'
+                            : 'Geser horizontal untuk kolom lanjutan'
+                    }}
+                </p>
+            </div>
         </div>
 
         <div
             v-if="isDesktopWorkspace"
             ref="desktopLeadViewport"
-            class="kgj-lead-ledger kgj-table mt-4 max-h-[calc(100dvh-18rem)] overflow-auto"
+            class="kgj-lead-ledger kgj-table mt-4 max-h-[calc(100dvh-10rem)] overflow-auto"
             :class="{
+                'kgj-lead-ledger--compact': desktopDensity === 'compact',
                 'kgj-lead-ledger--scrolled': desktopScrolledHorizontally,
             }"
             :aria-label="
@@ -2026,7 +2082,7 @@ onBeforeUnmount(() => {
                     <tr v-if="desktopVirtualTop" aria-hidden="true">
                         <td
                             :colspan="archiveMode ? 5 : 13"
-                            class="h-0 p-0"
+                            class="kgj-lead-ledger__spacer h-0 p-0"
                             :style="{ height: `${desktopVirtualTop}px` }"
                         />
                     </tr>
@@ -2206,7 +2262,7 @@ onBeforeUnmount(() => {
                     <tr v-if="desktopVirtualBottom" aria-hidden="true">
                         <td
                             :colspan="archiveMode ? 5 : 13"
-                            class="h-0 p-0"
+                            class="kgj-lead-ledger__spacer h-0 p-0"
                             :style="{ height: `${desktopVirtualBottom}px` }"
                         />
                     </tr>

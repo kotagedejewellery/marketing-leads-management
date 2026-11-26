@@ -89,6 +89,7 @@ class LeadController extends Controller
                 'name' => $data['name'] ?? null,
                 'phone' => $data['phone'] ?? null,
                 'assigned_user_id' => $assignedUserId,
+                'owner_resolution' => 'manual',
                 'source_branch_id' => $sourceBranchId,
                 'source_date_raw' => $data['source_date_raw'] ?? null,
                 'lead_created_on' => LeadSourceDate::parse($data['source_date_raw'] ?? null) ?? now()->toDateString(),
@@ -150,7 +151,7 @@ class LeadController extends Controller
             ->where('u.role', 'cs')
             ->where('u.active', true)
             ->exists()) {
-            throw ValidationException::withMessages(['branch_id' => 'Cabang sumber harus memiliki CS default impor yang aktif sebelum data harian dapat diimpor.']);
+            throw ValidationException::withMessages(['branch_id' => 'Cabang sumber harus memiliki CS fallback impor yang aktif sebelum data harian dapat diimpor.']);
         }
         $dailyErrors = [];
         if ($importMode === 'daily_tabs') {
@@ -183,6 +184,9 @@ class LeadController extends Controller
         $summary = $this->leadImporter->import($rows, $request->user()->id, null, $sourceBranchId);
 
         $message = "Import selesai: {$summary['inserted']} baru, {$summary['skipped']} duplikat dilewati, {$summary['unassigned']} perlu ditugaskan, {$summary['needs_review']} perlu review, {$summary['missing_dates']} tanpa tanggal lead.";
+        if ($summary['awaiting_account']) {
+            $message .= " {$summary['awaiting_account']} lead menunggu akun CS dari Nama CS sumber.";
+        }
         if ($dailyErrors !== []) {
             $message .= ' '.count($dailyErrors).' tab perlu diperbaiki; data dari tab valid tetap masuk.';
         }
@@ -217,6 +221,9 @@ class LeadController extends Controller
         }
         if ($summary['missing_source_fields']) {
             $message .= " {$summary['missing_source_fields']} kolom sumber kosong perlu dilengkapi di Google Sheets.";
+        }
+        if ($summary['awaiting_account']) {
+            $message .= " {$summary['awaiting_account']} lead menunggu akun CS dari Nama CS sumber.";
         }
         Inertia::flash('toast', [
             'type' => $summary['failed'] ? 'error' : ($summary['partial'] ? 'warning' : 'success'),
@@ -307,7 +314,7 @@ class LeadController extends Controller
 
             $ids = $leads->pluck('id')->all();
             $now = now();
-            DB::table('leads')->whereIn('id', $ids)->update(['assigned_user_id' => $owner->id, 'updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+            DB::table('leads')->whereIn('id', $ids)->update(['assigned_user_id' => $owner->id, 'owner_resolution' => 'manual', 'updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
             DB::table('leads')->whereIn('id', $ids)->whereNull('source_branch_id')->update(['source_branch_id' => $owner->branch_id]);
             DB::table('lead_activity')->insert(array_map(fn ($id) => [
                 'lead_id' => $id,
@@ -573,6 +580,7 @@ class LeadController extends Controller
             }
             if ($isAdmin && array_key_exists('assigned_user_id', $data) && (int) $record->assigned_user_id !== (int) ($data['assigned_user_id'] ?? 0)) {
                 $updates['assigned_user_id'] = $data['assigned_user_id'] ?: null;
+                $updates['owner_resolution'] = $data['assigned_user_id'] ? 'manual' : 'unassigned';
                 if ($data['assigned_user_id']) {
                     DB::table('lead_collaborators')->where('lead_id', $lead)->where('user_id', $data['assigned_user_id'])->whereNull('removed_at')->update(['removed_at' => now()]);
                 }
@@ -825,7 +833,9 @@ class LeadController extends Controller
                     ->whereNull('lead_collaborators.removed_at');
             });
             if (! $requiresHandling && $branchId > 0) {
-                $visible->orWhere('source_branch_id', $branchId);
+                $visible->orWhere(fn (Builder $teamLead) => $teamLead
+                    ->where('source_branch_id', $branchId)
+                    ->where('owner_resolution', '!=', 'awaiting_account'));
             }
         });
     }

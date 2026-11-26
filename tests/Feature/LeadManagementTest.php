@@ -8,6 +8,7 @@ use App\Services\LeadImportService;
 use App\Support\DailyLeadTabParser;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
@@ -42,9 +43,19 @@ class LeadManagementTest extends TestCase
             $table->timestamp('google_sheets_synced_at')->nullable();
             $table->text('google_sheets_sync_error')->nullable();
         });
+        Schema::create('cs_source_name_aliases', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('branch_id');
+            $table->unsignedBigInteger('user_id');
+            $table->string('source_name');
+            $table->string('source_name_key');
+            $table->timestamp('created_at')->nullable();
+            $table->unique(['branch_id', 'source_name_key']);
+        });
         Schema::create('leads', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('assigned_user_id')->nullable();
+            $table->string('owner_resolution')->default('manual');
             $table->unsignedBigInteger('source_branch_id')->nullable();
             $table->unsignedBigInteger('source_conflict_branch_id')->nullable();
             $table->timestamp('source_conflict_at')->nullable();
@@ -108,11 +119,22 @@ class LeadManagementTest extends TestCase
         Schema::create('lead_source_occurrences', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('lead_id');
+            $table->unsignedBigInteger('source_branch_id')->nullable();
             $table->string('spreadsheet_id');
             $table->string('source_tab');
             $table->string('source_row_no')->nullable();
             $table->string('source_date_raw')->nullable();
             $table->string('source_hash')->unique();
+            $table->timestamp('created_at')->nullable();
+        });
+        Schema::create('branch_source_events', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('branch_id');
+            $table->unsignedBigInteger('actor_id')->nullable();
+            $table->string('action');
+            $table->string('previous_spreadsheet_id')->nullable();
+            $table->string('spreadsheet_id')->nullable();
+            $table->text('detail')->nullable();
             $table->timestamp('created_at')->nullable();
         });
         Schema::create('lead_sync_runs', function (Blueprint $table) {
@@ -1000,9 +1022,9 @@ class LeadManagementTest extends TestCase
         $rows[0]['source_date_raw'] = '2 November 2026';
         $reappeared = app(LeadImportService::class)->import($rows, null, 'sheet-utama');
 
-        $this->assertSame(['enriched' => 0, 'inserted' => 1, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 1, 'needs_review' => 0, 'missing_dates' => 0], $first);
-        $this->assertSame(['enriched' => 0, 'inserted' => 0, 'skipped' => 1, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0], $again);
-        $this->assertSame(['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 1, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0], $reappeared);
+        $this->assertSame(['enriched' => 0, 'inserted' => 1, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 1, 'awaiting_account' => 0, 'needs_review' => 0, 'missing_dates' => 0], $first);
+        $this->assertSame(['enriched' => 0, 'inserted' => 0, 'skipped' => 1, 'resurfaced' => 0, 'unassigned' => 0, 'awaiting_account' => 0, 'needs_review' => 0, 'missing_dates' => 0], $again);
+        $this->assertSame(['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 1, 'unassigned' => 0, 'awaiting_account' => 0, 'needs_review' => 0, 'missing_dates' => 0], $reappeared);
         $this->assertDatabaseCount('leads', 1);
         $this->assertDatabaseCount('lead_source_occurrences', 2);
         $this->assertDatabaseHas('lead_activity', ['action' => 'Lead muncul kembali dari Google Sheets']);
@@ -1044,6 +1066,154 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'Data sumber diperbarui dari Google Sheets']);
     }
 
+    public function test_replacing_a_branch_sheet_refreshes_matching_source_data_without_touching_cs_work(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId([
+            'name' => 'Palagan',
+            'google_spreadsheet_id' => 'sheet-lama',
+        ]);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Palagan']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
+        $row = [
+            'source_row_no' => '1',
+            'source_date_raw' => '1 November 2026',
+            'source_tab' => '1',
+            'contact_raw' => '+62 851-7777-1779 Rini',
+            'respond_time' => '0',
+            'imported_cs_name' => 'Nama lama',
+            'imported_keterangan' => 'Klik saja',
+            'raw_kebutuhan' => 'Cincin nikah',
+            'greeting' => 'Halo',
+            'chat_time' => '10.38',
+            'source_description' => 'Iklan lama',
+            'campaign_description' => 'Bio lama',
+            'imported_definition' => 'Cold',
+        ];
+        app(LeadImportService::class)->import([$row], null, 'sheet-lama', $branchId);
+        $leadId = (int) \DB::table('leads')->where('contact_key', 'phone:6285177771779')->value('id');
+        \DB::table('leads')->where('id', $leadId)->update([
+            'keterangan' => 'Catatan follow-up CS',
+            'current_stage' => 'asked',
+        ]);
+        $row['greeting'] = 'Halo dari master baru';
+        $row['raw_kebutuhan'] = 'Cincin tunangan';
+        $row['source_description'] = 'Iklan baru';
+        $unmatchedRow = [...$row, 'source_row_no' => '2', 'contact_raw' => '+62 851-7777-1780 Sari'];
+        app(LeadImportService::class)->import([$unmatchedRow], null, 'sheet-lama', $branchId);
+
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])
+            ->makePartial()
+            ->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+        $sync->shouldReceive('readBranch')->once()->with(Mockery::type(PendingRequest::class), 'sheet-baru')->andReturn([
+            'rows' => [$row],
+            'missing_source_fields' => 0,
+            'errors' => [],
+        ]);
+
+        $summary = $sync->replaceSource($cs->id, $branchId, 'sheet-baru');
+
+        $this->assertSame(1, $summary['enriched']);
+        $this->assertSame(0, $summary['inserted']);
+        $this->assertDatabaseHas('branches', [
+            'id' => $branchId,
+            'google_spreadsheet_id' => 'sheet-baru',
+        ]);
+        $this->assertDatabaseHas('leads', [
+            'id' => $leadId,
+            'greeting' => 'Halo dari master baru',
+            'raw_kebutuhan' => 'Cincin tunangan',
+            'source_description' => 'Iklan baru',
+            'keterangan' => 'Catatan follow-up CS',
+            'current_stage' => 'asked',
+        ]);
+        $this->assertDatabaseCount('leads', 2);
+        $this->assertDatabaseCount('lead_source_occurrences', 3);
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771780',
+            'source_branch_id' => $branchId,
+        ]);
+        $this->assertDatabaseHas('branch_source_events', [
+            'branch_id' => $branchId,
+            'actor_id' => $cs->id,
+            'action' => 'replaced',
+            'previous_spreadsheet_id' => 'sheet-lama',
+            'spreadsheet_id' => 'sheet-baru',
+        ]);
+    }
+
+    public function test_failed_branch_sheet_replacement_keeps_the_previous_source_active(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId([
+            'name' => 'Palagan',
+            'google_spreadsheet_id' => 'sheet-lama',
+            'google_sheets_synced_at' => now()->subHour(),
+            'google_sheets_sync_error' => 'Catatan lama',
+        ]);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Palagan']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])
+            ->makePartial()
+            ->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+        $sync->shouldReceive('readBranch')->once()->with(Mockery::type(PendingRequest::class), 'sheet-baru')
+            ->andThrow(new \RuntimeException('Spreadsheet baru tidak dapat dibaca.'));
+
+        try {
+            $sync->replaceSource($cs->id, $branchId, 'sheet-baru');
+            $this->fail('Penggantian seharusnya gagal.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Sinkronisasi cabang gagal. Palagan: Spreadsheet baru tidak dapat dibaca.', $exception->getMessage());
+        }
+
+        $this->assertDatabaseHas('branches', [
+            'id' => $branchId,
+            'google_spreadsheet_id' => 'sheet-lama',
+            'google_sheets_sync_error' => 'Catatan lama',
+        ]);
+        $this->assertDatabaseHas('branch_source_events', [
+            'branch_id' => $branchId,
+            'actor_id' => $cs->id,
+            'action' => 'replacement_failed',
+            'previous_spreadsheet_id' => 'sheet-lama',
+            'spreadsheet_id' => 'sheet-baru',
+        ]);
+    }
+
+    public function test_source_occurrence_keeps_the_importing_branch_when_the_contact_belongs_to_another_branch(): void
+    {
+        $palaganId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $soloId = \DB::table('branches')->insertGetId(['name' => 'Solo']);
+        $palaganCs = $this->user('cs', ['branch_id' => $palaganId, 'name' => 'CS Palagan']);
+        $soloCs = $this->user('cs', ['branch_id' => $soloId, 'name' => 'CS Solo']);
+        \DB::table('branches')->where('id', $palaganId)->update(['default_import_user_id' => $palaganCs->id]);
+        \DB::table('branches')->where('id', $soloId)->update(['default_import_user_id' => $soloCs->id]);
+        $row = [
+            'source_row_no' => '1',
+            'source_date_raw' => '1 November 2026',
+            'source_tab' => '1',
+            'contact_raw' => '+62 851-7777-1880 Rini',
+            'respond_time' => '0',
+            'imported_cs_name' => 'CS Solo',
+            'imported_keterangan' => 'Klik saja',
+            'raw_kebutuhan' => 'Cincin nikah',
+            'greeting' => 'Halo',
+            'chat_time' => '10.38',
+            'source_description' => 'Iklan',
+            'campaign_description' => 'Bio',
+            'imported_definition' => 'Cold',
+        ];
+        app(LeadImportService::class)->import([$row], null, 'sheet-solo', $soloId);
+        app(LeadImportService::class)->import([$row], null, 'sheet-palagan', $palaganId);
+
+        $this->assertDatabaseHas('lead_source_occurrences', [
+            'spreadsheet_id' => 'sheet-palagan',
+            'source_branch_id' => $palaganId,
+        ]);
+    }
+
     public function test_moving_a_row_inside_the_same_daily_tab_keeps_the_same_lead(): void
     {
         $row = [
@@ -1074,19 +1244,19 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseMissing('lead_activity', ['action' => 'Lead muncul kembali dari Google Sheets']);
     }
 
-    public function test_import_from_a_branch_assigns_its_default_import_cs_instead_of_the_source_name(): void
+    public function test_import_from_a_branch_assigns_the_matching_source_cs_instead_of_the_fallback(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
-        $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta 1']);
-        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta 2']);
-        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
+        $sourceCs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta 1']);
+        $fallbackCs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta 2']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $fallbackCs->id]);
         $rows = [[
             'source_row_no' => '1',
             'source_date_raw' => '1 November 2026',
             'source_tab' => '1',
             'contact_raw' => '+62 851-7777-1888 Rini',
             'respond_time' => '0',
-            'imported_cs_name' => 'Nama lama di spreadsheet',
+            'imported_cs_name' => 'CS Yogyakarta 1',
             'imported_keterangan' => 'tanya-tanya',
             'raw_kebutuhan' => 'cincin nikah',
             'greeting' => 'Halo',
@@ -1101,8 +1271,119 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('leads', [
             'contact_key' => 'phone:6285177771888',
             'source_branch_id' => $branchId,
-            'assigned_user_id' => $cs->id,
+            'assigned_user_id' => $sourceCs->id,
+            'owner_resolution' => 'source_matched',
         ]);
+    }
+
+    public function test_import_from_a_branch_waits_for_an_account_when_source_cs_is_not_registered(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $fallbackCs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta']);
+        \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $fallbackCs->id]);
+        $row = [
+            'source_row_no' => '1', 'source_date_raw' => '1 November 2026', 'source_tab' => '1',
+            'contact_raw' => '+62 851-7777-1889 Rini', 'respond_time' => '0', 'imported_cs_name' => 'CS Baru',
+            'imported_keterangan' => 'tanya-tanya', 'raw_kebutuhan' => 'cincin nikah', 'greeting' => 'Halo',
+            'chat_time' => '10.38', 'source_description' => 'Iklan', 'campaign_description' => 'Bio', 'imported_definition' => 'Warm',
+        ];
+
+        $summary = app(LeadImportService::class)->import([$row], null, 'sheet-yogyakarta', $branchId);
+
+        $this->assertSame(1, $summary['awaiting_account']);
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771889',
+            'assigned_user_id' => null,
+            'owner_resolution' => 'awaiting_account',
+            'imported_cs_name' => 'CS Baru',
+        ]);
+        $this->assertDatabaseMissing('lead_collaborators', ['user_id' => $fallbackCs->id]);
+    }
+
+    public function test_import_with_a_source_cs_name_does_not_require_a_fallback_account(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $row = [
+            'source_row_no' => '1', 'source_date_raw' => '1 November 2026', 'source_tab' => '1',
+            'contact_raw' => '+62 851-7777-1891 Rini', 'respond_time' => '0', 'imported_cs_name' => 'CS Baru',
+            'imported_keterangan' => 'tanya-tanya', 'raw_kebutuhan' => 'cincin nikah', 'greeting' => 'Halo',
+            'chat_time' => '10.38', 'source_description' => 'Iklan', 'campaign_description' => 'Bio', 'imported_definition' => 'Warm',
+        ];
+
+        $summary = app(LeadImportService::class)->import([$row], null, 'sheet-yogyakarta', $branchId);
+
+        $this->assertSame(1, $summary['awaiting_account']);
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771891',
+            'assigned_user_id' => null,
+            'owner_resolution' => 'awaiting_account',
+        ]);
+    }
+
+    public function test_import_matches_a_configured_source_cs_alias(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Yogyakarta']);
+        \DB::table('cs_source_name_aliases')->insert([
+            'branch_id' => $branchId,
+            'user_id' => $cs->id,
+            'source_name' => 'Yogyakarta 1',
+            'source_name_key' => 'yogyakarta 1',
+            'created_at' => now(),
+        ]);
+        $row = [
+            'source_row_no' => '1', 'source_date_raw' => '1 November 2026', 'source_tab' => '1',
+            'contact_raw' => '+62 851-7777-1892 Rini', 'respond_time' => '0', 'imported_cs_name' => 'Yogyakarta 1',
+            'imported_keterangan' => 'tanya-tanya', 'raw_kebutuhan' => 'cincin nikah', 'greeting' => 'Halo',
+            'chat_time' => '10.38', 'source_description' => 'Iklan', 'campaign_description' => 'Bio', 'imported_definition' => 'Warm',
+        ];
+
+        app(LeadImportService::class)->import([$row], null, 'sheet-yogyakarta', $branchId);
+
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771892',
+            'assigned_user_id' => $cs->id,
+            'owner_resolution' => 'source_matched',
+        ]);
+    }
+
+    public function test_admin_can_link_awaiting_source_leads_to_a_matching_cs_account_without_changing_collaborators(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Baru']);
+        $helper = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Pendamping']);
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285177771890', 'contact_key' => 'phone:6285177771890', 'source_branch_id' => $branchId,
+            'imported_cs_name' => 'CS Baru', 'owner_resolution' => 'awaiting_account', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        \DB::table('lead_collaborators')->insert(['lead_id' => $leadId, 'user_id' => $helper->id, 'added_at' => now()]);
+
+        $this->actingAs($admin)->post("/accounts/{$cs->id}/link-awaiting-leads")->assertRedirect();
+
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'assigned_user_id' => $cs->id, 'owner_resolution' => 'source_matched']);
+        $this->assertDatabaseHas('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $helper->id, 'removed_at' => null]);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'CS utama dihubungkan dari Nama CS sumber']);
+    }
+
+    public function test_admin_can_reconcile_a_historical_lead_without_changing_its_collaborators(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Yogyakarta']);
+        $targetCs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Baru']);
+        $previousCs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Lama']);
+        $helper = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Pendamping']);
+        $leadId = \DB::table('leads')->insertGetId([
+            'contact_raw' => '+6285177771893', 'contact_key' => 'phone:6285177771893', 'source_branch_id' => $branchId,
+            'assigned_user_id' => $previousCs->id, 'imported_cs_name' => 'CS Baru', 'owner_resolution' => 'manual', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        \DB::table('lead_collaborators')->insert(['lead_id' => $leadId, 'user_id' => $helper->id, 'added_at' => now()]);
+
+        $this->actingAs($admin)->post("/accounts/{$targetCs->id}/reconcile-source-leads")->assertRedirect();
+
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'assigned_user_id' => $targetCs->id, 'owner_resolution' => 'source_matched']);
+        $this->assertDatabaseHas('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $helper->id, 'removed_at' => null]);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'CS utama direkonsiliasi dari Nama CS sumber']);
     }
 
     public function test_same_contact_from_a_different_branch_is_flagged_without_changing_its_owner(): void
@@ -1607,6 +1888,28 @@ class LeadManagementTest extends TestCase
                 ->has('leads.data', 1)
                 ->where('leads.data.0.name', 'Lead Palagan')
                 ->where('leads.data.0.handling_role', 'team'),
+        );
+    }
+
+    public function test_cs_cannot_see_a_lead_waiting_for_its_source_account(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId]);
+        \DB::table('leads')->insert([
+            'name' => 'Lead menunggu akun',
+            'source_branch_id' => $branchId,
+            'owner_resolution' => 'awaiting_account',
+            'imported_cs_name' => 'CS Baru',
+            'contact_raw' => '+6285100000025',
+            'contact_key' => 'phone:6285100000025',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($cs)->get('/leads')->assertInertia(
+            fn (Assert $page) => $page
+                ->component('Leads/Index')
+                ->has('leads.data', 0),
         );
     }
 

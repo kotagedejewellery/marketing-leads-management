@@ -19,6 +19,9 @@ type Account = {
     branch_id: number | null;
     branch_name: string | null;
     active: boolean;
+    awaiting_lead_count: number;
+    reconcilable_lead_count: number;
+    source_name_aliases: string[];
 };
 const props = defineProps<{
     accounts: Account[];
@@ -30,10 +33,13 @@ const form = useForm({
     password: '',
     role: 'cs' as 'admin' | 'cs',
     branch_id: '',
+    source_name_aliases: '',
     active: true,
 });
 const editingId = ref<number | null>(null);
 const accountToToggle = ref<{ account: Account; active: boolean } | null>(null);
+const accountToLink = ref<Account | null>(null);
+const accountToReconcile = ref<Account | null>(null);
 const needsBranch = computed(() => form.role === 'cs');
 const cancel = () => {
     editingId.value = null;
@@ -47,6 +53,7 @@ const edit = (account: Account) => {
     form.password = '';
     form.role = account.role;
     form.branch_id = account.branch_id ? String(account.branch_id) : '';
+    form.source_name_aliases = account.source_name_aliases.join('\n');
     form.active = account.active;
     form.clearErrors();
 };
@@ -63,8 +70,31 @@ const setActive = (account: Account, active: boolean) => {
         password: '',
         role: account.role,
         branch_id: account.branch_id ? String(account.branch_id) : '',
+        source_name_aliases: account.source_name_aliases.join('\n'),
         active,
     });
+};
+const linkAwaitingLeads = () => {
+    if (!accountToLink.value) return;
+    router.post(
+        `/accounts/${accountToLink.value.id}/link-awaiting-leads`,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => (accountToLink.value = null),
+        },
+    );
+};
+const reconcileSourceLeads = () => {
+    if (!accountToReconcile.value) return;
+    router.post(
+        `/accounts/${accountToReconcile.value.id}/reconcile-source-leads`,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => (accountToReconcile.value = null),
+        },
+    );
 };
 </script>
 
@@ -151,6 +181,21 @@ const setActive = (account: Account, active: boolean) => {
                     form.errors.branch_id
                 }}</span></label
             >
+            <label v-if="needsBranch" class="grid gap-1 text-sm font-medium"
+                >Nama CS sumber / alias<textarea
+                    v-model="form.source_name_aliases"
+                    class="kgj-input min-h-24"
+                    placeholder="Satu nama per baris"
+                ></textarea
+                ><span class="text-xs font-normal text-kgj-muted"
+                    >Gunakan bila nama di spreadsheet berbeda dari nama
+                    akun.</span
+                ><span
+                    v-if="form.errors.source_name_aliases"
+                    class="text-[#a23e2b]"
+                    >{{ form.errors.source_name_aliases }}</span
+                ></label
+            >
             <label
                 v-if="editingId"
                 class="flex min-h-11 items-center gap-2 text-sm font-medium"
@@ -206,6 +251,25 @@ const setActive = (account: Account, active: boolean) => {
                     {{ account.role.toUpperCase() }} ·
                     {{ account.branch_name || 'Tanpa cabang' }}
                 </p>
+                <p
+                    v-if="account.awaiting_lead_count"
+                    class="mt-2 text-sm font-semibold text-kgj-gold-deep"
+                >
+                    {{ account.awaiting_lead_count }} lead menunggu akun ini
+                </p>
+                <p
+                    v-if="account.source_name_aliases.length"
+                    class="mt-2 text-xs text-kgj-muted"
+                >
+                    Nama sumber: {{ account.source_name_aliases.join(', ') }}
+                </p>
+                <p
+                    v-if="account.reconcilable_lead_count"
+                    class="mt-2 text-sm font-semibold text-kgj-ink"
+                >
+                    {{ account.reconcilable_lead_count }} lead historis perlu
+                    ditinjau
+                </p>
                 <div class="mt-4 flex gap-2">
                     <button
                         class="kgj-button-secondary flex-1"
@@ -226,6 +290,22 @@ const setActive = (account: Account, active: boolean) => {
                         {{ account.active ? 'Nonaktifkan' : 'Aktifkan' }}
                     </button>
                 </div>
+                <button
+                    v-if="account.awaiting_lead_count"
+                    class="mt-3 min-h-11 text-sm font-semibold text-kgj-gold-deep underline underline-offset-4"
+                    type="button"
+                    @click="accountToLink = account"
+                >
+                    Hubungkan lead sumber
+                </button>
+                <button
+                    v-if="account.reconcilable_lead_count"
+                    class="mt-3 min-h-11 text-sm font-semibold text-kgj-ink underline underline-offset-4"
+                    type="button"
+                    @click="accountToReconcile = account"
+                >
+                    Rekonsiliasi lead historis
+                </button>
             </article>
             <p v-if="!accounts.length" class="py-10 text-center text-kgj-muted">
                 Belum ada akun.
@@ -253,6 +333,18 @@ const setActive = (account: Account, active: boolean) => {
                             }}<small class="block font-normal text-[#62665b]">{{
                                 account.email
                             }}</small>
+                            <small
+                                v-if="account.awaiting_lead_count"
+                                class="mt-1 block font-semibold text-kgj-gold-deep"
+                                >{{ account.awaiting_lead_count }} lead menunggu
+                                akun ini</small
+                            >
+                            <small
+                                v-if="account.reconcilable_lead_count"
+                                class="mt-1 block font-semibold text-kgj-ink"
+                                >{{ account.reconcilable_lead_count }} lead
+                                historis perlu ditinjau</small
+                            >
                         </td>
                         <td class="p-4">{{ account.role.toUpperCase() }}</td>
                         <td class="p-4">{{ account.branch_name || '—' }}</td>
@@ -284,6 +376,22 @@ const setActive = (account: Account, active: boolean) => {
                                 {{
                                     account.active ? 'Nonaktifkan' : 'Aktifkan'
                                 }}
+                            </button>
+                            <button
+                                v-if="account.awaiting_lead_count"
+                                class="ml-3 inline-flex min-h-11 items-center text-sm font-semibold text-kgj-gold-deep underline decoration-[#c4a45d] underline-offset-4"
+                                type="button"
+                                @click="accountToLink = account"
+                            >
+                                Hubungkan lead
+                            </button>
+                            <button
+                                v-if="account.reconcilable_lead_count"
+                                class="ml-3 inline-flex min-h-11 items-center text-sm font-semibold text-kgj-ink underline underline-offset-4"
+                                type="button"
+                                @click="accountToReconcile = account"
+                            >
+                                Rekonsiliasi
                             </button>
                         </td>
                     </tr>
@@ -337,6 +445,65 @@ const setActive = (account: Account, active: boolean) => {
                                 ? 'Aktifkan akun'
                                 : 'Nonaktifkan akun'
                         }}
+                    </button></DialogFooter
+                ></DialogContent
+            >
+        </Dialog>
+        <Dialog
+            :open="Boolean(accountToLink)"
+            @update:open="(open) => !open && (accountToLink = null)"
+        >
+            <DialogContent
+                ><DialogHeader
+                    ><DialogTitle
+                        >Hubungkan lead dari Nama CS sumber?</DialogTitle
+                    ><DialogDescription
+                        >{{ accountToLink?.awaiting_lead_count || 0 }} lead
+                        dengan Nama CS sumber yang cocok akan menjadi tanggung
+                        jawab {{ accountToLink?.name }}. CS pendamping yang
+                        sudah ada tidak diubah.</DialogDescription
+                    ></DialogHeader
+                ><DialogFooter
+                    ><DialogClose as-child
+                        ><button class="kgj-button-secondary" type="button">
+                            Batalkan
+                        </button></DialogClose
+                    ><button
+                        class="kgj-button-primary"
+                        type="button"
+                        @click="linkAwaitingLeads"
+                    >
+                        Hubungkan lead
+                    </button></DialogFooter
+                ></DialogContent
+            >
+        </Dialog>
+        <Dialog
+            :open="Boolean(accountToReconcile)"
+            @update:open="(open) => !open && (accountToReconcile = null)"
+        >
+            <DialogContent
+                ><DialogHeader
+                    ><DialogTitle
+                        >Rekonsiliasi lead historis dari Nama CS
+                        sumber?</DialogTitle
+                    ><DialogDescription
+                        >{{ accountToReconcile?.reconcilable_lead_count || 0 }}
+                        lead lama yang namanya cocok akan menetapkan
+                        {{ accountToReconcile?.name }} sebagai CS utama. CS
+                        pendamping yang ada tidak diubah.</DialogDescription
+                    ></DialogHeader
+                ><DialogFooter
+                    ><DialogClose as-child
+                        ><button class="kgj-button-secondary" type="button">
+                            Batalkan
+                        </button></DialogClose
+                    ><button
+                        class="kgj-button-primary"
+                        type="button"
+                        @click="reconcileSourceLeads"
+                    >
+                        Rekonsiliasi lead
                     </button></DialogFooter
                 ></DialogContent
             >

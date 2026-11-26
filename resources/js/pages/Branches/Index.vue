@@ -32,12 +32,40 @@ type Branch = {
         summary: {
             inserted?: number;
             enriched?: number;
+            awaiting_account?: number;
             failed_tabs?: number;
         } | null;
         error: string | null;
     } | null;
+    source_events: {
+        id: number;
+        action:
+            | 'connected'
+            | 'replaced'
+            | 'disconnected'
+            | 'replacement_failed';
+        previous_spreadsheet_id: string | null;
+        spreadsheet_id: string | null;
+        detail: string | null;
+        created_at: string | null;
+        actor_name: string | null;
+    }[];
 };
-const props = defineProps<{ branches: Branch[] }>();
+type SourcePreview = {
+    branch_id: number;
+    spreadsheet_id: string;
+    rows: number;
+    matching: number;
+    new: number;
+    updates: number;
+    conflicts: number;
+    missing_source_fields: number;
+    failed_tabs: number;
+};
+const props = defineProps<{
+    branches: Branch[];
+    source_preview: SourcePreview | null;
+}>();
 const form = useForm({
     name: '',
     google_spreadsheet_id: '',
@@ -45,7 +73,19 @@ const form = useForm({
 });
 const editingId = ref<number | null>(null);
 const branchToDelete = ref<Branch | null>(null);
+const sourceBranch = ref<Branch | null>(null);
+const branchToDisconnect = ref<Branch | null>(null);
 const syncingBranchId = ref<number | null>(null);
+const sourceForm = useForm({ google_spreadsheet_id: '' });
+const sourcePreview = computed(() => {
+    if (!sourceBranch.value || !props.source_preview) return null;
+
+    return props.source_preview.branch_id === sourceBranch.value.id &&
+        props.source_preview.spreadsheet_id ===
+            sourceForm.google_spreadsheet_id.trim()
+        ? props.source_preview
+        : null;
+});
 const readyBranches = computed(
     () =>
         props.branches.filter((branch) => branch.import_status === 'Siap impor')
@@ -64,6 +104,10 @@ const statusClass = (branch: Branch) =>
 const syncAttemptLabel = (branch: Branch) => {
     if (!branch.last_sync) return '';
 
+    if (!branch.google_spreadsheet_id) {
+        return 'Riwayat sinkronisasi terakhir';
+    }
+
     return {
         success: 'Percobaan terakhir berhasil',
         partial: 'Percobaan terakhir selesai sebagian',
@@ -80,7 +124,7 @@ const syncSummary = (branch: Branch) => {
     const summary = branch.last_sync?.summary;
     if (!summary) return '';
 
-    const detail = `${summary.inserted || 0} lead baru · ${summary.enriched || 0} data diperbarui`;
+    const detail = `${summary.inserted || 0} lead baru · ${summary.enriched || 0} data diperbarui${summary.awaiting_account ? ` · ${summary.awaiting_account} menunggu akun CS` : ''}`;
 
     return summary.failed_tabs
         ? `${detail} · ${summary.failed_tabs} tab perlu diperbaiki`
@@ -93,6 +137,15 @@ const syncFailureDetail = (branch: Branch) =>
         : !branch.last_sync
           ? branch.google_sheets_sync_error
           : null;
+const sourceEventLabel = (action: Branch['source_events'][number]['action']) =>
+    ({
+        connected: 'Sumber dihubungkan',
+        replaced: 'Sumber diganti',
+        disconnected: 'Koneksi diputus',
+        replacement_failed: 'Penggantian dibatalkan',
+    })[action];
+const sourceEventActor = (event: Branch['source_events'][number]) =>
+    event.actor_name || 'Sistem';
 const save = () => {
     const options = {
         onSuccess: () => {
@@ -121,6 +174,35 @@ const remove = () => {
     if (!branchToDelete.value) return;
     router.delete(`/branches/${branchToDelete.value.id}`, {
         onFinish: () => (branchToDelete.value = null),
+    });
+};
+const openSourceChange = (branch: Branch) => {
+    sourceBranch.value = branch;
+    sourceForm.reset();
+    sourceForm.clearErrors();
+};
+const replaceSource = () => {
+    if (!sourceBranch.value || !sourcePreview.value) return;
+    sourceForm.post(`/branches/${sourceBranch.value.id}/replace-google-sheet`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            sourceBranch.value = null;
+            sourceForm.reset();
+        },
+    });
+};
+const previewSource = () => {
+    if (!sourceBranch.value) return;
+    sourceForm.post(`/branches/${sourceBranch.value.id}/preview-google-sheet`, {
+        preserveScroll: true,
+        preserveState: true,
+    });
+};
+const disconnectSource = () => {
+    if (!branchToDisconnect.value) return;
+    router.delete(`/branches/${branchToDisconnect.value.id}/google-sheet`, {
+        preserveScroll: true,
+        onSuccess: () => (branchToDisconnect.value = null),
     });
 };
 const syncBranch = (branch: Branch) =>
@@ -209,8 +291,13 @@ const syncBranch = (branch: Branch) =>
                         id="branch-sheet"
                         v-model="form.google_spreadsheet_id"
                         class="kgj-input"
-                        placeholder="Tempel ID dari URL spreadsheet"
+                        :placeholder="
+                            editingId
+                                ? 'Gunakan tindakan Ganti spreadsheet sumber'
+                                : 'Tempel ID dari URL spreadsheet'
+                        "
                         maxlength="128"
+                        :readonly="Boolean(editingId)"
                         :aria-invalid="
                             Boolean(form.errors.google_spreadsheet_id)
                         "
@@ -221,18 +308,24 @@ const syncBranch = (branch: Branch) =>
                         role="alert"
                         >{{ form.errors.google_spreadsheet_id }}</span
                     >
+                    <span
+                        v-if="editingId"
+                        class="text-xs font-normal text-kgj-muted"
+                        >Gunakan menu Lainnya untuk mengganti atau memutuskan
+                        sumber spreadsheet.</span
+                    >
                 </label>
             </div>
             <label
                 v-if="editingId"
                 class="mt-4 grid gap-1.5 text-sm font-medium"
-                >CS default impor
+                >CS fallback impor
                 <select
                     v-model="form.default_import_user_id"
                     class="kgj-input"
                     :aria-invalid="Boolean(form.errors.default_import_user_id)"
                 >
-                    <option value="">Pilih CS default impor</option>
+                    <option value="">Pilih CS fallback impor</option>
                     <option
                         v-for="account in importCsOptions"
                         :key="account.id"
@@ -242,8 +335,7 @@ const syncBranch = (branch: Branch) =>
                     </option>
                 </select>
                 <span class="text-xs font-normal text-kgj-muted"
-                    >Lead baru dari spreadsheet cabang akan menjadi tanggung
-                    jawab CS ini.</span
+                    >Dipakai hanya bila Nama CS sumber kosong.</span
                 >
                 <span
                     v-if="form.errors.default_import_user_id"
@@ -304,7 +396,7 @@ const syncBranch = (branch: Branch) =>
                         <span
                             v-if="branch.default_import_user_id === account.id"
                             class="ml-2 rounded-full bg-[#f3ead1] px-2 py-0.5 text-xs font-semibold text-kgj-gold-deep"
-                            >Default impor</span
+                            >Fallback impor</span
                         >
                         <small class="block break-all">{{
                             account.email
@@ -336,8 +428,40 @@ const syncBranch = (branch: Branch) =>
                         </p>
                     </details>
                     <p v-else class="mt-1 text-xs text-kgj-muted">
-                        Ubah cabang untuk menyambungkan sumber lead.
+                        Hubungkan spreadsheet sumber dari menu Lainnya.
                     </p>
+                    <details
+                        v-if="branch.source_events.length"
+                        class="mt-2 text-xs text-kgj-muted"
+                    >
+                        <summary
+                            class="cursor-pointer font-semibold text-kgj-gold-deep"
+                        >
+                            Riwayat konfigurasi sumber
+                        </summary>
+                        <ol
+                            class="mt-2 grid gap-2 border-l border-kgj-line pl-3"
+                        >
+                            <li
+                                v-for="event in branch.source_events"
+                                :key="event.id"
+                            >
+                                <span class="font-medium text-kgj-ink">{{
+                                    sourceEventLabel(event.action)
+                                }}</span>
+                                <span> · {{ sourceEventActor(event) }}</span>
+                                <span v-if="event.created_at">
+                                    ·
+                                    {{ formatSyncTime(event.created_at) }}</span
+                                >
+                                <span
+                                    v-if="event.detail"
+                                    class="mt-0.5 block leading-relaxed"
+                                    >{{ event.detail }}</span
+                                >
+                            </li>
+                        </ol>
+                    </details>
                 </div>
                 <p
                     v-if="branch.google_sheets_synced_at"
@@ -418,6 +542,19 @@ const syncBranch = (branch: Branch) =>
                         ><DropdownMenuContent
                             align="end"
                             class="border-kgj-line bg-kgj-paper text-kgj-ink"
+                            ><DropdownMenuItem
+                                @select="openSourceChange(branch)"
+                                >{{
+                                    branch.google_spreadsheet_id
+                                        ? 'Ganti spreadsheet sumber'
+                                        : 'Hubungkan spreadsheet sumber'
+                                }}</DropdownMenuItem
+                            ><DropdownMenuItem
+                                v-if="branch.google_spreadsheet_id"
+                                variant="destructive"
+                                @select="branchToDisconnect = branch"
+                                >Putuskan koneksi Google
+                                Sheets</DropdownMenuItem
                             ><DropdownMenuItem
                                 variant="destructive"
                                 @select="branchToDelete = branch"
@@ -544,6 +681,46 @@ const syncBranch = (branch: Branch) =>
                                 </p>
                             </details>
                             <details
+                                v-if="branch.source_events.length"
+                                class="mt-2 text-xs text-kgj-muted"
+                            >
+                                <summary
+                                    class="cursor-pointer font-semibold text-kgj-gold-deep"
+                                >
+                                    Riwayat konfigurasi sumber
+                                </summary>
+                                <ol
+                                    class="mt-2 grid gap-2 border-l border-kgj-line pl-3"
+                                >
+                                    <li
+                                        v-for="event in branch.source_events"
+                                        :key="event.id"
+                                    >
+                                        <span
+                                            class="font-medium text-kgj-ink"
+                                            >{{
+                                                sourceEventLabel(event.action)
+                                            }}</span
+                                        >
+                                        <span>
+                                            ·
+                                            {{ sourceEventActor(event) }}</span
+                                        >
+                                        <span v-if="event.created_at">
+                                            ·
+                                            {{
+                                                formatSyncTime(event.created_at)
+                                            }}</span
+                                        >
+                                        <span
+                                            v-if="event.detail"
+                                            class="mt-0.5 block leading-relaxed"
+                                            >{{ event.detail }}</span
+                                        >
+                                    </li>
+                                </ol>
+                            </details>
+                            <details
                                 v-if="syncFailureDetail(branch)"
                                 class="mt-2 text-xs"
                                 :class="
@@ -605,6 +782,22 @@ const syncBranch = (branch: Branch) =>
                                         class="border-kgj-line bg-kgj-paper text-kgj-ink"
                                     >
                                         <DropdownMenuItem
+                                            @select="openSourceChange(branch)"
+                                            >{{
+                                                branch.google_spreadsheet_id
+                                                    ? 'Ganti spreadsheet sumber'
+                                                    : 'Hubungkan spreadsheet sumber'
+                                            }}</DropdownMenuItem
+                                        ><DropdownMenuItem
+                                            v-if="branch.google_spreadsheet_id"
+                                            variant="destructive"
+                                            @select="
+                                                branchToDisconnect = branch
+                                            "
+                                            >Putuskan koneksi Google
+                                            Sheets</DropdownMenuItem
+                                        >
+                                        <DropdownMenuItem
                                             variant="destructive"
                                             @select="branchToDelete = branch"
                                         >
@@ -650,6 +843,185 @@ const syncBranch = (branch: Branch) =>
                     </button></DialogFooter
                 ></DialogContent
             >
+        </Dialog>
+        <Dialog
+            :open="Boolean(sourceBranch)"
+            @update:open="(open) => !open && (sourceBranch = null)"
+        >
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>
+                        {{
+                            sourceBranch?.google_spreadsheet_id
+                                ? 'Ganti spreadsheet sumber?'
+                                : 'Hubungkan spreadsheet sumber?'
+                        }}
+                    </DialogTitle>
+                    <DialogDescription>
+                        Lead dengan kontak yang cocok tetap satu record. Data
+                        asal akan diperbarui saat sinkronisasi ini, sedangkan
+                        penugasan, milestone, catatan, dan hasil kerja CS tetap
+                        dipertahankan.
+                    </DialogDescription>
+                </DialogHeader>
+                <label class="grid gap-1.5 text-sm font-medium">
+                    ID Google Spreadsheet baru
+                    <input
+                        v-model="sourceForm.google_spreadsheet_id"
+                        class="kgj-input"
+                        placeholder="Tempel ID dari URL spreadsheet"
+                        maxlength="128"
+                        required
+                        :aria-invalid="
+                            Boolean(sourceForm.errors.google_spreadsheet_id)
+                        "
+                    />
+                    <span
+                        v-if="sourceForm.errors.google_spreadsheet_id"
+                        class="text-sm font-normal text-[#a23e2b]"
+                        role="alert"
+                        >{{ sourceForm.errors.google_spreadsheet_id }}</span
+                    >
+                </label>
+                <p class="text-sm text-kgj-muted">
+                    Lead yang tidak ada di spreadsheet baru tidak dihapus atau
+                    diarsipkan otomatis.
+                </p>
+                <div
+                    v-if="sourcePreview"
+                    class="grid gap-3 rounded-xl border border-kgj-line bg-kgj-canvas p-4 text-sm sm:grid-cols-2"
+                >
+                    <p class="font-semibold text-kgj-ink sm:col-span-2">
+                        Dampak spreadsheet yang diperiksa
+                    </p>
+                    <p>
+                        <span class="block text-xs text-kgj-muted"
+                            >Baris lead</span
+                        >
+                        <span class="font-semibold tabular-nums">{{
+                            sourcePreview.rows
+                        }}</span>
+                    </p>
+                    <p>
+                        <span class="block text-xs text-kgj-muted"
+                            >Kontak cocok</span
+                        >
+                        <span class="font-semibold tabular-nums">{{
+                            sourcePreview.matching
+                        }}</span>
+                    </p>
+                    <p>
+                        <span class="block text-xs text-kgj-muted"
+                            >Lead baru</span
+                        >
+                        <span class="font-semibold tabular-nums">{{
+                            sourcePreview.new
+                        }}</span>
+                    </p>
+                    <p>
+                        <span class="block text-xs text-kgj-muted"
+                            >Data asal diperbarui</span
+                        >
+                        <span class="font-semibold tabular-nums">{{
+                            sourcePreview.updates
+                        }}</span>
+                    </p>
+                    <p
+                        v-if="sourcePreview.conflicts"
+                        class="text-kgj-rose sm:col-span-2"
+                    >
+                        {{ sourcePreview.conflicts }} kontak berasal dari cabang
+                        lain dan akan ditandai untuk ditinjau, bukan
+                        dipindahkan.
+                    </p>
+                    <p
+                        v-if="sourcePreview.missing_source_fields"
+                        class="text-kgj-gold-deep sm:col-span-2"
+                    >
+                        {{ sourcePreview.missing_source_fields }} kolom sumber
+                        kosong perlu dilengkapi di Google Sheets.
+                    </p>
+                    <p
+                        v-if="sourcePreview.failed_tabs"
+                        class="text-kgj-gold-deep sm:col-span-2"
+                    >
+                        {{ sourcePreview.failed_tabs }} tab perlu diperbaiki;
+                        tab valid tetap dapat disinkronkan.
+                    </p>
+                </div>
+                <p v-else class="text-xs text-kgj-muted">
+                    Periksa dampak terlebih dahulu. Spreadsheet tidak akan
+                    diganti sebelum pemeriksaan selesai.
+                </p>
+                <DialogFooter>
+                    <DialogClose as-child>
+                        <button class="kgj-button-secondary" type="button">
+                            Batalkan
+                        </button>
+                    </DialogClose>
+                    <button
+                        class="kgj-button-secondary"
+                        type="button"
+                        :disabled="
+                            sourceForm.processing ||
+                            !sourceForm.google_spreadsheet_id.trim()
+                        "
+                        @click="previewSource"
+                    >
+                        {{
+                            sourceForm.processing
+                                ? 'Memeriksa…'
+                                : 'Periksa dampak'
+                        }}
+                    </button>
+                    <button
+                        class="kgj-button-primary"
+                        type="button"
+                        :disabled="sourceForm.processing || !sourcePreview"
+                        @click="replaceSource"
+                    >
+                        {{
+                            sourceForm.processing
+                                ? 'Menyinkronkan…'
+                                : 'Simpan dan sinkronkan'
+                        }}
+                    </button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+        <Dialog
+            :open="Boolean(branchToDisconnect)"
+            @update:open="(open) => !open && (branchToDisconnect = null)"
+        >
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Putuskan koneksi Google Sheets?</DialogTitle>
+                    <DialogDescription>
+                        Sinkronisasi baru untuk cabang
+                        {{ branchToDisconnect?.name }} akan berhenti. Lead,
+                        penugasan CS, dan riwayat yang sudah tersimpan tidak
+                        akan dihapus.
+                    </DialogDescription>
+                </DialogHeader>
+                <p class="text-sm text-kgj-muted">
+                    Untuk mencabut akses Google sepenuhnya, hapus email Service
+                    Account dari pengaturan Share spreadsheet.
+                </p>
+                <DialogFooter>
+                    <DialogClose as-child>
+                        <button class="kgj-button-secondary" type="button">
+                            Batalkan
+                        </button>
+                    </DialogClose>
+                    <button
+                        class="inline-flex min-h-11 items-center justify-center rounded-lg bg-kgj-rose px-4 text-sm font-semibold text-white transition hover:bg-[#84362e]"
+                        type="button"
+                        @click="disconnectSource"
+                    >
+                        Putuskan koneksi
+                    </button>
+                </DialogFooter>
+            </DialogContent>
         </Dialog>
     </section>
 </template>

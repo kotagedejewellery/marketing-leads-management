@@ -27,7 +27,7 @@ class GoogleSheetSyncService
         private readonly DailyLeadTabParser $dailyLeadTabParser,
     ) {}
 
-    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
+    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
     public function sync(?int $actorId = null, ?int $branchId = null): array
     {
         $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
@@ -42,8 +42,96 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
-    private function syncUnlocked(?int $actorId, ?int $branchId): array
+    /** @return array{rows: int, matching: int, new: int, updates: int, conflicts: int, missing_source_fields: int, failed_tabs: int} */
+    public function previewReplacement(int $branchId, string $spreadsheetId): array
+    {
+        $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
+        if (! $lock->get()) {
+            throw new RuntimeException('Sinkronisasi Google Sheets sedang berjalan. Coba lagi beberapa saat lagi.');
+        }
+
+        try {
+            abort_unless(DB::table('branches')->where('id', $branchId)->exists(), 404);
+            $sourceData = $this->readBranch($this->googleClient(), $spreadsheetId);
+
+            return [
+                ...$this->leadImporter->preview($sourceData['rows'], $branchId),
+                'missing_source_fields' => $sourceData['missing_source_fields'],
+                'failed_tabs' => count($sourceData['errors']),
+            ];
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
+    public function replaceSource(?int $actorId, int $branchId, string $spreadsheetId): array
+    {
+        $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
+        if (! $lock->get()) {
+            throw new RuntimeException('Sinkronisasi Google Sheets sedang berjalan. Coba lagi beberapa saat lagi.');
+        }
+
+        try {
+            $branch = DB::table('branches')->where('id', $branchId)->first([
+                'id',
+                'google_spreadsheet_id',
+                'google_sheets_synced_at',
+                'google_sheets_sync_error',
+            ]) ?? abort(404);
+            DB::table('branches')->where('id', $branchId)->update([
+                'google_spreadsheet_id' => $spreadsheetId,
+                'google_sheets_synced_at' => null,
+                'google_sheets_sync_error' => null,
+            ]);
+
+            try {
+                $summary = $this->syncUnlocked($actorId, $branchId, true);
+            } catch (Throwable $exception) {
+                DB::table('branches')->where('id', $branchId)->update([
+                    'google_spreadsheet_id' => $branch->google_spreadsheet_id,
+                    'google_sheets_synced_at' => $branch->google_sheets_synced_at,
+                    'google_sheets_sync_error' => $branch->google_sheets_sync_error,
+                ]);
+                $this->recordSourceEvent($branchId, $actorId, 'replacement_failed', $branch->google_spreadsheet_id, $spreadsheetId, $this->failureMessage($exception));
+
+                throw $exception instanceof RuntimeException
+                    ? $exception
+                    : new RuntimeException($this->failureMessage($exception), previous: $exception);
+            }
+
+            $this->recordSourceEvent($branchId, $actorId, 'replaced', $branch->google_spreadsheet_id, $spreadsheetId, "{$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui.");
+
+            return $summary;
+        } finally {
+            $lock->release();
+        }
+    }
+
+    public function disconnect(?int $actorId, int $branchId): void
+    {
+        $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
+        if (! $lock->get()) {
+            throw new RuntimeException('Sinkronisasi Google Sheets sedang berjalan. Coba lagi beberapa saat lagi.');
+        }
+
+        try {
+            $branch = DB::table('branches')->where('id', $branchId)->first(['id', 'google_spreadsheet_id']) ?? abort(404);
+            DB::table('branches')->where('id', $branchId)->update([
+                'google_spreadsheet_id' => null,
+                'google_sheets_synced_at' => null,
+                'google_sheets_sync_error' => null,
+            ]);
+            if ($branch->google_spreadsheet_id) {
+                $this->recordSourceEvent($branchId, $actorId, 'disconnected', $branch->google_spreadsheet_id, null, 'Sinkronisasi Google Sheets dihentikan.');
+            }
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
+    private function syncUnlocked(?int $actorId, ?int $branchId, bool $refreshKnownSourceData = false): array
     {
         $sources = DB::table('branches')
             ->whereNotNull('google_spreadsheet_id')
@@ -54,17 +142,8 @@ class GoogleSheetSyncService
             throw new RuntimeException($branchId ? 'Cabang ini belum memiliki Spreadsheet ID.' : 'Belum ada Spreadsheet ID pada konfigurasi cabang.');
         }
 
-        $credentialsPath = (string) config('leads.google_sheets.credentials_path');
-        if ($credentialsPath === '' || ! is_readable($credentialsPath)) {
-            $message = 'File kredensial Google Sheets belum dikonfigurasi di server.';
-            $this->recordFailures($this->sourceIds($sources), $message);
-            $this->record('failed', null, $message);
-
-            throw new RuntimeException($message);
-        }
-
         try {
-            $accessToken = $this->accessToken($credentialsPath);
+            $client = $this->googleClient();
         } catch (Throwable $exception) {
             $message = $this->failureMessage($exception);
             $this->recordFailures($this->sourceIds($sources), $message);
@@ -73,18 +152,18 @@ class GoogleSheetSyncService
             throw new RuntimeException($message, previous: $exception);
         }
 
-        $client = Http::withToken($accessToken)->acceptJson()->timeout(25)->retry(3, 500);
-        $summary = ['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0, 'missing_source_fields' => 0, 'failed' => 0, 'partial' => 0];
+        $summary = ['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'awaiting_account' => 0, 'needs_review' => 0, 'missing_dates' => 0, 'missing_source_fields' => 0, 'failed' => 0, 'partial' => 0];
         $failures = [];
         foreach ($sources as $source) {
             try {
                 $sourceData = $this->readBranch($client, (string) $source->google_spreadsheet_id);
-                $sourceSummary = DB::transaction(function () use ($actorId, $source, $sourceData): array {
+                $sourceSummary = DB::transaction(function () use ($actorId, $source, $sourceData, $refreshKnownSourceData): array {
                     $importSummary = $this->leadImporter->import(
                         $sourceData['rows'],
                         $actorId,
                         (string) $source->google_spreadsheet_id,
                         (int) $source->id,
+                        $refreshKnownSourceData,
                     );
                     $partialError = $sourceData['errors'] === [] ? null : implode(' ', $sourceData['errors']);
                     $branchSummary = [...$importSummary, 'missing_source_fields' => $sourceData['missing_source_fields'], 'failed_tabs' => count($sourceData['errors'])];
@@ -97,7 +176,7 @@ class GoogleSheetSyncService
 
                     return $branchSummary;
                 });
-                foreach (['enriched', 'inserted', 'skipped', 'resurfaced', 'unassigned', 'needs_review', 'missing_dates', 'missing_source_fields'] as $key) {
+                foreach (['enriched', 'inserted', 'skipped', 'resurfaced', 'unassigned', 'awaiting_account', 'needs_review', 'missing_dates', 'missing_source_fields'] as $key) {
                     $summary[$key] += $sourceSummary[$key];
                 }
                 $summary['partial'] += $sourceSummary['failed_tabs'] > 0 ? 1 : 0;
@@ -167,6 +246,16 @@ class GoogleSheetSyncService
         return $accessToken;
     }
 
+    private function googleClient(): PendingRequest
+    {
+        $credentialsPath = (string) config('leads.google_sheets.credentials_path');
+        if ($credentialsPath === '' || ! is_readable($credentialsPath)) {
+            throw new RuntimeException('File kredensial Google Sheets belum dikonfigurasi di server.');
+        }
+
+        return Http::withToken($this->accessToken($credentialsPath))->acceptJson()->timeout(25)->retry(3, 500);
+    }
+
     /** @param array<int, int> $branchIds */
     private function recordFailures(array $branchIds, string $message): void
     {
@@ -194,6 +283,19 @@ class GoogleSheetSyncService
             DB::table('branches')->where('id', $branchId)->update(['google_sheets_sync_error' => $message]);
             $this->record('failed', null, $message, $branchId);
         });
+    }
+
+    private function recordSourceEvent(int $branchId, ?int $actorId, string $action, ?string $previousSpreadsheetId, ?string $spreadsheetId, ?string $detail = null): void
+    {
+        DB::table('branch_source_events')->insert([
+            'branch_id' => $branchId,
+            'actor_id' => $actorId,
+            'action' => $action,
+            'previous_spreadsheet_id' => $previousSpreadsheetId,
+            'spreadsheet_id' => $spreadsheetId,
+            'detail' => $detail,
+            'created_at' => now(),
+        ]);
     }
 
     private function failureMessage(Throwable $exception): string

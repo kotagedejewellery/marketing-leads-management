@@ -619,6 +619,7 @@ class DashboardController extends Controller
 
     public function linkAwaitingLeadsToAccount(Request $request, int $account): RedirectResponse
     {
+        /** @var object{id: int, name: string, branch_id: int|null} $record */
         $record = DB::table('users')->where('id', $account)->where('role', 'cs')->where('active', true)->first(['id', 'name', 'branch_id']) ?? abort(404);
         $sourceNameKeys = $this->sourceNameKeysForAccount($record);
         $this->assertSourceNameKeysUnambiguous($record, $sourceNameKeys);
@@ -668,6 +669,7 @@ class DashboardController extends Controller
 
     public function reconcileSourceLeadsToAccount(Request $request, int $account): RedirectResponse
     {
+        /** @var object{id: int, name: string, branch_id: int|null} $record */
         $record = DB::table('users')->where('id', $account)->where('role', 'cs')->where('active', true)->first(['id', 'name', 'branch_id']) ?? abort(404);
         $sourceNameKeys = $this->sourceNameKeysForAccount($record);
         $this->assertSourceNameKeysUnambiguous($record, $sourceNameKeys);
@@ -799,17 +801,22 @@ class DashboardController extends Controller
         }
     }
 
-    /** @return list<string> */
+    /**
+     * @param  object{id: int, name: string, branch_id: int|null}  $account
+     * @return list<string>
+     */
     private function sourceNameKeysForAccount(object $account): array
     {
-        return collect([CsName::key((string) $account->name)])
+        return array_values(collect([CsName::key((string) $account->name)])
             ->concat(DB::table('cs_source_name_aliases')->where('user_id', $account->id)->where('branch_id', $account->branch_id)->pluck('source_name_key')->map(fn (string $key): string => CsName::key($key)))
             ->unique()
-            ->values()
-            ->all();
+            ->all());
     }
 
-    /** @param list<string> $sourceNameKeys */
+    /**
+     * @param  object{id: int, name: string, branch_id: int|null}  $account
+     * @param  list<string>  $sourceNameKeys
+     */
     private function assertSourceNameKeysUnambiguous(object $account, array $sourceNameKeys): void
     {
         $owners = [];

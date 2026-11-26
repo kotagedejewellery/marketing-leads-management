@@ -24,6 +24,7 @@ class LeadImportService
     public function import(array $rows, ?int $actorId, ?string $spreadsheetId = null, ?int $sourceBranchId = null, bool $refreshKnownSourceData = false): array
     {
         $known = $this->knownContacts($rows);
+        /** @var object{id: int, name: string, default_import_user_id: int|null, default_import_name: string|null}|null $sourceBranch */
         $sourceBranch = $sourceBranchId
             ? DB::table('branches as b')
                 ->leftJoin('users as u', fn ($join) => $join->on('u.id', '=', 'b.default_import_user_id')
@@ -33,8 +34,9 @@ class LeadImportService
                 ->where('b.id', $sourceBranchId)
                 ->first(['b.id', 'b.name', 'u.id as default_import_user_id', 'u.name as default_import_name'])
             : null;
+        /** @var (object{id: int, name: string}&\stdClass)|null $branchOwner */
         $branchOwner = $sourceBranch?->default_import_user_id
-            ? (object) ['id' => $sourceBranch->default_import_user_id, 'name' => $sourceBranch->default_import_name]
+            ? (object) ['id' => (int) $sourceBranch->default_import_user_id, 'name' => (string) $sourceBranch->default_import_name]
             : null;
         if ($sourceBranchId && ! $sourceBranch) {
             throw new \RuntimeException('Cabang sumber tidak ditemukan.');
@@ -266,8 +268,10 @@ class LeadImportService
         return $summary;
     }
 
-    /** @param list<array<string, string|null>> $rows
-     *  @return array<string, array<string, int|string|null>> */
+    /**
+     * @param  list<array<string, string|null>>  $rows
+     * @return array<string, array{id: int, source_branch_id: int|null, source_branch_name: string|null, source_date_raw: string|null, lead_created_on: string|null, respond_time: string|null, imported_cs_name: string|null, imported_keterangan: string|null, raw_kebutuhan: string|null, greeting: string|null, chat_time: string|null, source_description: string|null, campaign_description: string|null, imported_definition: string|null}>
+     */
     private function knownContacts(array $rows): array
     {
         $keys = [];
@@ -467,6 +471,7 @@ class LeadImportService
 
     /**
      * @param  array<string, int|null>  $csByName
+     * @param  object{id: int, name: string}|null  $branchOwner
      * @return array{0: int|null, 1: 'manual'|'source_matched'|'fallback'|'awaiting_account'|'unassigned'}
      */
     private function resolveOwner(string $sourceCsName, ?int $sourceBranchId, ?object $branchOwner, array $csByName): array
@@ -484,7 +489,11 @@ class LeadImportService
         return [null, 'unassigned'];
     }
 
-    /** @param array<string, string|null> $row */
+    /**
+     * @param  array<string, string|null>  $row
+     * @param  object{name: string}|null  $sourceBranch
+     * @param  object{id: int, name: string}|null  $branchOwner
+     */
     private function ownerImportDetail(array $row, ?object $sourceBranch, ?object $branchOwner, string $sourceCsName, ?int $owner, string $ownerResolution): string
     {
         $source = $row['source_tab']

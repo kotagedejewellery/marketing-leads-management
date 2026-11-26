@@ -679,7 +679,7 @@ class DashboardTest extends TestCase
         $this->actingAs($admin)->get('/branches')->assertInertia(
             fn (Assert $page) => $page
                 ->component('Branches/Index')
-                ->where('branches.0.import_status', 'Butuh akun CS aktif'),
+                ->where('branches.0.import_status', 'Nama CS kosong perlu fallback impor'),
         );
     }
 

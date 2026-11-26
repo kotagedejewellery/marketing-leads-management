@@ -460,6 +460,14 @@ class DashboardController extends Controller
             ->when($branchId, fn ($query) => $query->where('occurrence.source_branch_id', '!=', $branchId))
             ->orderBy('branch.name')
             ->value('branch.name');
+        $sourceBranch ??= DB::table('lead_source_occurrences as occurrence')
+            ->join('leads as lead', 'lead.id', '=', 'occurrence.lead_id')
+            ->join('branches as branch', 'branch.id', '=', 'lead.source_branch_id')
+            ->where('occurrence.spreadsheet_id', $spreadsheetId)
+            ->whereNull('occurrence.source_branch_id')
+            ->when($branchId, fn ($query) => $query->where('lead.source_branch_id', '!=', $branchId))
+            ->orderBy('branch.name')
+            ->value('branch.name');
         if ($sourceBranch) {
             throw ValidationException::withMessages(['google_spreadsheet_id' => "Spreadsheet ini memiliki riwayat sumber lead di cabang {$sourceBranch}. Gunakan alur pindah sumber khusus agar atribusi lead tetap tepat."]);
         }

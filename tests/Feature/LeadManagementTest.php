@@ -593,9 +593,9 @@ class LeadManagementTest extends TestCase
         $writer = new Writer;
         $writer->openToFile($path);
 
-        $this->writeDailyLeadSheet($writer, '1', '1 November 2026', '+62 851-7777-4444');
+        $this->writeDailyLeadSheet($writer, '1', '1 November 2026', '+62 851-7777-4444', '');
         $writer->addNewSheetAndMakeItCurrent();
-        $this->writeDailyLeadSheet($writer, '2', '2 November 2026', '+62 851-7777-5555');
+        $this->writeDailyLeadSheet($writer, '2', '2 November 2026', '+62 851-7777-5555', '');
         $writer->addNewSheetAndMakeItCurrent()->setName('All Leads');
         $writer->addRow(Row::fromValues(['Tanggal', 'Nama/Nomor']));
         $writer->addRow(Row::fromValues(['1', '+62 851-7777-6666']));
@@ -611,7 +611,7 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseCount('leads', 2);
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177774444', 'source_date_raw' => '1 November 2026', 'lead_created_on' => '2026-11-01', 'source_branch_id' => $branchId, 'assigned_user_id' => $cs->id]);
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177775555', 'source_date_raw' => '2 November 2026']);
-        $this->assertDatabaseHas('lead_activity', ['action' => 'Diimpor dari tab harian', 'detail' => 'Sumber: tab 1 (1 November 2026). Ditugaskan otomatis ke CS Yogyakarta (Yogyakarta).']);
+        $this->assertDatabaseHas('lead_activity', ['action' => 'Diimpor dari tab harian', 'detail' => 'Sumber: tab 1 (1 November 2026). Nama CS sumber kosong; ditugaskan sementara ke CS Yogyakarta (Yogyakarta).']);
         $this->assertDatabaseMissing('leads', ['contact_key' => 'phone:6285177776666']);
         @unlink($path);
     }
@@ -1400,7 +1400,7 @@ class LeadManagementTest extends TestCase
             'source_tab' => '1',
             'contact_raw' => '+62 851-7777-1998 Rini',
             'respond_time' => '0',
-            'imported_cs_name' => 'CS lama',
+            'imported_cs_name' => '',
             'imported_keterangan' => 'tanya-tanya',
             'raw_kebutuhan' => 'cincin nikah',
             'greeting' => 'Halo',
@@ -2123,13 +2123,13 @@ class LeadManagementTest extends TestCase
         return $user;
     }
 
-    private function writeDailyLeadSheet(Writer $writer, string $tab, string $date, string $phone): void
+    private function writeDailyLeadSheet(Writer $writer, string $tab, string $date, string $phone, string $csName = 'Dila'): void
     {
         $writer->getCurrentSheet()->setName($tab);
         $writer->addRow(Row::fromValues([null, 'Monitoring Leads']));
         $writer->addRow(Row::fromValues([null, $date]));
         $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['Whatsapp 1'])));
         $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting*', 'Waktu Chat', 'Keterangan Sumber*', 'Keterangan Campaign*', 'Definisi Leads'])));
-        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['1', $phone, '0', 'Dila', 'klik saja', 'nikah', 'halo', '10.38', 'Iklan', 'Bio', 'Cold'])));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['1', $phone, '0', $csName, 'klik saja', 'nikah', 'halo', '10.38', 'Iklan', 'Bio', 'Cold'])));
     }
 }

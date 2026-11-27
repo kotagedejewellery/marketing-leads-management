@@ -212,7 +212,10 @@ class LeadController extends Controller
             $message .= " {$summary['partial']} cabang memiliki tab yang perlu diperbaiki; data dari tab valid tetap masuk.";
         }
         if ($summary['missing_dates']) {
-            $message .= " {$summary['missing_dates']} lead baru tanpa tanggal lead; periksa format tanggal sumber.";
+            $message .= " {$summary['missing_dates']} lead baru tanpa tanggal lead; periksa bulan dan tahun pada judul spreadsheet serta nomor tab.";
+        }
+        if ($summary['chat_time_review'] > 0) {
+            $message .= " {$summary['chat_time_review']} waktu chat perlu diperiksa melalui menu Cabang.";
         }
         if ($summary['missing_source_fields']) {
             $message .= " {$summary['missing_source_fields']} kolom sumber kosong perlu dilengkapi di Google Sheets.";
@@ -221,7 +224,7 @@ class LeadController extends Controller
             $message .= " {$summary['awaiting_account']} lead menunggu akun CS dari Nama CS sumber.";
         }
         Inertia::flash('toast', [
-            'type' => $summary['failed'] ? 'error' : ($summary['partial'] ? 'warning' : 'success'),
+            'type' => $summary['failed'] ? 'error' : ($summary['partial'] || $summary['chat_time_review'] > 0 ? 'warning' : 'success'),
             'message' => $message,
         ]);
 

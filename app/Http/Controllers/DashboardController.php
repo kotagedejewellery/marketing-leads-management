@@ -426,7 +426,11 @@ class DashboardController extends Controller
             return back();
         }
 
-        Inertia::flash('toast', ['type' => $summary['partial'] ? 'warning' : 'success', 'message' => "Spreadsheet sumber diperbarui: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui. Data kerja CS tetap dipertahankan."]);
+        $message = "Spreadsheet sumber diperbarui: {$summary['inserted']} lead baru, {$summary['enriched']} data sumber diperbarui. Data kerja CS tetap dipertahankan.";
+        if ($summary['chat_time_review'] > 0) {
+            $message .= " {$summary['chat_time_review']} waktu chat perlu diperiksa melalui Periksa data historis.";
+        }
+        Inertia::flash('toast', ['type' => $summary['partial'] || $summary['chat_time_review'] > 0 ? 'warning' : 'success', 'message' => $message]);
 
         return back();
     }
@@ -610,7 +614,13 @@ class DashboardController extends Controller
         if ($summary['missing_source_fields']) {
             $message .= " {$summary['missing_source_fields']} kolom sumber kosong perlu dilengkapi di Google Sheets.";
         }
-        Inertia::flash('toast', ['type' => $summary['failed'] ? 'error' : ($summary['partial'] ? 'warning' : 'success'), 'message' => $summary['failed'] ? 'Sinkronisasi cabang gagal. Periksa konfigurasi atau akun CS.' : $message]);
+        if ($summary['missing_dates']) {
+            $message .= " {$summary['missing_dates']} lead baru tanpa tanggal; periksa bulan dan tahun pada judul spreadsheet serta nomor tab.";
+        }
+        if ($summary['chat_time_review'] > 0) {
+            $message .= " {$summary['chat_time_review']} waktu chat perlu diperiksa melalui Periksa data historis.";
+        }
+        Inertia::flash('toast', ['type' => $summary['failed'] ? 'error' : ($summary['partial'] || $summary['chat_time_review'] > 0 ? 'warning' : 'success'), 'message' => $summary['failed'] ? 'Sinkronisasi cabang gagal. Periksa konfigurasi atau akun CS.' : $message]);
 
         return back();
     }

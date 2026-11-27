@@ -23,6 +23,9 @@ class SyncGoogleLeads extends Command
         }
 
         $this->info("{$summary['inserted']} baru, {$summary['enriched']} diperbarui, {$summary['resurfaced']} muncul kembali, {$summary['awaiting_account']} menunggu akun CS, {$summary['missing_source_fields']} kolom sumber kosong.");
+        if ($summary['chat_time_review'] > 0) {
+            $this->warn("{$summary['chat_time_review']} waktu chat perlu diperiksa melalui menu Cabang.");
+        }
 
         return self::SUCCESS;
     }

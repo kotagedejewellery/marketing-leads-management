@@ -585,7 +585,10 @@ function destroyLead() {
                             label: 'Nama CS sumber',
                             value: lead.imported_cs_name,
                         },
-                        { label: 'Waktu chat', value: lead.chat_time },
+                        {
+                            label: 'Waktu chat sumber (periksa tanggal)',
+                            value: lead.chat_time,
+                        },
                         { label: 'Sumber', value: lead.source_description },
                         { label: 'Campaign', value: lead.campaign_description },
                         { label: 'Greeting', value: lead.greeting },

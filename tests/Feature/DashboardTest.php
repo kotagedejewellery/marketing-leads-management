@@ -238,6 +238,7 @@ class DashboardTest extends TestCase
                 'unassigned' => 0,
                 'needs_review' => 0,
                 'missing_dates' => 0,
+                'chat_time_review' => 0,
                 'missing_source_fields' => 0,
                 'failed' => 0,
                 'partial' => 0,
@@ -247,6 +248,21 @@ class DashboardTest extends TestCase
         $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/replace-google-sheet", [
             'google_spreadsheet_id' => 'sheet-baru',
         ])->assertRedirect('/branches');
+    }
+
+    public function test_branch_sync_warns_when_chat_time_needs_review(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $sync = \Mockery::mock(GoogleSheetSyncService::class);
+        $sync->shouldReceive('sync')->once()->with($admin->id, $branchId)->andReturn([
+            'inserted' => 0, 'enriched' => 0, 'partial' => 0, 'failed' => 0,
+            'missing_source_fields' => 0, 'missing_dates' => 0, 'chat_time_review' => 1,
+        ]);
+        $this->app->instance(GoogleSheetSyncService::class, $sync);
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/sync-google-sheet")
+            ->assertSessionHas('inertia.flash_data.toast.type', 'warning')
+            ->assertSessionHas('inertia.flash_data.toast.message', fn (string $message) => str_contains($message, '1 waktu chat perlu diperiksa'));
     }
 
     public function test_admin_cannot_reuse_a_historical_sheet_for_a_different_branch(): void
@@ -333,6 +349,7 @@ class DashboardTest extends TestCase
                 'unassigned' => 0,
                 'needs_review' => 1,
                 'missing_dates' => 0,
+                'chat_time_review' => 0,
                 'missing_source_fields' => 0,
                 'failed' => 0,
                 'partial' => 0,

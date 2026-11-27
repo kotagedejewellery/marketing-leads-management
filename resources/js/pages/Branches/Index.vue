@@ -33,6 +33,7 @@ type Branch = {
             inserted?: number;
             enriched?: number;
             awaiting_account?: number;
+            chat_time_review?: number;
             failed_tabs?: number;
         } | null;
         error: string | null;
@@ -73,6 +74,8 @@ type ReconciliationPreview = {
         new_date: string;
         old_cs: string | null;
         new_cs: string | null;
+        old_chat_time: string | null;
+        new_chat_time: string | null;
     }[];
     conflicts: number;
     uncertain: number;
@@ -154,7 +157,7 @@ const syncSummary = (branch: Branch) => {
     const summary = branch.last_sync?.summary;
     if (!summary) return '';
 
-    const detail = `${summary.inserted || 0} lead baru · ${summary.enriched || 0} data diperbarui${summary.awaiting_account ? ` · ${summary.awaiting_account} menunggu akun CS` : ''}`;
+    const detail = `${summary.inserted || 0} lead baru · ${summary.enriched || 0} data diperbarui${summary.awaiting_account ? ` · ${summary.awaiting_account} menunggu akun CS` : ''}${summary.chat_time_review ? ` · ${summary.chat_time_review} waktu chat perlu diperiksa di Periksa data historis` : ''}`;
 
     return summary.failed_tabs
         ? `${detail} · ${summary.failed_tabs} tab perlu diperbaiki`
@@ -1060,8 +1063,8 @@ const syncBranch = (branch: Branch) =>
                         {{ reconciliationBranch?.name }}</DialogTitle
                     >
                     <DialogDescription>
-                        Bandingkan tanggal dan nama CS dengan tab sumber. Data
-                        kerja dan penugasan CS tidak diubah.
+                        Bandingkan tanggal, nama CS, dan waktu chat dengan tab
+                        sumber. Data kerja dan penugasan CS tidak diubah.
                     </DialogDescription>
                 </DialogHeader>
                 <p
@@ -1108,6 +1111,7 @@ const syncBranch = (branch: Branch) =>
                                     <th class="p-3">Lead / tab</th>
                                     <th class="p-3">Tanggal lama → sumber</th>
                                     <th class="p-3">CS lama → sumber</th>
+                                    <th class="p-3">Waktu chat lama → hasil</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1129,6 +1133,10 @@ const syncBranch = (branch: Branch) =>
                                     <td class="p-3">
                                         {{ change.old_cs || '—' }} →
                                         {{ change.new_cs || '—' }}
+                                    </td>
+                                    <td class="p-3">
+                                        {{ change.old_chat_time || '—' }} →
+                                        {{ change.new_chat_time || '—' }}
                                     </td>
                                 </tr>
                             </tbody>

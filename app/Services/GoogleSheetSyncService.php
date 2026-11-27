@@ -28,7 +28,7 @@ class GoogleSheetSyncService
         private readonly DailyLeadTabParser $dailyLeadTabParser,
     ) {}
 
-    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
+    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, chat_time_review: int, missing_source_fields: int, failed: int, partial: int} */
     public function sync(?int $actorId = null, ?int $branchId = null): array
     {
         $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
@@ -65,7 +65,7 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{spreadsheet_id: string, spreadsheet_title: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
+    /** @return array{spreadsheet_id: string, spreadsheet_title: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
     public function previewReconciliation(int $branchId): array
     {
         $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
@@ -98,7 +98,7 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{spreadsheet_id: string, spreadsheet_title: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
+    /** @return array{spreadsheet_id: string, spreadsheet_title: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
     private function reconciliationPlan(int $branchId): array
     {
         $spreadsheetId = DB::table('branches')->where('id', $branchId)->value('google_spreadsheet_id');
@@ -110,7 +110,7 @@ class GoogleSheetSyncService
         return ['spreadsheet_id' => $spreadsheetId, 'spreadsheet_title' => $sourceData['spreadsheet_title'] ?? '', ...$this->leadImporter->previewReconciliation($sourceData['rows'], $branchId), 'failed_tabs' => count($sourceData['errors'])];
     }
 
-    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
+    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, chat_time_review: int, missing_source_fields: int, failed: int, partial: int} */
     public function replaceSource(?int $actorId, int $branchId, string $spreadsheetId): array
     {
         $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
@@ -176,7 +176,7 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
+    /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, chat_time_review: int, missing_source_fields: int, failed: int, partial: int} */
     private function syncUnlocked(?int $actorId, ?int $branchId, bool $refreshKnownSourceData = false): array
     {
         $sources = DB::table('branches')
@@ -198,7 +198,7 @@ class GoogleSheetSyncService
             throw new RuntimeException($message, previous: $exception);
         }
 
-        $summary = ['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'awaiting_account' => 0, 'needs_review' => 0, 'missing_dates' => 0, 'missing_source_fields' => 0, 'failed' => 0, 'partial' => 0];
+        $summary = ['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 0, 'awaiting_account' => 0, 'needs_review' => 0, 'missing_dates' => 0, 'chat_time_review' => 0, 'missing_source_fields' => 0, 'failed' => 0, 'partial' => 0];
         $failures = [];
         foreach ($sources as $source) {
             try {
@@ -212,7 +212,8 @@ class GoogleSheetSyncService
                         $refreshKnownSourceData,
                     );
                     $partialError = $sourceData['errors'] === [] ? null : implode(' ', $sourceData['errors']);
-                    $branchSummary = [...$importSummary, 'missing_source_fields' => $sourceData['missing_source_fields'], 'failed_tabs' => count($sourceData['errors'])];
+                    $chatTimeReview = $this->leadImporter->previewReconciliation($sourceData['rows'], (int) $source->id)['chat_time_review'];
+                    $branchSummary = [...$importSummary, 'chat_time_review' => $chatTimeReview, 'missing_source_fields' => $sourceData['missing_source_fields'], 'failed_tabs' => count($sourceData['errors'])];
 
                     DB::table('branches')->where('id', $source->id)->update([
                         'google_sheets_synced_at' => now(),
@@ -222,7 +223,7 @@ class GoogleSheetSyncService
 
                     return $branchSummary;
                 });
-                foreach (['enriched', 'inserted', 'skipped', 'resurfaced', 'unassigned', 'awaiting_account', 'needs_review', 'missing_dates', 'missing_source_fields'] as $key) {
+                foreach (['enriched', 'inserted', 'skipped', 'resurfaced', 'unassigned', 'awaiting_account', 'needs_review', 'missing_dates', 'chat_time_review', 'missing_source_fields'] as $key) {
                     $summary[$key] += $sourceSummary[$key];
                 }
                 $summary['partial'] += $sourceSummary['failed_tabs'] > 0 ? 1 : 0;

@@ -1168,6 +1168,85 @@ class LeadManagementTest extends TestCase
         ]);
     }
 
+    public function test_reconciliation_pairs_chat_time_with_first_source_tab(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $importer = app(LeadImportService::class);
+        $first = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla', 'chat_time' => '09.17'];
+        $later = [...$first, 'source_tab' => '13', 'source_date_raw' => '2026-11-13', 'chat_time' => '16.56'];
+        $importer->import([$first], null, 'sheet', $branchId);
+        \DB::table('leads')->where('contact_key', 'phone:6281234567890')->update(['lead_created_on' => null, 'chat_time' => '16.56']);
+        $preview = $importer->previewReconciliation([$later, $first], $branchId);
+        $this->assertSame('09.17', $preview['changes'][0]['new_chat_time']);
+        $importer->applyReconciliation($preview['changes'], $branchId, $cs->id);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567890', 'lead_created_on' => '2026-11-01', 'chat_time' => '09.17']);
+    }
+
+    public function test_later_source_tab_does_not_overwrite_first_chat_time(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $importer = app(LeadImportService::class);
+        $first = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla', 'chat_time' => '09.17'];
+        $later = [...$first, 'source_tab' => '13', 'source_date_raw' => '2026-11-13', 'chat_time' => '16.56'];
+        $importer->import([$first, $later], null, 'sheet', $branchId);
+        $importer->import([$later], null, 'sheet', $branchId);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567890', 'lead_created_on' => '2026-11-01', 'chat_time' => '09.17']);
+    }
+
+    public function test_reconciliation_retains_chat_time_when_first_day_is_ambiguous(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $importer = app(LeadImportService::class);
+        $first = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla', 'chat_time' => '09.17'];
+        $importer->import([$first], null, 'sheet', $branchId);
+        $preview = $importer->previewReconciliation([$first, [...$first, 'source_row_no' => '2', 'chat_time' => '16.56']], $branchId);
+        $this->assertSame([], $preview['changes']);
+        $this->assertSame(0, $preview['matched']);
+        $this->assertStringContainsString('Waktu chat', $preview['review'][0]['reason']);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567890', 'chat_time' => '09.17']);
+    }
+
+    public function test_reconciliation_marks_missing_first_chat_time_for_review(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $importer = app(LeadImportService::class);
+        $row = ['source_tab' => '13', 'source_row_no' => '1', 'source_date_raw' => '2026-11-13', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla', 'chat_time' => '16.56'];
+        $importer->import([$row], null, 'sheet', $branchId);
+        $preview = $importer->previewReconciliation([[...$row, 'source_tab' => '1', 'source_date_raw' => '2026-11-01', 'chat_time' => '']], $branchId);
+        $this->assertSame('16.56', $preview['changes'][0]['new_chat_time']);
+        $this->assertStringContainsString('Waktu chat', $preview['review'][0]['reason']);
+        $this->assertSame(0, $preview['matched']);
+    }
+
+    public function test_google_sheet_sync_reports_changed_first_chat_time_for_admin_review(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $row = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla', 'chat_time' => ''];
+        app(LeadImportService::class)->import([$row], null, 'sheet', $branchId);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+        $sync->shouldReceive('readBranch')->once()->andReturn(['rows' => [[...$row, 'chat_time' => '09.17']], 'missing_source_fields' => 0, 'errors' => []]);
+        $summary = $sync->sync(null, $branchId);
+        $this->assertSame(1, $summary['chat_time_review']);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567890', 'chat_time' => '']);
+    }
+
+    public function test_google_sheet_sync_reports_conflicting_chat_times_on_first_import(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $row = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla', 'chat_time' => '09.17'];
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+        $sync->shouldReceive('readBranch')->once()->andReturn(['rows' => [$row, [...$row, 'source_row_no' => '2', 'chat_time' => '16.56']], 'missing_source_fields' => 0, 'errors' => []]);
+        $this->assertSame(1, $sync->sync(null, $branchId)['chat_time_review']);
+    }
+
     public function test_reconciliation_reports_missing_leads_and_protects_older_dates(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);

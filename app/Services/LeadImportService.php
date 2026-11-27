@@ -275,7 +275,7 @@ class LeadImportService
 
     /**
      * @param  list<array<string, string|null>>  $rows
-     * @return array{changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, review: list<array{contact: string, tab: string, reason: string}>}
+     * @return array{changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>}
      */
     public function previewReconciliation(array $rows, int $branchId): array
     {
@@ -317,13 +317,14 @@ class LeadImportService
 
                 continue;
             }
-            $groups[$id]['rows'][] = ['date' => $date, 'name' => $name, 'tab' => (string) $row['source_tab'], 'contact' => $contact];
+            $groups[$id]['rows'][] = ['date' => $date, 'name' => $name, 'tab' => (string) $row['source_tab'], 'contact' => $contact, 'chat_time' => trim((string) ($row['chat_time'] ?? ''))];
         }
 
         ksort($groups);
         $changes = [];
         $uncertain = count($ambiguous);
         $matched = 0;
+        $chatTimeReview = 0;
         $review = [...array_values($conflicts), ...array_values($ambiguous)];
         $missingCount = 0;
         $missing = DB::table('leads')->where('source_branch_id', $branchId)->orderBy('id')->get(['id', 'contact_raw']);
@@ -344,9 +345,11 @@ class LeadImportService
             usort($sourceRows, fn (array $a, array $b): int => $a['date'] <=> $b['date']);
             $first = $sourceRows[0];
             $names = [];
+            $times = [];
             foreach ($sourceRows as $sourceRow) {
                 if ($sourceRow['date'] === $first['date']) {
                     $names[CsName::key($sourceRow['name'])] = $sourceRow['name'];
+                    $times[$sourceRow['chat_time']] = true;
                 }
             }
             $lead = $group['lead'];
@@ -357,13 +360,31 @@ class LeadImportService
                 continue;
             }
             $newCs = $first['name'];
+            $needsReview = false;
             if (count($names) !== 1 || $newCs === '') {
-                $uncertain++;
+                $needsReview = true;
                 $review[] = ['contact' => $group['contact'], 'tab' => $group['tab'], 'reason' => 'Nama CS pada tanggal pertama kosong atau saling berbeda; tanggal diperiksa terpisah.'];
                 $newCs = $lead['imported_cs_name'];
             }
-            if ($lead['lead_created_on'] === $first['date'] && $lead['imported_cs_name'] === $newCs) {
-                $matched++;
+            $newChatTime = $lead['chat_time'];
+            if (count($times) === 1 && $first['chat_time'] !== '') {
+                $newChatTime = $first['chat_time'];
+                if ($newChatTime !== $lead['chat_time']) {
+                    $chatTimeReview++;
+                }
+            } elseif (count($times) > 1 || $lead['chat_time'] !== null && $lead['chat_time'] !== '') {
+                $chatTimeReview++;
+                $needsReview = true;
+                $reason = count($times) > 1
+                    ? 'Waktu chat pada tanggal pertama berbeda; periksa sumber.'
+                    : 'Waktu chat pada tanggal pertama kosong; waktu tersimpan belum terverifikasi.';
+                $review[] = ['contact' => $group['contact'], 'tab' => $group['tab'], 'reason' => $reason];
+            }
+            if ($needsReview) {
+                $uncertain++;
+            }
+            if ($lead['lead_created_on'] === $first['date'] && $lead['imported_cs_name'] === $newCs && $lead['chat_time'] === $newChatTime) {
+                $matched += $needsReview ? 0 : 1;
 
                 continue;
             }
@@ -372,13 +393,14 @@ class LeadImportService
                 'old_date' => $lead['lead_created_on'], 'new_date' => $first['date'],
                 'old_source_date' => $lead['source_date_raw'], 'old_revision' => $lead['revision'],
                 'old_cs' => $lead['imported_cs_name'], 'new_cs' => $newCs,
+                'old_chat_time' => $lead['chat_time'], 'new_chat_time' => $newChatTime,
             ];
         }
 
-        return ['changes' => $changes, 'matched' => $matched, 'conflicts' => count($conflicts), 'uncertain' => $uncertain, 'missing' => $missingCount, 'review' => $review];
+        return ['changes' => $changes, 'matched' => $matched, 'conflicts' => count($conflicts), 'uncertain' => $uncertain, 'missing' => $missingCount, 'chat_time_review' => $chatTimeReview, 'review' => $review];
     }
 
-    /** @param list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null}> $changes */
+    /** @param list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}> $changes */
     public function applyReconciliation(array $changes, int $branchId, int $actorId): int
     {
         return DB::transaction(function () use ($changes, $branchId, $actorId): int {
@@ -386,13 +408,14 @@ class LeadImportService
                 $lead = DB::table('leads')->where('id', $change['lead_id'])->lockForUpdate()->first();
                 if (! $lead || (int) $lead->source_branch_id !== $branchId
                     || $lead->lead_created_on !== $change['old_date'] || $lead->source_date_raw !== $change['old_source_date']
-                    || (int) $lead->revision !== $change['old_revision'] || $lead->imported_cs_name !== $change['old_cs']) {
+                    || (int) $lead->revision !== $change['old_revision'] || $lead->imported_cs_name !== $change['old_cs'] || $lead->chat_time !== $change['old_chat_time']) {
                     throw new \RuntimeException('Data lead berubah setelah pratinjau. Periksa kembali sebelum melanjutkan.');
                 }
                 $updates = [
                     'lead_created_on' => $change['new_date'],
                     'source_date_raw' => $change['old_date'] === $change['new_date'] ? $change['old_source_date'] : $change['new_date'],
                     'imported_cs_name' => $change['new_cs'],
+                    'chat_time' => $change['new_chat_time'],
                     'updated_at' => now(),
                     'revision' => DB::raw('revision + 1'),
                 ];
@@ -403,7 +426,7 @@ class LeadImportService
                 DB::table('lead_activity')->insert([
                     'lead_id' => $change['lead_id'], 'actor_id' => $actorId,
                     'action' => 'Data sumber direkonsiliasi',
-                    'detail' => "Tab {$change['tab']}: tanggal ".($change['old_date'] ?? 'kosong')." menjadi {$change['new_date']}; Nama CS ".($change['old_cs'] ?? 'kosong')." menjadi {$change['new_cs']}.",
+                    'detail' => "Tab {$change['tab']}: tanggal ".($change['old_date'] ?? 'kosong')." menjadi {$change['new_date']}; Nama CS ".($change['old_cs'] ?? 'kosong')." menjadi {$change['new_cs']}; waktu chat ".($change['old_chat_time'] ?? 'kosong').' menjadi '.($change['new_chat_time'] ?? 'kosong').'.',
                     'created_at' => now(),
                 ]);
             }
@@ -523,7 +546,7 @@ class LeadImportService
         $updates = [];
         foreach ([
             'respond_time', 'imported_keterangan', 'raw_kebutuhan',
-            'greeting', 'chat_time', 'source_description', 'campaign_description',
+            'greeting', 'source_description', 'campaign_description',
         ] as $field) {
             $value = $row[$field] ?? null;
             if ($value !== null && $value !== '' && ($lead[$field] ?? null) !== $value) {

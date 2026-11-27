@@ -30,15 +30,15 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/DashboardController.php": {
-    "mtime": 1795751133.164045,
-    "seen": 1795751211.4621394,
-    "ast_hash": "2a08e0e9419204b5226f2f209ac8147d",
+    "mtime": 1795760144.251677,
+    "seen": 1795760220.18414,
+    "ast_hash": "a0649c1580401d6eeb8ec26b10698ef0",
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
-    "mtime": 1795749372.0156884,
-    "seen": 1795749397.2906651,
-    "ast_hash": "648800812d65badabbe0e7b1e3bd494d",
+    "mtime": 1795760688.258061,
+    "seen": 1795760739.676246,
+    "ast_hash": "cd37c5071ff1cb0bdd9c856c9e3c639c",
     "semantic_hash": ""
   },
   "app/Http/Controllers/Settings/ProfileController.php": {
@@ -1428,9 +1428,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Branches/Index.vue": {
-    "mtime": 1795751771.4619055,
-    "seen": 1795751789.3586333,
-    "ast_hash": "44f3e8a6dd8bbc08d7b8a402f2cb1940",
+    "mtime": 1795760723.8119407,
+    "seen": 1795760739.6768353,
+    "ast_hash": "e9cb0b4800637b0ea3eaf1fe939c907b",
     "semantic_hash": ""
   },
   "resources/js/pages/Dashboard.vue": {
@@ -1440,9 +1440,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1795750871.918591,
-    "seen": 1795750950.4157357,
-    "ast_hash": "ac25f1b8bea2207b49607e997565a305",
+    "mtime": 1795760124.505144,
+    "seen": 1795760220.1861975,
+    "ast_hash": "2dcd54897d8e9f00d7f9e23bd77a13c1",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
@@ -1626,9 +1626,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/DashboardTest.php": {
-    "mtime": 1795749372.471209,
-    "seen": 1795749397.2917755,
-    "ast_hash": "2e81e04f3f8be25a302a53351479f48b",
+    "mtime": 1795760707.3007288,
+    "seen": 1795760739.6769156,
+    "ast_hash": "f9fa61f8113bc934a13a706b988cadf1",
     "semantic_hash": ""
   },
   "tests/Feature/ExampleTest.php": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {
-    "mtime": 1795751870.403576,
-    "seen": 1795751928.8593464,
-    "ast_hash": "7d9760f3a42a9699466b20af8bce93aa",
+    "mtime": 1795760694.5844097,
+    "seen": 1795760739.6769204,
+    "ast_hash": "4f69d36ede71d96c02a94a96465fe47a",
     "semantic_hash": ""
   },
   "tests/Feature/Settings/ProfileUpdateTest.php": {
@@ -1842,9 +1842,9 @@
     "semantic_hash": ""
   },
   "app/Services/GoogleSheetSyncService.php": {
-    "mtime": 1795751848.2778344,
-    "seen": 1795751928.8585236,
-    "ast_hash": "848d321c836ace67f072e2990052fd11",
+    "mtime": 1795760687.3184,
+    "seen": 1795760739.676284,
+    "ast_hash": "42a3241e7c9ec8a21ee60335703e2395",
     "semantic_hash": ""
   },
   "app/Services/LeadImportService.php": {

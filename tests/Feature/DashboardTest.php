@@ -700,6 +700,19 @@ class DashboardTest extends TestCase
         );
     }
 
+    public function test_branch_index_preserves_missing_source_field_count_in_last_sync(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        \DB::table('lead_sync_runs')->insert([
+            'branch_id' => $branchId, 'source' => 'google_sheets', 'status' => 'success',
+            'summary' => json_encode(['missing_source_fields' => 12], JSON_THROW_ON_ERROR), 'completed_at' => now(),
+        ]);
+        $this->actingAs($admin)->get('/branches')->assertInertia(fn (Assert $page) => $page
+            ->where('branches.0.last_sync.summary.missing_source_fields', 12)
+            ->where('branches.0.import_status', 'Nama CS kosong perlu fallback impor'));
+    }
+
     public function test_admin_cannot_delete_a_branch_that_still_has_an_account(): void
     {
         $admin = User::factory()->create();

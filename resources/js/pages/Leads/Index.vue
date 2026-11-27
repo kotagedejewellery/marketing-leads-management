@@ -62,6 +62,14 @@ type Lead = {
     owner_name: string | null;
     owner_resolution: string;
     imported_cs_name: string | null;
+    source_cs_account_status:
+        | 'matched'
+        | 'missing'
+        | 'ambiguous'
+        | 'awaiting_link'
+        | 'source_empty'
+        | 'branch_missing'
+        | null;
     branch_name: string | null;
     source_branch_id: number | null;
     cs_filter_match: string | null;
@@ -131,16 +139,11 @@ const props = defineProps<{
     }[];
     outcomeFactors: Record<string, Record<string, string>>;
     archiveMode: boolean;
-    sheetSync: {
-        status: string;
-        completed_at: string | null;
-        summary: { missing_source_fields?: number } | null;
-    } | null;
 }>();
 const page = usePage();
 const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
 const ownerLabel = (lead: Lead) =>
-    lead.imported_cs_name ||
+    lead.imported_cs_name?.trim() ||
     (lead.owner_resolution === 'fallback'
         ? 'Nama CS sumber kosong'
         : lead.owner_name || 'Belum ditugaskan');
@@ -148,6 +151,25 @@ const ownerTitle = (lead: Lead) =>
     isAdmin.value && lead.branch_name
         ? `${ownerLabel(lead)} · Cabang: ${lead.branch_name}`
         : ownerLabel(lead);
+const sourceCsStatus = (lead: Lead) =>
+    lead.source_cs_account_status === 'missing'
+        ? 'Akun CS belum ditemukan'
+        : lead.source_cs_account_status === 'ambiguous'
+          ? 'Nama CS perlu diperiksa'
+          : lead.source_cs_account_status === 'awaiting_link'
+            ? 'Akun ditemukan · lead belum dihubungkan'
+            : lead.source_cs_account_status === 'source_empty' &&
+                lead.owner_resolution !== 'fallback'
+              ? 'Nama CS sumber kosong'
+              : lead.source_cs_account_status === 'branch_missing' &&
+                  isAdmin.value
+                ? 'Cabang sumber perlu diperiksa'
+                : null;
+const canReviewAccount = (lead: Lead) =>
+    isAdmin.value &&
+    ['missing', 'ambiguous', 'awaiting_link'].includes(
+        lead.source_cs_account_status || '',
+    );
 const q = ref(props.filters.q || '');
 const branch = ref(props.filters.branch || '');
 const sourceBranchMissing = ref(props.filters.source_branch_missing || '');
@@ -346,15 +368,6 @@ const desktopVisibleLeadRange = computed(() => {
         end: Math.max(firstVisible + 1, lastVisible),
     };
 });
-const importForm = useForm<{
-    csv_file: File | null;
-    import_mode: 'all_leads' | 'daily_tabs';
-    branch_id: string;
-}>({
-    csv_file: null,
-    import_mode: 'all_leads',
-    branch_id: '',
-});
 const newLead = useForm({
     inline: true,
     contact_raw: '',
@@ -435,16 +448,6 @@ const hasFilters = computed(() =>
         crm.value ||
         csUserId.value,
     ),
-);
-const selectedFile = computed(() => {
-    if (!importForm.csv_file) return '';
-
-    return `${importForm.csv_file.name} · ${Math.ceil(importForm.csv_file.size / 1024)} KB`;
-});
-const importHint = computed(() =>
-    importForm.import_mode === 'daily_tabs'
-        ? 'Unggah XLSX penuh dari spreadsheet monitoring, lalu pilih cabang pemilik data tab 1–31.'
-        : 'Gunakan export CSV atau XLSX dari tab All Leads.',
 );
 const activeFilterText = computed(() =>
     [
@@ -623,35 +626,6 @@ const clearFilters = () =>
         showAdvancedFilters.value = false;
         applyFiltersNow();
     });
-const importCsvNow = () =>
-    importForm.post('/leads/import', {
-        forceFormData: true,
-        onSuccess: () => importForm.reset(),
-    });
-const importCsv = () => guardUnsavedChanges(importCsvNow);
-const syncingSheet = ref(false);
-const sheetSyncLabel = computed(
-    () =>
-        ({
-            success: 'berhasil',
-            partial: 'sebagian berhasil',
-            failed: 'gagal',
-        })[props.sheetSync?.status || ''] || 'belum diketahui',
-);
-const syncGoogleSheetNow = () =>
-    router.post(
-        '/leads/sync-google-sheet',
-        {},
-        {
-            preserveScroll: true,
-            onStart: () => (syncingSheet.value = true),
-            onFinish: () => (syncingSheet.value = false),
-        },
-    );
-const syncGoogleSheet = () => guardUnsavedChanges(syncGoogleSheetNow);
-const selectCsv = (event: Event) => {
-    importForm.csv_file = (event.target as HTMLInputElement).files?.[0] || null;
-};
 const toggleArchiveNow = () =>
     router.get('/leads', { archived: props.archiveMode ? undefined : '1' });
 const toggleArchive = () => guardUnsavedChanges(toggleArchiveNow);
@@ -833,12 +807,6 @@ watch(hasUnsavedChanges, (isDirty) => {
         syncWorkspaceLayout();
     }
 });
-watch(
-    () => importForm.import_mode,
-    (mode) => {
-        if (mode === 'all_leads') importForm.branch_id = '';
-    },
-);
 watch(
     () => props.leads.data,
     () => {
@@ -1212,66 +1180,6 @@ onBeforeUnmount(() => {
                     <option value="source_conflict">Nomor lintas cabang</option>
                 </select></label
             >
-            <form
-                v-if="isAdmin"
-                class="flex flex-wrap items-center gap-2"
-                @submit.prevent="importCsv"
-            >
-                <label class="sr-only" for="import-mode">Sumber import</label
-                ><select
-                    id="import-mode"
-                    v-model="importForm.import_mode"
-                    class="kgj-input min-h-11 max-w-44 text-sm"
-                    :disabled="importForm.processing"
-                >
-                    <option value="all_leads">All Leads</option>
-                    <option value="daily_tabs">Tab harian</option>
-                </select>
-                <label
-                    v-if="importForm.import_mode === 'daily_tabs'"
-                    class="sr-only"
-                    for="import-branch"
-                    >Cabang sumber</label
-                >
-                <select
-                    v-if="importForm.import_mode === 'daily_tabs'"
-                    id="import-branch"
-                    v-model="importForm.branch_id"
-                    class="kgj-input min-h-11 max-w-44 text-sm"
-                    :disabled="importForm.processing"
-                >
-                    <option value="">Cabang sumber</option>
-                    <option
-                        v-for="item in branches"
-                        :key="item.id"
-                        :value="String(item.id)"
-                    >
-                        {{ item.name }}
-                    </option>
-                </select>
-                <label
-                    class="inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-[#c9aa6a] bg-white px-3 py-3 text-sm font-semibold text-kgj-gold-deep transition hover:bg-[#fbf6e8]"
-                    >{{ importForm.csv_file?.name || 'Pilih CSV / XLSX'
-                    }}<input
-                        class="sr-only"
-                        type="file"
-                        accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                        @change="selectCsv" /></label
-                ><button
-                    class="kgj-button-gold"
-                    :disabled="!importForm.csv_file || importForm.processing"
-                >
-                    {{ importForm.processing ? 'Mengimpor…' : 'Import' }}
-                </button>
-                <button
-                    class="kgj-button-secondary"
-                    type="button"
-                    :disabled="syncingSheet"
-                    @click="syncGoogleSheet"
-                >
-                    {{ syncingSheet ? 'Menyinkronkan…' : 'Sinkronkan Sheet' }}
-                </button>
-            </form>
         </div>
         <section
             v-if="showAdvancedFilters"
@@ -1436,38 +1344,7 @@ onBeforeUnmount(() => {
             >
                 Hapus filter
             </button>
-            <span v-if="selectedFile">Siap diimpor: {{ selectedFile }}</span>
-            <span v-if="isAdmin && !selectedFile">{{ importHint }}</span>
-            <span v-if="isAdmin && sheetSync"
-                >Sinkronisasi terakhir:
-                {{ sheetSyncLabel }}
-                {{
-                    sheetSync.completed_at
-                        ? `· ${new Date(sheetSync.completed_at).toLocaleString('id-ID')}`
-                        : ''
-                }}</span
-            >
-            <span
-                v-if="sheetSync?.summary?.missing_source_fields"
-                class="text-[#a23e2b]"
-                >{{ sheetSync.summary.missing_source_fields }} kolom sumber
-                kosong</span
-            >
         </div>
-        <p
-            v-if="importForm.errors.csv_file"
-            class="mt-2 text-sm text-[#a23e2b]"
-            role="alert"
-        >
-            {{ importForm.errors.csv_file }}
-        </p>
-        <p
-            v-if="importForm.errors.branch_id"
-            class="mt-2 text-sm text-[#a23e2b]"
-            role="alert"
-        >
-            {{ importForm.errors.branch_id }}
-        </p>
         <div
             v-if="visibleLeadIds.length && !isDesktopWorkspace"
             class="mt-5 flex flex-wrap items-center justify-between gap-3"
@@ -1679,6 +1556,18 @@ onBeforeUnmount(() => {
                             :title="ownerTitle(lead)"
                         >
                             {{ ownerLabel(lead) }}
+                        </dd>
+                        <dd
+                            v-if="sourceCsStatus(lead)"
+                            class="mt-1 text-xs font-semibold text-kgj-gold-deep"
+                        >
+                            {{ sourceCsStatus(lead) }}
+                            <Link
+                                v-if="canReviewAccount(lead)"
+                                href="/accounts"
+                                class="block underline underline-offset-4"
+                                >Periksa akun</Link
+                            >
                         </dd>
                     </div>
                     <div v-if="lead.next_follow_up_at">
@@ -2019,6 +1908,16 @@ onBeforeUnmount(() => {
                                     class="block truncate"
                                     :title="ownerTitle(lead)"
                                     >{{ ownerLabel(lead) }}</span
+                                ><small
+                                    v-if="sourceCsStatus(lead)"
+                                    class="mt-1 block font-semibold text-kgj-gold-deep"
+                                    >{{ sourceCsStatus(lead)
+                                    }}<Link
+                                        v-if="canReviewAccount(lead)"
+                                        href="/accounts"
+                                        class="block underline underline-offset-4"
+                                        >Periksa akun</Link
+                                    ></small
                                 ><small
                                     v-if="lead.source_conflict_at"
                                     :class="

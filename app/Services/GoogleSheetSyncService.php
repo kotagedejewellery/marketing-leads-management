@@ -17,9 +17,9 @@ class GoogleSheetSyncService
 {
     private const ROW_LIMIT = 5000;
 
-    private const LOCK_NAME = 'lead-google-sheets-sync';
+    public const LOCK_NAME = 'lead-google-sheets-sync';
 
-    private const LOCK_SECONDS = 600;
+    public const LOCK_SECONDS = 600;
 
     public function __construct(
         private readonly LeadImportService $leadImporter,

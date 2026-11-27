@@ -15,6 +15,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -132,6 +133,7 @@ class LeadController extends Controller
                 'csv_file' => ['required', 'file', 'mimes:csv,txt,xlsx', 'max:10240'],
                 'import_mode' => ['nullable', 'in:all_leads,daily_tabs'],
                 'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+                'return_to' => ['nullable', 'in:branches'],
             ],
             ['csv_file.uploaded' => 'File gagal diunggah. Gunakan CSV/XLSX maksimal 10 MB.'],
         );
@@ -172,10 +174,16 @@ class LeadController extends Controller
             }
         }
         $sourceBranchId = $importMode === 'daily_tabs' ? (int) $data['branch_id'] : null;
+        $lock = Cache::lock(GoogleSheetSyncService::LOCK_NAME, GoogleSheetSyncService::LOCK_SECONDS);
+        if (! $lock->get()) {
+            throw ValidationException::withMessages(['csv_file' => 'Impor atau sinkronisasi lead sedang berjalan. Coba lagi beberapa saat lagi.']);
+        }
         try {
             $summary = $this->leadImporter->import($rows, $request->user()->id, null, $sourceBranchId);
         } catch (\RuntimeException $exception) {
             throw ValidationException::withMessages(['branch_id' => $exception->getMessage()]);
+        } finally {
+            $lock->release();
         }
 
         $message = "Import selesai: {$summary['inserted']} baru, {$summary['skipped']} duplikat dilewati, {$summary['unassigned']} perlu ditugaskan, {$summary['needs_review']} perlu review, {$summary['missing_dates']} tanpa tanggal lead.";
@@ -187,19 +195,20 @@ class LeadController extends Controller
         }
         Inertia::flash('toast', ['type' => $dailyErrors === [] ? 'success' : 'warning', 'message' => $message]);
 
-        return to_route('leads.index');
+        return to_route(($data['return_to'] ?? null) === 'branches' ? 'branches.index' : 'leads.index');
     }
 
     public function syncGoogleSheet(Request $request, GoogleSheetSyncService $sync): RedirectResponse
     {
         abort_unless($request->user()->role === 'admin', 403);
+        $returnRoute = $request->input('return_to') === 'branches' ? 'branches.index' : 'leads.index';
 
         try {
             $summary = $sync->sync($request->user()->id);
         } catch (\RuntimeException $exception) {
             Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
 
-            return to_route('leads.index');
+            return to_route($returnRoute);
         }
 
         $message = $summary['failed'] || $summary['partial']
@@ -228,7 +237,7 @@ class LeadController extends Controller
             'message' => $message,
         ]);
 
-        return to_route('leads.index');
+        return to_route($returnRoute);
     }
 
     public function show(Request $request, int $lead): Response

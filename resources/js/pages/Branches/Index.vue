@@ -35,6 +35,7 @@ type Branch = {
             awaiting_account?: number;
             chat_time_review?: number;
             failed_tabs?: number;
+            missing_source_fields?: number;
         } | null;
         error: string | null;
     } | null;
@@ -102,6 +103,41 @@ const form = useForm({
     google_spreadsheet_id: '',
     default_import_user_id: '',
 });
+const importForm = useForm<{
+    csv_file: File | null;
+    import_mode: 'all_leads' | 'daily_tabs';
+    branch_id: string;
+    return_to: 'branches';
+}>({
+    csv_file: null,
+    import_mode: 'all_leads',
+    branch_id: '',
+    return_to: 'branches',
+});
+const fileInputKey = ref(0);
+const syncingAll = ref(false);
+const selectImportFile = (event: Event) => {
+    importForm.csv_file = (event.target as HTMLInputElement).files?.[0] || null;
+};
+const importFile = () =>
+    importForm.post('/leads/import', {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            importForm.reset();
+            fileInputKey.value++;
+        },
+    });
+const syncAll = () =>
+    router.post(
+        '/leads/sync-google-sheet',
+        { return_to: 'branches' },
+        {
+            preserveScroll: true,
+            onStart: () => (syncingAll.value = true),
+            onFinish: () => (syncingAll.value = false),
+        },
+    );
 const editingId = ref<number | null>(null);
 const branchToDelete = ref<Branch | null>(null);
 const sourceBranch = ref<Branch | null>(null);
@@ -140,9 +176,9 @@ const importCsOptions = computed(
 );
 const formatSyncTime = (value: string | null) =>
     value ? new Date(value).toLocaleString('id-ID') : '';
-const canSync = (branch: Branch) => branch.import_status === 'Siap impor';
+const canSync = (branch: Branch) => Boolean(branch.google_spreadsheet_id);
 const statusClass = (branch: Branch) =>
-    canSync(branch) ? 'text-kgj-sage' : 'text-kgj-rose';
+    branch.import_status === 'Siap impor' ? 'text-kgj-sage' : 'text-kgj-rose';
 const syncAttemptLabel = (branch: Branch) => {
     if (!branch.last_sync) return '';
 
@@ -166,7 +202,7 @@ const syncSummary = (branch: Branch) => {
     const summary = branch.last_sync?.summary;
     if (!summary) return '';
 
-    const detail = `${summary.inserted || 0} lead baru · ${summary.enriched || 0} data diperbarui${summary.awaiting_account ? ` · ${summary.awaiting_account} menunggu akun CS` : ''}${summary.chat_time_review ? ` · ${summary.chat_time_review} waktu chat perlu diperiksa di Periksa data historis` : ''}`;
+    const detail = `${summary.inserted || 0} lead baru · ${summary.enriched || 0} data diperbarui${summary.awaiting_account ? ` · ${summary.awaiting_account} menunggu akun CS` : ''}${summary.chat_time_review ? ` · ${summary.chat_time_review} waktu chat perlu diperiksa di Periksa data historis` : ''}${summary.missing_source_fields ? ` · ${summary.missing_source_fields} kolom sumber kosong` : ''}`;
 
     return summary.failed_tabs
         ? `${detail} · ${summary.failed_tabs} tab perlu diperbaiki`
@@ -305,6 +341,126 @@ const syncBranch = (branch: Branch) =>
             }}</span>
             siap impor
         </p>
+        <section
+            class="kgj-surface mt-6 max-w-4xl p-5 sm:p-6"
+            aria-labelledby="source-management-heading"
+        >
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 id="source-management-heading" class="font-semibold">
+                        Sumber data lead
+                    </h2>
+                    <p class="mt-1 text-sm text-kgj-muted">
+                        Sinkronkan Google Sheets per cabang di bawah, atau semua
+                        cabang yang terhubung. Cabang tanpa CS fallback dapat
+                        disinkronkan jika setiap lead memiliki nama CS sumber.
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    class="kgj-button-secondary"
+                    :disabled="
+                        syncingAll ||
+                        importForm.processing ||
+                        syncingBranchId !== null ||
+                        !branches.some((branch) => branch.google_spreadsheet_id)
+                    "
+                    @click="syncAll"
+                >
+                    {{
+                        syncingAll
+                            ? 'Menyinkronkan…'
+                            : 'Sinkronkan semua cabang'
+                    }}
+                </button>
+            </div>
+            <form
+                class="mt-5 border-t border-kgj-line pt-5"
+                @submit.prevent="importFile"
+            >
+                <h3 class="font-semibold">Impor berkas</h3>
+                <p class="mt-1 text-sm text-kgj-muted">
+                    {{
+                        importForm.import_mode === 'daily_tabs'
+                            ? 'Unggah XLSX monitoring dan pilih cabang sumber untuk tab 1–31.'
+                            : 'Unggah CSV atau XLSX dari tab All Leads. Lead baru tidak memiliki cabang sumber dan belum tersedia bagi tim cabang sampai ditugaskan.'
+                    }}
+                </p>
+                <div class="mt-3 flex flex-wrap items-end gap-3">
+                    <label class="grid gap-1 text-sm font-medium"
+                        >Mode impor
+                        <select
+                            v-model="importForm.import_mode"
+                            class="kgj-input"
+                            :disabled="importForm.processing"
+                            @change="importForm.branch_id = ''"
+                        >
+                            <option value="all_leads">All Leads</option>
+                            <option value="daily_tabs">Tab harian</option>
+                        </select>
+                    </label>
+                    <label
+                        v-if="importForm.import_mode === 'daily_tabs'"
+                        class="grid gap-1 text-sm font-medium"
+                        >Cabang sumber
+                        <select
+                            v-model="importForm.branch_id"
+                            class="kgj-input"
+                            :disabled="importForm.processing"
+                            required
+                        >
+                            <option value="">Pilih cabang</option>
+                            <option
+                                v-for="branch in branches"
+                                :key="branch.id"
+                                :value="String(branch.id)"
+                            >
+                                {{ branch.name }}
+                            </option>
+                        </select>
+                    </label>
+                    <label class="grid gap-1 text-sm font-medium"
+                        >Berkas CSV / XLSX
+                        <input
+                            :key="fileInputKey"
+                            type="file"
+                            accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            :disabled="importForm.processing"
+                            @change="selectImportFile"
+                        />
+                    </label>
+                    <button
+                        class="kgj-button-gold"
+                        :disabled="
+                            !importForm.csv_file ||
+                            importForm.processing ||
+                            syncingAll ||
+                            syncingBranchId !== null
+                        "
+                    >
+                        {{
+                            importForm.processing
+                                ? 'Mengimpor…'
+                                : 'Impor berkas'
+                        }}
+                    </button>
+                </div>
+                <p
+                    v-if="importForm.errors.csv_file"
+                    class="mt-2 text-sm text-kgj-rose"
+                    role="alert"
+                >
+                    {{ importForm.errors.csv_file }}
+                </p>
+                <p
+                    v-if="importForm.errors.branch_id"
+                    class="mt-2 text-sm text-kgj-rose"
+                    role="alert"
+                >
+                    {{ importForm.errors.branch_id }}
+                </p>
+            </form>
+        </section>
         <form
             class="kgj-surface mt-7 max-w-4xl p-5 sm:p-6"
             @submit.prevent="save"
@@ -583,7 +739,10 @@ const syncBranch = (branch: Branch) =>
                         class="kgj-button-gold flex-1"
                         type="button"
                         :disabled="
-                            !canSync(branch) || syncingBranchId === branch.id
+                            !canSync(branch) ||
+                            syncingAll ||
+                            importForm.processing ||
+                            syncingBranchId !== null
                         "
                         @click="syncBranch(branch)"
                     >
@@ -823,7 +982,9 @@ const syncBranch = (branch: Branch) =>
                                     type="button"
                                     :disabled="
                                         !canSync(branch) ||
-                                        syncingBranchId === branch.id
+                                        syncingAll ||
+                                        importForm.processing ||
+                                        syncingBranchId !== null
                                     "
                                     @click="syncBranch(branch)"
                                 >

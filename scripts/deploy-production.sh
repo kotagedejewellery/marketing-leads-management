@@ -4,7 +4,7 @@ set -euo pipefail
 compose=(docker compose --env-file .env.production -f compose.production.yml)
 
 "${compose[@]}" config -q
-"${compose[@]}" build app
+"${compose[@]}" build app scheduler
 "${compose[@]}" up -d db
 
 for _ in $(seq 1 30); do
@@ -15,12 +15,14 @@ for _ in $(seq 1 30); do
 done
 "${compose[@]}" exec -T db pg_isready -U marketing_leads -d marketing_leads >/dev/null
 
+"${compose[@]}" stop scheduler
+
 mkdir -p backups
 backup_file="backups/pre-migrate-$(date -u +%Y%m%dT%H%M%SZ).dump"
 "${compose[@]}" exec -T db pg_dump -U marketing_leads -Fc marketing_leads > "$backup_file"
 
 "${compose[@]}" run --rm --no-deps migrate
-"${compose[@]}" up -d --build --no-deps app
+"${compose[@]}" up -d --no-deps app scheduler
 
 for _ in $(seq 1 30); do
   if "${compose[@]}" exec -T app php -r 'exit(@file_get_contents("http://127.0.0.1/up") === false ? 1 : 0);'; then

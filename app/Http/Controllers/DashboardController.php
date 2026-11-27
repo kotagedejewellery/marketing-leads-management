@@ -40,7 +40,9 @@ class DashboardController extends Controller
             ->leftJoin('branches as source_b', 'source_b.id', '=', 'l.source_branch_id')
             ->leftJoin('branches as conflict_b', 'conflict_b.id', '=', 'l.source_conflict_branch_id')
             ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.assigned_user_id', 'l.owner_resolution', 'l.imported_cs_name', 'l.source_branch_id', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.outcome', 'l.outcome_factor', 'l.outcome_note', 'l.outcome_recorded_at', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.chat_time', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
-            ->orderByDesc('l.updated_at');
+            ->orderByRaw('CASE WHEN l.lead_created_on IS NULL THEN 1 ELSE 0 END')
+            ->orderByDesc('l.lead_created_on')
+            ->orderByDesc('l.id');
 
         $showArchived = $request->boolean('archived');
         $query->{$showArchived ? 'whereNotNull' : 'whereNull'}('l.archived_at');
@@ -165,10 +167,45 @@ class DashboardController extends Controller
         foreach (DB::table('lead_collaborators as c')->join('users as u', 'u.id', '=', 'c.user_id')->whereIn('c.lead_id', $leadIds)->whereNull('c.removed_at')->orderBy('u.name')->get(['c.lead_id', 'u.id', 'u.name']) as $collaborator) {
             $collaboratorsByLead[$collaborator->lead_id][] = ['id' => (int) $collaborator->id, 'name' => (string) $collaborator->name];
         }
+        $csAccounts = DB::table('users as u')
+            ->join('branches as b', 'b.id', '=', 'u.branch_id')
+            ->where('u.role', 'cs')
+            ->where('u.active', true)
+            ->when($request->user()->role === 'cs', fn (Builder $builder) => $builder->where('u.branch_id', $request->user()->branch_id))
+            ->orderBy('b.name')
+            ->get(['u.id', 'u.name', 'u.branch_id', 'b.name as branch_name']);
+        $sourceNameOwners = [];
+        foreach ($csAccounts as $account) {
+            $sourceNameOwners[$account->branch_id.'|'.CsName::key((string) $account->name)][$account->id] = true;
+        }
+        foreach (DB::table('cs_source_name_aliases as a')->join('users as u', 'u.id', '=', 'a.user_id')
+            ->whereIn('u.id', $csAccounts->pluck('id'))->whereColumn('a.branch_id', 'u.branch_id')->get(['a.user_id', 'a.branch_id', 'a.source_name_key']) as $alias) {
+            $sourceNameOwners[$alias->branch_id.'|'.CsName::key((string) $alias->source_name_key)][$alias->user_id] = true;
+        }
+        $blankSourceIds = $leads->filter(fn (object $lead): bool => trim((string) $lead->imported_cs_name) === '')->pluck('id');
+        $importedBlankIds = array_fill_keys(DB::table('leads')->whereIn('id', $blankSourceIds)->whereNotNull('import_fingerprint')->pluck('id')->all(), true);
+        $blankOrigins = DB::table('lead_activity')->whereIn('lead_id', $blankSourceIds)->whereIn('action', ['Lead dibuat manual', 'Diimpor dari tab harian', 'Diimpor dari CSV/XLSX'])->get(['lead_id', 'action'])->groupBy('lead_id');
         $currentUserId = (int) $request->user()->id;
         foreach ($leads as $lead) {
             $lead->milestones = $milestonesByLead[$lead->id] ?? [];
             $lead->collaborators = $collaboratorsByLead[$lead->id] ?? [];
+            $lead->source_cs_account_status = null;
+            $sourceName = trim((string) $lead->imported_cs_name);
+            if (! $showArchived && $sourceName === '') {
+                $actions = $blankOrigins->get($lead->id, collect())->pluck('action')->all();
+                if (! in_array('Lead dibuat manual', $actions, true) && (isset($importedBlankIds[$lead->id]) || $lead->owner_resolution === 'fallback' || in_array('Diimpor dari tab harian', $actions, true) || in_array('Diimpor dari CSV/XLSX', $actions, true))) {
+                    $lead->source_cs_account_status = 'source_empty';
+                }
+            } elseif (! $showArchived && $lead->source_branch_id === null) {
+                $lead->source_cs_account_status = 'branch_missing';
+            } elseif (! $showArchived) {
+                $matches = count($sourceNameOwners[$lead->source_branch_id.'|'.CsName::key((string) $lead->imported_cs_name)] ?? []);
+                $lead->source_cs_account_status = match ($matches) {
+                    0 => 'missing',
+                    1 => $lead->owner_resolution === 'awaiting_account' && $lead->assigned_user_id === null ? 'awaiting_link' : 'matched',
+                    default => 'ambiguous',
+                };
+            }
             $lead->cs_filter_match = $filteredCsUserId === null
                 ? null
                 : (trim((string) $lead->imported_cs_name) !== '' ? 'CS sumber' : 'CS utama');
@@ -184,14 +221,6 @@ class DashboardController extends Controller
                         ? 'collaborator'
                         : 'team'));
         }
-
-        $csAccounts = DB::table('users as u')
-            ->join('branches as b', 'b.id', '=', 'u.branch_id')
-            ->where('u.role', 'cs')
-            ->where('u.active', true)
-            ->when($request->user()->role === 'cs', fn (Builder $builder) => $builder->where('u.branch_id', $request->user()->branch_id))
-            ->orderBy('b.name')
-            ->get(['u.id', 'u.name', 'u.branch_id', 'b.name as branch_name']);
 
         $sheetSync = $request->user()->role === 'admin'
             ? DB::table('lead_sync_runs')->where('source', 'google_sheets')->whereNull('branch_id')->orderByDesc('completed_at')->first(['status', 'completed_at', 'summary'])

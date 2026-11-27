@@ -167,6 +167,41 @@ class LeadManagementTest extends TestCase
         }
     }
 
+    public function test_file_import_refuses_to_run_while_sheet_sync_holds_the_lock(): void
+    {
+        $admin = $this->user('admin');
+        $csv = "No,Nama/Nomor,Respond Time,Nama CS,Keterangan,Kebutuhan,Greeting*,Waktu Chat,Keterangan Sumber*,Keterangan Campaign*,Definisi Leads\n1,081234567890,0,Dilla,klik saja,nikah,halo,10.00,Iklan,Bio,Cold";
+        $lock = Cache::lock('lead-google-sheets-sync', 120);
+        $this->assertTrue($lock->get());
+        try {
+            $this->actingAs($admin)->from('/branches')->post('/leads/import', ['csv_file' => UploadedFile::fake()->createWithContent('leads.csv', $csv), 'return_to' => 'branches'])->assertSessionHasErrors('csv_file');
+            $this->assertDatabaseCount('leads', 0);
+        } finally {
+            $lock->release();
+        }
+        $this->actingAs($admin)->from('/branches')->post('/leads/import', ['csv_file' => UploadedFile::fake()->createWithContent('leads.csv', $csv), 'return_to' => 'branches'])->assertRedirect('/branches')->assertSessionHasNoErrors();
+        $this->assertDatabaseCount('leads', 1);
+    }
+
+    public function test_sheet_sync_is_blocked_during_file_import(): void
+    {
+        $admin = $this->user('admin');
+        $csv = "No,Nama/Nomor,Respond Time,Nama CS,Keterangan,Kebutuhan,Greeting*,Waktu Chat,Keterangan Sumber*,Keterangan Campaign*,Definisi Leads\n1,081234567890,0,Dilla,klik saja,nikah,halo,10.00,Iklan,Bio,Cold";
+        $importer = Mockery::mock(LeadImportService::class);
+        $importer->shouldReceive('import')->once()->andReturnUsing(function () {
+            try {
+                app(GoogleSheetSyncService::class)->sync();
+                $this->fail('Sinkronisasi tidak boleh berjalan bersamaan dengan impor.');
+            } catch (\RuntimeException $exception) {
+                $this->assertStringContainsString('sedang berjalan', $exception->getMessage());
+            }
+
+            return ['inserted' => 0, 'skipped' => 0, 'unassigned' => 0, 'needs_review' => 0, 'missing_dates' => 0, 'awaiting_account' => 0];
+        });
+        $this->app->instance(LeadImportService::class, $importer);
+        $this->actingAs($admin)->post('/leads/import', ['csv_file' => UploadedFile::fake()->createWithContent('leads.csv', $csv)])->assertSessionHasNoErrors();
+    }
+
     public function test_google_sheet_sync_rejects_an_incomplete_batch_response(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
@@ -1007,6 +1042,47 @@ class LeadManagementTest extends TestCase
                 ->where('leads.data.0.latest_activity', 'Lead diperbarui')
                 ->where('leads.data.0.latest_activity_detail', 'Keterangan diperbarui'),
             );
+    }
+
+    public function test_leads_are_ordered_by_source_date_then_id_with_missing_dates_last(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $admin = $this->user('admin');
+        $cs = $this->user('cs', ['branch_id' => $branchId]);
+        $insert = fn (?string $date, string $updated) => \DB::table('leads')->insertGetId(['source_branch_id' => $branchId, 'lead_created_on' => $date, 'updated_at' => $updated]);
+        $missing = $insert(null, '2026-11-29 00:00:00');
+        $old = $insert('2026-11-02', '2026-11-30 00:00:00');
+        $new1 = $insert('2026-11-23', '2026-11-01 00:00:00');
+        $new2 = $insert('2026-11-23', '2026-11-01 00:00:00');
+        foreach ([$admin, $cs] as $viewer) {
+            $this->actingAs($viewer)->get('/leads')->assertInertia(fn (Assert $page) => $page
+                ->where('leads.data.0.id', $new2)->where('leads.data.1.id', $new1)
+                ->where('leads.data.2.id', $old)->where('leads.data.3.id', $missing));
+        }
+    }
+
+    public function test_admin_import_from_branches_returns_to_source_management(): void
+    {
+        $admin = $this->user('admin');
+        $csv = "No,Nama/Nomor,Respond Time,Nama CS,Keterangan,Kebutuhan,Greeting*,Waktu Chat,Keterangan Sumber*,Keterangan Campaign*,Definisi Leads\n1,081234567890,0,Dilla,klik saja,nikah,halo,10.00,Iklan,Bio,Cold";
+        $this->actingAs($admin)->from('/branches')->post('/leads/import', [
+            'csv_file' => UploadedFile::fake()->createWithContent('leads.csv', $csv), 'return_to' => 'branches',
+        ])->assertRedirect('/branches');
+        $this->assertDatabaseHas('leads', ['contact_raw' => '081234567890']);
+    }
+
+    public function test_sync_all_from_branches_keeps_admin_on_source_management(): void
+    {
+        $admin = $this->user('admin');
+        $cs = $this->user('cs');
+        $sync = Mockery::mock(GoogleSheetSyncService::class);
+        $sync->shouldReceive('sync')->once()->with($admin->id)->andReturn([
+            'failed' => 0, 'partial' => 0, 'inserted' => 0, 'enriched' => 0, 'resurfaced' => 0,
+            'missing_dates' => 0, 'chat_time_review' => 0, 'missing_source_fields' => 0, 'awaiting_account' => 0,
+        ]);
+        $this->app->instance(GoogleSheetSyncService::class, $sync);
+        $this->actingAs($cs)->post('/leads/sync-google-sheet', ['return_to' => 'branches'])->assertForbidden();
+        $this->actingAs($admin)->post('/leads/sync-google-sheet', ['return_to' => 'branches'])->assertRedirect('/branches');
     }
 
     public function test_lead_list_returns_every_matching_lead_without_pagination(): void
@@ -2515,6 +2591,46 @@ class LeadManagementTest extends TestCase
                 ->has('leads.data', 1)
                 ->where('leads.data.0.imported_cs_name', 'CS Baru'),
         );
+    }
+
+    public function test_source_cs_account_status_uses_active_branch_accounts_and_aliases(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $otherBranch = \DB::table('branches')->insertGetId(['name' => 'Solo']);
+        $admin = $this->user('admin');
+        $cs = $this->user('cs', ['name' => 'Linda', 'branch_id' => $branchId]);
+        $this->user('cs', ['name' => 'Tidak Aktif', 'branch_id' => $branchId, 'active' => false]);
+        $this->user('cs', ['name' => 'Cabang Lain', 'branch_id' => $otherBranch]);
+        $this->user('cs', ['name' => 'Ganda', 'branch_id' => $branchId]);
+        $this->user('cs', ['name' => 'Ganda', 'branch_id' => $branchId]);
+        \DB::table('cs_source_name_aliases')->insert(['branch_id' => $branchId, 'user_id' => $cs->id, 'source_name' => 'Lindy', 'source_name_key' => 'lindy']);
+        $id = \DB::table('leads')->insertGetId(['name' => 'Lead', 'source_branch_id' => $branchId, 'imported_cs_name' => 'Linda', 'owner_resolution' => 'manual', 'created_at' => now(), 'updated_at' => now()]);
+        foreach ([' LINDA ' => 'matched', 'Lindy' => 'matched', 'Tidak Aktif' => 'missing', 'Cabang Lain' => 'missing', 'Ganda' => 'ambiguous', 'Baru' => 'missing', '' => null] as $name => $expected) {
+            \DB::table('leads')->where('id', $id)->update(['imported_cs_name' => $name]);
+            foreach ([$admin, $cs] as $viewer) {
+                $this->actingAs($viewer)->get('/leads')->assertInertia(fn (Assert $page) => $page->where('leads.data.0.source_cs_account_status', $expected));
+            }
+        }
+        \DB::table('leads')->where('id', $id)->update(['source_branch_id' => null, 'imported_cs_name' => 'Linda']);
+        $this->actingAs($admin)->get('/leads')->assertInertia(fn (Assert $page) => $page->where('leads.data.0.source_cs_account_status', 'branch_missing'));
+    }
+
+    public function test_lead_source_account_status_distinguishes_import_history_pending_link_and_archive(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $admin = $this->user('admin');
+        $cs = $this->user('cs', ['name' => 'Linda', 'branch_id' => $branchId]);
+        $id = \DB::table('leads')->insertGetId(['source_branch_id' => $branchId, 'imported_cs_name' => 'Linda', 'owner_resolution' => 'awaiting_account', 'created_at' => now(), 'updated_at' => now()]);
+        $this->actingAs($admin)->get('/leads')->assertInertia(fn (Assert $page) => $page->where('leads.data.0.source_cs_account_status', 'awaiting_link'));
+        $this->assertDatabaseHas('leads', ['id' => $id, 'assigned_user_id' => null, 'owner_resolution' => 'awaiting_account']);
+        \DB::table('leads')->where('id', $id)->update(['imported_cs_name' => '', 'owner_resolution' => 'manual', 'assigned_user_id' => $cs->id]);
+        $this->actingAs($admin)->get('/leads')->assertInertia(fn (Assert $page) => $page->where('leads.data.0.source_cs_account_status', null));
+        \DB::table('lead_activity')->insert(['lead_id' => $id, 'action' => 'Diimpor dari tab harian', 'created_at' => now()]);
+        $this->actingAs($admin)->get('/leads')->assertInertia(fn (Assert $page) => $page->where('leads.data.0.source_cs_account_status', 'source_empty'));
+        \DB::table('lead_activity')->insert(['lead_id' => $id, 'action' => 'Lead dibuat manual', 'created_at' => now()]);
+        $this->actingAs($admin)->get('/leads')->assertInertia(fn (Assert $page) => $page->where('leads.data.0.source_cs_account_status', null));
+        \DB::table('leads')->where('id', $id)->update(['imported_cs_name' => 'Tidak Ada', 'archived_at' => now()]);
+        $this->actingAs($admin)->get('/leads?archived=1')->assertInertia(fn (Assert $page) => $page->where('leads.data.0.source_cs_account_status', null));
     }
 
     public function test_retired_assistance_endpoints_preserve_existing_collaborators(): void

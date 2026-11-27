@@ -62,9 +62,27 @@ type SourcePreview = {
     missing_source_fields: number;
     failed_tabs: number;
 };
+type ReconciliationPreview = {
+    branch_id: number;
+    changes: {
+        lead_id: number;
+        contact: string;
+        tab: string;
+        old_date: string | null;
+        new_date: string;
+        old_cs: string | null;
+        new_cs: string;
+    }[];
+    conflicts: number;
+    uncertain: number;
+    failed_tabs: number;
+    matched: number;
+    review: { contact: string; tab: string; reason: string }[];
+};
 const props = defineProps<{
     branches: Branch[];
     source_preview: SourcePreview | null;
+    reconciliation_preview: ReconciliationPreview | null;
 }>();
 const form = useForm({
     name: '',
@@ -74,6 +92,13 @@ const form = useForm({
 const editingId = ref<number | null>(null);
 const branchToDelete = ref<Branch | null>(null);
 const sourceBranch = ref<Branch | null>(null);
+const reconciliationBranch = ref<Branch | null>(null);
+const reconciliationForm = useForm({ backup_confirmed: false });
+const reconciliationPreview = computed(() =>
+    reconciliationBranch.value?.id === props.reconciliation_preview?.branch_id
+        ? props.reconciliation_preview
+        : null,
+);
 const branchToDisconnect = ref<Branch | null>(null);
 const syncingBranchId = ref<number | null>(null);
 const sourceForm = useForm({ google_spreadsheet_id: '' });
@@ -197,6 +222,24 @@ const previewSource = () => {
         preserveScroll: true,
         preserveState: true,
     });
+};
+const previewReconciliation = (branch: Branch) => {
+    reconciliationBranch.value = branch;
+    reconciliationForm.reset();
+    reconciliationForm.post(`/branches/${branch.id}/preview-reconciliation`, {
+        preserveScroll: true,
+        preserveState: true,
+    });
+};
+const applyReconciliation = () => {
+    if (!reconciliationBranch.value || !reconciliationPreview.value) return;
+    reconciliationForm.post(
+        `/branches/${reconciliationBranch.value.id}/apply-reconciliation`,
+        {
+            preserveScroll: true,
+            onSuccess: () => (reconciliationBranch.value = null),
+        },
+    );
 };
 const disconnectSource = () => {
     if (!branchToDisconnect.value) return;
@@ -551,6 +594,10 @@ const syncBranch = (branch: Branch) =>
                                 }}</DropdownMenuItem
                             ><DropdownMenuItem
                                 v-if="branch.google_spreadsheet_id"
+                                @select="previewReconciliation(branch)"
+                                >Periksa data historis</DropdownMenuItem
+                            ><DropdownMenuItem
+                                v-if="branch.google_spreadsheet_id"
                                 variant="destructive"
                                 @select="branchToDisconnect = branch"
                                 >Putuskan koneksi Google
@@ -782,6 +829,14 @@ const syncBranch = (branch: Branch) =>
                                         class="border-kgj-line bg-kgj-paper text-kgj-ink"
                                     >
                                         <DropdownMenuItem
+                                            v-if="branch.google_spreadsheet_id"
+                                            @select="
+                                                previewReconciliation(branch)
+                                            "
+                                            >Periksa data
+                                            historis</DropdownMenuItem
+                                        >
+                                        <DropdownMenuItem
                                             @select="openSourceChange(branch)"
                                             >{{
                                                 branch.google_spreadsheet_id
@@ -985,6 +1040,147 @@ const syncBranch = (branch: Branch) =>
                                 ? 'Menyinkronkan…'
                                 : 'Simpan dan sinkronkan'
                         }}
+                    </button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+        <Dialog
+            :open="Boolean(reconciliationBranch)"
+            @update:open="(open) => !open && (reconciliationBranch = null)"
+        >
+            <DialogContent class="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+                <DialogHeader>
+                    <DialogTitle
+                        >Periksa data historis
+                        {{ reconciliationBranch?.name }}</DialogTitle
+                    >
+                    <DialogDescription>
+                        Bandingkan tanggal dan nama CS dengan tab sumber. Data
+                        kerja dan penugasan CS tidak diubah.
+                    </DialogDescription>
+                </DialogHeader>
+                <p
+                    v-if="reconciliationForm.processing"
+                    role="status"
+                    class="text-sm text-kgj-muted"
+                >
+                    Memeriksa spreadsheet…
+                </p>
+                <template v-else-if="reconciliationPreview">
+                    <p class="text-sm">
+                        {{ reconciliationPreview.matched }} lead sudah sesuai ·
+                        {{ reconciliationPreview.changes.length }} lead dapat
+                        dikoreksi · {{ reconciliationPreview.uncertain }} perlu
+                        diperiksa ·
+                        {{ reconciliationPreview.conflicts }} konflik cabang.
+                    </p>
+                    <p
+                        v-if="reconciliationPreview.failed_tabs"
+                        class="text-sm text-kgj-rose"
+                        role="alert"
+                    >
+                        {{ reconciliationPreview.failed_tabs }} tab gagal
+                        dibaca. Perbaiki sumber dan periksa kembali sebelum
+                        menerapkan koreksi.
+                    </p>
+                    <div
+                        v-if="reconciliationPreview.changes.length"
+                        class="max-h-72 overflow-auto rounded-lg border border-kgj-line"
+                    >
+                        <table class="w-full min-w-[620px] text-left text-sm">
+                            <thead>
+                                <tr>
+                                    <th class="p-3">Lead / tab</th>
+                                    <th class="p-3">Tanggal lama → sumber</th>
+                                    <th class="p-3">CS lama → sumber</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="change in reconciliationPreview.changes"
+                                    :key="change.lead_id"
+                                    class="border-t border-kgj-line"
+                                >
+                                    <td class="p-3">
+                                        {{ change.contact }}
+                                        <span class="text-kgj-muted"
+                                            >· Tab {{ change.tab }}</span
+                                        >
+                                    </td>
+                                    <td class="p-3">
+                                        {{ change.old_date || '—' }} →
+                                        {{ change.new_date }}
+                                    </td>
+                                    <td class="p-3">
+                                        {{ change.old_cs || '—' }} →
+                                        {{ change.new_cs }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <details
+                        v-if="reconciliationPreview.review.length"
+                        class="text-sm"
+                    >
+                        <summary
+                            class="cursor-pointer font-semibold text-kgj-gold-deep"
+                        >
+                            Lihat data yang perlu diperiksa
+                        </summary>
+                        <ul class="mt-2 max-h-48 space-y-2 overflow-y-auto">
+                            <li
+                                v-for="(
+                                    item, index
+                                ) in reconciliationPreview.review"
+                                :key="index"
+                            >
+                                {{ item.contact }} · Tab {{ item.tab || '—' }} —
+                                {{ item.reason }}
+                            </li>
+                        </ul>
+                    </details>
+                    <label
+                        v-if="reconciliationPreview.changes.length"
+                        class="flex items-start gap-2 text-sm"
+                    >
+                        <input
+                            v-model="reconciliationForm.backup_confirmed"
+                            type="checkbox"
+                            class="mt-1"
+                        />
+                        Saya telah memastikan backup database tersedia sebelum
+                        menerapkan koreksi.
+                    </label>
+                    <p
+                        v-if="reconciliationForm.errors.backup_confirmed"
+                        class="text-sm text-kgj-rose"
+                        role="alert"
+                    >
+                        {{ reconciliationForm.errors.backup_confirmed }}
+                    </p>
+                </template>
+                <p v-else class="text-sm text-kgj-muted">
+                    Pratinjau belum tersedia. Periksa kembali sumber cabang.
+                </p>
+                <DialogFooter>
+                    <DialogClose as-child
+                        ><button class="kgj-button-secondary" type="button">
+                            Tutup
+                        </button></DialogClose
+                    >
+                    <button
+                        class="kgj-button-primary"
+                        type="button"
+                        :disabled="
+                            reconciliationForm.processing ||
+                            !reconciliationForm.backup_confirmed ||
+                            !reconciliationPreview?.changes.length ||
+                            Boolean(reconciliationPreview?.failed_tabs)
+                        "
+                        @click="applyReconciliation"
+                    >
+                        Terapkan koreksi
                     </button>
                 </DialogFooter>
             </DialogContent>

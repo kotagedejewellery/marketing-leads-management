@@ -26,6 +26,13 @@ type Account = {
 const props = defineProps<{
     accounts: Account[];
     branches: { id: number; name: string }[];
+    unmatched_source_names: {
+        name: string;
+        branch_id: number;
+        branch_name: string;
+        count: number;
+        ambiguous: boolean;
+    }[];
 }>();
 const form = useForm({
     name: '',
@@ -108,6 +115,33 @@ const reconcileSourceLeads = () => {
         <p class="kgj-subtitle">
             Satu cabang dapat memiliki beberapa akun CS aktif.
         </p>
+        <section
+            v-if="unmatched_source_names.length"
+            class="kgj-surface mt-6 p-4 sm:p-5"
+            aria-labelledby="unmatched-names-heading"
+        >
+            <h2 id="unmatched-names-heading" class="font-semibold">
+                Nama CS sumber perlu diperiksa
+            </h2>
+            <p class="mt-2 text-sm text-kgj-muted">
+                Buat akun CS atau tambahkan alias yang sesuai. Penugasan yang
+                sudah ada tetap dipertahankan sampai admin merekonsiliasinya.
+            </p>
+            <ul class="mt-3 space-y-2 text-sm">
+                <li
+                    v-for="item in unmatched_source_names"
+                    :key="`${item.branch_id}-${item.name}`"
+                >
+                    <strong>{{ item.name }}</strong> · {{ item.branch_name }} ·
+                    {{ item.count }} lead ·
+                    {{
+                        item.ambiguous
+                            ? 'Nama cocok dengan beberapa akun'
+                            : 'Belum cocok dengan akun aktif'
+                    }}
+                </li>
+            </ul>
+        </section>
         <form
             class="kgj-surface mt-7 grid gap-4 p-4 sm:p-5 md:grid-cols-2"
             @submit.prevent="save"

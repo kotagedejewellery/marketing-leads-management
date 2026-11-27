@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\DailyLeadTabParser;
+use App\Support\LeadSourceDate;
 use Google\Auth\Credentials\ServiceAccountCredentials;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
@@ -62,6 +63,51 @@ class GoogleSheetSyncService
         } finally {
             $lock->release();
         }
+    }
+
+    /** @return array{spreadsheet_id: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string}>, matched: int, conflicts: int, uncertain: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
+    public function previewReconciliation(int $branchId): array
+    {
+        $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
+        if (! $lock->get()) {
+            throw new RuntimeException('Sinkronisasi Google Sheets sedang berjalan. Coba lagi beberapa saat lagi.');
+        }
+        try {
+            return $this->reconciliationPlan($branchId);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    public function applyReconciliation(int $branchId, int $actorId, string $expectedHash): int
+    {
+        $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
+        if (! $lock->get()) {
+            throw new RuntimeException('Sinkronisasi Google Sheets sedang berjalan. Coba lagi beberapa saat lagi.');
+        }
+        try {
+            $plan = $this->reconciliationPlan($branchId);
+            if ($plan['failed_tabs'] > 0 || $plan['changes'] === []
+                || ! hash_equals($expectedHash, hash('sha256', json_encode($plan, JSON_THROW_ON_ERROR)))) {
+                throw new RuntimeException('Sumber atau data lead berubah, atau ada tab gagal dibaca. Buat pratinjau baru.');
+            }
+
+            return $this->leadImporter->applyReconciliation($plan['changes'], $branchId, $actorId);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** @return array{spreadsheet_id: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string}>, matched: int, conflicts: int, uncertain: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
+    private function reconciliationPlan(int $branchId): array
+    {
+        $spreadsheetId = DB::table('branches')->where('id', $branchId)->value('google_spreadsheet_id');
+        if (! is_string($spreadsheetId) || $spreadsheetId === '') {
+            throw new RuntimeException('Cabang ini belum memiliki spreadsheet sumber.');
+        }
+        $sourceData = $this->readBranch($this->googleClient(), $spreadsheetId);
+
+        return ['spreadsheet_id' => $spreadsheetId, ...$this->leadImporter->previewReconciliation($sourceData['rows'], $branchId), 'failed_tabs' => count($sourceData['errors'])];
     }
 
     /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
@@ -204,7 +250,7 @@ class GoogleSheetSyncService
     /** @return array{rows: list<array<string, string|null>>, missing_source_fields: int, errors: list<string>} */
     protected function readBranch(PendingRequest $client, string $spreadsheetId): array
     {
-        $metadata = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?fields=sheets.properties")->throw()->json();
+        $metadata = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?fields=sheets.properties,properties.title")->throw()->json();
         $sheets = is_array($metadata) && is_array($metadata['sheets'] ?? null) ? $metadata['sheets'] : [];
         /** @var list<string> $tabs */
         $tabs = collect($sheets)->map(fn (mixed $sheet) => $sheet['properties']['title'] ?? null)
@@ -222,6 +268,11 @@ class GoogleSheetSyncService
             $tabValues[$tab] = is_array($valueRanges[$index]['values'] ?? null) ? $valueRanges[$index]['values'] : [];
         }
         $parsed = $this->dailyLeadTabParser->parseAll($tabValues);
+        $spreadsheetTitle = is_string($metadata['properties']['title'] ?? null) ? $metadata['properties']['title'] : '';
+        foreach ($parsed['rows'] as &$row) {
+            $row['source_date_raw'] = LeadSourceDate::fromDailyTab((string) $row['source_tab'], $spreadsheetTitle);
+        }
+        unset($row);
         if ($parsed['rows'] === [] && $parsed['errors'] !== []) {
             throw new RuntimeException(implode(' ', $parsed['errors']));
         }

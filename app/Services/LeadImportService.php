@@ -41,11 +41,6 @@ class LeadImportService
         if ($sourceBranchId && ! $sourceBranch) {
             throw new \RuntimeException('Cabang sumber tidak ditemukan.');
         }
-        if ($sourceBranchId && ! $branchOwner && collect($rows)->contains(
-            fn (array $row): bool => trim((string) ($row['imported_cs_name'] ?? '')) === '',
-        )) {
-            throw new \RuntimeException('Cabang sumber harus memiliki CS fallback impor yang aktif sebelum lead dapat disinkronkan.');
-        }
         $activeCs = DB::table('users')->where('role', 'cs')->where('active', true)
             ->when($sourceBranchId, fn ($query) => $query->where('branch_id', $sourceBranchId))
             ->get(['id', 'name'])
@@ -92,6 +87,12 @@ class LeadImportService
                     }
                 }
                 if ($sourceOccurrenceLeadId !== null) {
+                    $leadSourceBranchId = DB::table('leads')->where('id', $sourceOccurrenceLeadId)->value('source_branch_id');
+                    if ($sourceBranchId && $leadSourceBranchId && (int) $leadSourceBranchId !== $sourceBranchId) {
+                        $summary['skipped']++;
+
+                        continue;
+                    }
                     if ($this->refreshSourceData((int) $sourceOccurrenceLeadId, $row)) {
                         $summary['enriched']++;
                         DB::table('lead_activity')->insert([
@@ -155,6 +156,9 @@ class LeadImportService
 
                 preg_match('/^(\+?[0-9][0-9\s-]*)(?:\s+(.+))?$/u', $contact, $match);
                 $sourceCsName = trim((string) ($row['imported_cs_name'] ?? ''));
+                if ($sourceBranchId && ! $branchOwner && $sourceCsName === '') {
+                    throw new \RuntimeException('Cabang sumber harus memiliki CS fallback impor yang aktif sebelum lead dapat disinkronkan.');
+                }
                 [$owner, $ownerResolution] = $this->resolveOwner(
                     $sourceCsName,
                     $sourceBranchId,
@@ -213,6 +217,7 @@ class LeadImportService
                         'id' => $leadId,
                         'source_branch_id' => $sourceBranchId,
                         'source_branch_name' => $sourceBranch?->name,
+                        'lead_created_on' => $leadCreatedOn,
                     ];
                 }
                 $summary['inserted']++;
@@ -270,7 +275,130 @@ class LeadImportService
 
     /**
      * @param  list<array<string, string|null>>  $rows
-     * @return array<string, array{id: int, source_branch_id: int|null, source_branch_name: string|null, source_date_raw: string|null, lead_created_on: string|null, respond_time: string|null, imported_cs_name: string|null, imported_keterangan: string|null, raw_kebutuhan: string|null, greeting: string|null, chat_time: string|null, source_description: string|null, campaign_description: string|null, imported_definition: string|null}>
+     * @return array{changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string}>, matched: int, conflicts: int, uncertain: int, review: list<array{contact: string, tab: string, reason: string}>}
+     */
+    public function previewReconciliation(array $rows, int $branchId): array
+    {
+        $known = $this->knownContacts($rows);
+        $groups = [];
+        $conflicts = [];
+        $ambiguous = [];
+        foreach ($rows as $row) {
+            $contact = trim((string) ($row['contact_raw'] ?? ''));
+            $lead = null;
+            $matches = [];
+            foreach ($this->contactKeys($contact) as $key) {
+                if (isset($known[$key])) {
+                    $lead = $known[$key];
+                    $matches[$lead['id']] = $lead;
+                }
+            }
+            if (count($matches) > 1) {
+                $ambiguous[$this->contactKey($contact)] = ['contact' => $contact, 'tab' => (string) ($row['source_tab'] ?? ''), 'reason' => 'Nomor cocok dengan lebih dari satu lead.'];
+
+                continue;
+            }
+            if (! $lead) {
+                continue;
+            }
+            $id = $lead['id'];
+            if ($lead['source_branch_id'] !== $branchId || $lead['source_conflict_at'] !== null) {
+                $conflicts[$id] = ['contact' => $contact, 'tab' => (string) ($row['source_tab'] ?? ''), 'reason' => 'Kontak tercatat di cabang lain atau sumber cabang belum diketahui.'];
+
+                continue;
+            }
+            $date = LeadSourceDate::parse($row['source_date_raw'] ?? null);
+            $name = trim((string) ($row['imported_cs_name'] ?? ''));
+            $groups[$id] ??= ['lead' => $lead, 'rows' => [], 'uncertain' => false, 'contact' => $contact, 'tab' => (string) ($row['source_tab'] ?? '')];
+            if ($date === null || $name === '' || empty($row['source_tab'])) {
+                $groups[$id]['uncertain'] = true;
+
+                continue;
+            }
+            $groups[$id]['rows'][] = ['date' => $date, 'name' => $name, 'tab' => (string) $row['source_tab'], 'contact' => $contact];
+        }
+
+        ksort($groups);
+        $changes = [];
+        $uncertain = count($ambiguous);
+        $matched = 0;
+        $review = [...array_values($conflicts), ...array_values($ambiguous)];
+        foreach ($groups as $id => $group) {
+            $sourceRows = $group['rows'];
+            if ($group['uncertain'] || $sourceRows === []) {
+                $uncertain++;
+                $review[] = ['contact' => $group['contact'], 'tab' => $group['tab'], 'reason' => 'Tanggal, tab, atau Nama CS sumber belum lengkap.'];
+
+                continue;
+            }
+            usort($sourceRows, fn (array $a, array $b): int => $a['date'] <=> $b['date']);
+            $first = $sourceRows[0];
+            $names = [];
+            foreach ($sourceRows as $sourceRow) {
+                if ($sourceRow['date'] === $first['date']) {
+                    $names[CsName::key($sourceRow['name'])] = true;
+                }
+            }
+            if (count($names) !== 1) {
+                $uncertain++;
+                $review[] = ['contact' => $group['contact'], 'tab' => $group['tab'], 'reason' => 'Nama CS pada tanggal pertama saling berbeda.'];
+
+                continue;
+            }
+            $lead = $group['lead'];
+            if ($lead['lead_created_on'] === $first['date'] && $lead['imported_cs_name'] === $first['name']) {
+                $matched++;
+
+                continue;
+            }
+            $changes[] = [
+                'lead_id' => $id, 'contact' => $first['contact'], 'tab' => $first['tab'],
+                'old_date' => $lead['lead_created_on'], 'new_date' => $first['date'],
+                'old_source_date' => $lead['source_date_raw'], 'old_revision' => $lead['revision'],
+                'old_cs' => $lead['imported_cs_name'], 'new_cs' => $first['name'],
+            ];
+        }
+
+        return ['changes' => $changes, 'matched' => $matched, 'conflicts' => count($conflicts), 'uncertain' => $uncertain, 'review' => $review];
+    }
+
+    /** @param list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string}> $changes */
+    public function applyReconciliation(array $changes, int $branchId, int $actorId): int
+    {
+        return DB::transaction(function () use ($changes, $branchId, $actorId): int {
+            foreach ($changes as $change) {
+                $lead = DB::table('leads')->where('id', $change['lead_id'])->lockForUpdate()->first();
+                if (! $lead || (int) $lead->source_branch_id !== $branchId
+                    || $lead->lead_created_on !== $change['old_date'] || $lead->source_date_raw !== $change['old_source_date']
+                    || (int) $lead->revision !== $change['old_revision'] || $lead->imported_cs_name !== $change['old_cs']) {
+                    throw new \RuntimeException('Data lead berubah setelah pratinjau. Periksa kembali sebelum melanjutkan.');
+                }
+                $updates = [
+                    'lead_created_on' => $change['new_date'],
+                    'source_date_raw' => $change['new_date'],
+                    'imported_cs_name' => $change['new_cs'],
+                    'updated_at' => now(),
+                    'revision' => DB::raw('revision + 1'),
+                ];
+                if ($lead->owner_resolution === 'source_matched' && CsName::key((string) $lead->imported_cs_name) !== CsName::key($change['new_cs'])) {
+                    $updates['owner_resolution'] = 'manual';
+                }
+                DB::table('leads')->where('id', $change['lead_id'])->update($updates);
+                DB::table('lead_activity')->insert([
+                    'lead_id' => $change['lead_id'], 'actor_id' => $actorId,
+                    'action' => 'Data sumber direkonsiliasi',
+                    'detail' => "Tab {$change['tab']}: tanggal ".($change['old_date'] ?? 'kosong')." menjadi {$change['new_date']}; Nama CS ".($change['old_cs'] ?? 'kosong')." menjadi {$change['new_cs']}.",
+                    'created_at' => now(),
+                ]);
+            }
+
+            return count($changes);
+        });
+    }
+
+    /**
+     * @param  list<array<string, string|null>>  $rows
+     * @return array<string, array{id: int, source_branch_id: int|null, source_branch_name: string|null, source_conflict_at: string|null, source_date_raw: string|null, lead_created_on: string|null, revision: int, respond_time: string|null, imported_cs_name: string|null, imported_keterangan: string|null, raw_kebutuhan: string|null, greeting: string|null, chat_time: string|null, source_description: string|null, campaign_description: string|null, imported_definition: string|null}>
      */
     private function knownContacts(array $rows): array
     {
@@ -286,8 +414,8 @@ class LeadImportService
             ->leftJoin('branches as b', 'b.id', '=', 'l.source_branch_id')
             ->whereIn('l.contact_key', array_keys($keys))
             ->get([
-                'l.id', 'l.contact_key', 'l.source_branch_id', 'b.name as source_branch_name',
-                'l.source_date_raw', 'l.lead_created_on', 'l.respond_time', 'l.imported_cs_name',
+                'l.id', 'l.contact_key', 'l.source_branch_id', 'l.source_conflict_at', 'b.name as source_branch_name',
+                'l.source_date_raw', 'l.lead_created_on', 'l.revision', 'l.respond_time', 'l.imported_cs_name',
                 'l.imported_keterangan', 'l.raw_kebutuhan', 'l.greeting', 'l.chat_time',
                 'l.source_description', 'l.campaign_description', 'l.imported_definition',
             ]) as $lead) {
@@ -295,8 +423,10 @@ class LeadImportService
                 'id' => (int) $lead->id,
                 'source_branch_id' => $lead->source_branch_id === null ? null : (int) $lead->source_branch_id,
                 'source_branch_name' => $lead->source_branch_name,
+                'source_conflict_at' => $lead->source_conflict_at,
                 'source_date_raw' => $lead->source_date_raw,
                 'lead_created_on' => $lead->lead_created_on,
+                'revision' => (int) $lead->revision,
                 'respond_time' => $lead->respond_time,
                 'imported_cs_name' => $lead->imported_cs_name,
                 'imported_keterangan' => $lead->imported_keterangan,
@@ -376,7 +506,7 @@ class LeadImportService
     {
         $updates = [];
         foreach ([
-            'source_date_raw', 'respond_time', 'imported_cs_name', 'imported_keterangan', 'raw_kebutuhan',
+            'respond_time', 'imported_keterangan', 'raw_kebutuhan',
             'greeting', 'chat_time', 'source_description', 'campaign_description',
         ] as $field) {
             $value = $row[$field] ?? null;
@@ -387,10 +517,6 @@ class LeadImportService
         $classification = $this->classification($row, $this->initialMilestones($row));
         if ($classification !== null && ($lead['imported_definition'] ?? null) !== $classification) {
             $updates['imported_definition'] = $classification;
-        }
-        $leadCreatedOn = LeadSourceDate::parse($row['source_date_raw'] ?? null);
-        if ($leadCreatedOn !== null && (string) ($lead['lead_created_on'] ?? '') !== $leadCreatedOn) {
-            $updates['lead_created_on'] = $leadCreatedOn;
         }
 
         return $updates;

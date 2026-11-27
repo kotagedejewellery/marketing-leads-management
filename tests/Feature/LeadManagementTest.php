@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\GoogleSheetSyncService;
 use App\Services\LeadImportService;
 use App\Support\DailyLeadTabParser;
+use App\Support\LeadSourceDate;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\PendingRequest;
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
 use Mockery;
+use OpenSpout\Common\Entity\Cell;
+use OpenSpout\Common\Entity\Cell\FormulaCell;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer;
 use Tests\TestCase;
@@ -214,7 +217,7 @@ class LeadManagementTest extends TestCase
         $batchRequests = 0;
         Http::fake(function (Request $request) use (&$batchRequests, $headers) {
             if (str_contains($request->url(), 'fields=sheets.properties')) {
-                return Http::response(['sheets' => [['properties' => ['title' => '1']]]]);
+                return Http::response(['properties' => ['title' => 'Monitoring Leads NOVEMBER 2026'], 'sheets' => [['properties' => ['title' => '1']]]]);
             }
             $batchRequests++;
             if ($batchRequests === 1) {
@@ -224,7 +227,7 @@ class LeadManagementTest extends TestCase
             return Http::response(['valueRanges' => [[
                 'values' => [
                     [],
-                    ['', '1 November 2026'],
+                    ['', '26 November 2026'],
                     [...array_fill(0, 26, ''), 'Whatsapp 1'],
                     [...array_fill(0, 26, ''), ...$headers],
                     [...array_fill(0, 26, ''), '1', '+62 851-0000-0888 Rini', '0', 'Sisil', 'Tanya-Tanya', 'Cincin nikah', 'Halo Rini', '10.46', 'Organik', 'Other', 'Warm'],
@@ -241,7 +244,7 @@ class LeadManagementTest extends TestCase
 
         $this->assertSame(1, $summary['inserted']);
         $this->assertSame(2, $batchRequests);
-        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285100000888', 'greeting' => 'Halo Rini']);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285100000888', 'greeting' => 'Halo Rini', 'lead_created_on' => '2026-11-01']);
     }
 
     public function test_admin_imports_a_phone_once_and_maps_its_first_milestone(): void
@@ -593,26 +596,46 @@ class LeadManagementTest extends TestCase
         $writer = new Writer;
         $writer->openToFile($path);
 
-        $this->writeDailyLeadSheet($writer, '1', '1 November 2026', '+62 851-7777-4444', '');
+        $this->writeDailyLeadSheet($writer, '1', '26 November 2026', '+62 851-7777-4444', '');
         $writer->addNewSheetAndMakeItCurrent();
-        $this->writeDailyLeadSheet($writer, '2', '2 November 2026', '+62 851-7777-5555', '');
+        $this->writeDailyLeadSheet($writer, '2', '26 November 2026', '+62 851-7777-5555', '');
         $writer->addNewSheetAndMakeItCurrent()->setName('All Leads');
         $writer->addRow(Row::fromValues(['Tanggal', 'Nama/Nomor']));
         $writer->addRow(Row::fromValues(['1', '+62 851-7777-6666']));
         $writer->close();
 
         $response = $this->actingAs($admin)->post('/leads/import', [
-            'csv_file' => new UploadedFile($path, 'daily-leads.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+            'csv_file' => new UploadedFile($path, 'monitoring NOVEMBER 2026.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
             'import_mode' => 'daily_tabs',
             'branch_id' => $branchId,
         ]);
 
         $response->assertRedirect('/leads');
         $this->assertDatabaseCount('leads', 2);
-        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177774444', 'source_date_raw' => '1 November 2026', 'lead_created_on' => '2026-11-01', 'source_branch_id' => $branchId, 'assigned_user_id' => $cs->id]);
-        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177775555', 'source_date_raw' => '2 November 2026']);
-        $this->assertDatabaseHas('lead_activity', ['action' => 'Diimpor dari tab harian', 'detail' => 'Sumber: tab 1 (1 November 2026). Nama CS sumber kosong; ditugaskan sementara ke CS Yogyakarta (Yogyakarta).']);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177774444', 'source_date_raw' => '2026-11-01', 'lead_created_on' => '2026-11-01', 'source_branch_id' => $branchId, 'assigned_user_id' => $cs->id]);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177775555', 'source_date_raw' => '2026-11-02']);
+        $this->assertDatabaseHas('lead_activity', ['action' => 'Diimpor dari tab harian', 'detail' => 'Sumber: tab 1 (2026-11-01). Nama CS sumber kosong; ditugaskan sementara ke CS Yogyakarta (Yogyakarta).']);
         $this->assertDatabaseMissing('leads', ['contact_key' => 'phone:6285177776666']);
+        @unlink($path);
+    }
+
+    public function test_daily_xlsx_uses_earliest_numeric_tab_even_if_workbook_order_is_reversed(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $path = tempnam(sys_get_temp_dir(), 'daily-order-').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $this->writeDailyLeadSheet($writer, '13', '13 November 2026', '081234567890', 'Dilla');
+        $writer->addNewSheetAndMakeItCurrent();
+        $this->writeDailyLeadSheet($writer, '1', '1 November 2026', '081234567890', 'Dilla');
+        $writer->close();
+        $this->actingAs($admin)->post('/leads/import', [
+            'csv_file' => new UploadedFile($path, 'monitoring NOVEMBER 2026.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+            'import_mode' => 'daily_tabs', 'branch_id' => $branchId,
+        ])->assertRedirect('/leads');
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567890', 'lead_created_on' => '2026-11-01']);
         @unlink($path);
     }
 
@@ -639,6 +662,48 @@ class LeadManagementTest extends TestCase
             ->assertSessionHas('inertia.flash_data.toast.type', 'warning');
 
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177777001']);
+        @unlink($path);
+    }
+
+    public function test_daily_xlsx_with_formula_date_and_unknown_period_does_not_guess_a_date(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $path = tempnam(sys_get_temp_dir(), 'daily-formula-').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $writer->getCurrentSheet()->setName('1');
+        $writer->addRow(Row::fromValues([null, 'Monitoring Leads']));
+        $writer->addRow(new Row([Cell::fromValue(null), new FormulaCell('TODAY()', '26 November 2026')]));
+        $writer->addRow(Row::fromValues(['Whatsapp 1']));
+        $writer->addRow(Row::fromValues(['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads']));
+        $writer->addRow(Row::fromValues(['1', '+62 851-7777-7002', '0', 'Dilla', 'klik saja', '', '', '', '', '', 'Cold']));
+        $writer->close();
+
+        $this->actingAs($admin)->post('/leads/import', [
+            'csv_file' => new UploadedFile($path, 'daily.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+            'import_mode' => 'daily_tabs', 'branch_id' => $branchId,
+        ])->assertRedirect('/leads');
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177777002', 'assigned_user_id' => $cs->id, 'lead_created_on' => null]);
+        @unlink($path);
+    }
+
+    public function test_daily_xlsx_with_empty_source_cs_requires_an_active_fallback(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $path = tempnam(sys_get_temp_dir(), 'daily-no-fallback-').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $this->writeDailyLeadSheet($writer, '1', '1 November 2026', '+62 851-7777-7003', '');
+        $writer->close();
+
+        $this->actingAs($admin)->post('/leads/import', [
+            'csv_file' => new UploadedFile($path, 'daily.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+            'import_mode' => 'daily_tabs', 'branch_id' => $branchId,
+        ])->assertSessionHasErrors('branch_id');
+        $this->assertDatabaseCount('leads', 0);
         @unlink($path);
     }
 
@@ -1021,13 +1086,234 @@ class LeadManagementTest extends TestCase
         $rows[0]['source_tab'] = '2';
         $rows[0]['source_date_raw'] = '2 November 2026';
         $reappeared = app(LeadImportService::class)->import($rows, null, 'sheet-utama');
+        app(LeadImportService::class)->import($rows, null, 'sheet-utama');
 
         $this->assertSame(['enriched' => 0, 'inserted' => 1, 'skipped' => 0, 'resurfaced' => 0, 'unassigned' => 1, 'awaiting_account' => 0, 'needs_review' => 0, 'missing_dates' => 0], $first);
         $this->assertSame(['enriched' => 0, 'inserted' => 0, 'skipped' => 1, 'resurfaced' => 0, 'unassigned' => 0, 'awaiting_account' => 0, 'needs_review' => 0, 'missing_dates' => 0], $again);
         $this->assertSame(['enriched' => 0, 'inserted' => 0, 'skipped' => 0, 'resurfaced' => 1, 'unassigned' => 0, 'awaiting_account' => 0, 'needs_review' => 0, 'missing_dates' => 0], $reappeared);
         $this->assertDatabaseCount('leads', 1);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177771999', 'lead_created_on' => '2026-11-01']);
         $this->assertDatabaseCount('lead_source_occurrences', 2);
         $this->assertDatabaseHas('lead_activity', ['action' => 'Lead muncul kembali dari Google Sheets']);
+    }
+
+    public function test_an_earlier_source_tab_does_not_automatically_reconcile_an_existing_lead(): void
+    {
+        $row = [
+            'source_row_no' => '1',
+            'source_date_raw' => '2 November 2026',
+            'source_tab' => '2',
+            'contact_raw' => '+62 851-7777-1997',
+            'imported_cs_name' => 'Nanda',
+        ];
+        app(LeadImportService::class)->import([$row], null, 'sheet-utama');
+        $row['source_date_raw'] = '1 November 2026';
+        $row['source_tab'] = '1';
+        $row['imported_cs_name'] = 'Dilla';
+        app(LeadImportService::class)->import([$row], null, 'sheet-utama');
+
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771997',
+            'lead_created_on' => '2026-11-02',
+            'imported_cs_name' => 'Nanda',
+        ]);
+    }
+
+    public function test_sync_does_not_reconcile_historical_date_or_source_cs_automatically(): void
+    {
+        $row = [
+            'source_row_no' => '1',
+            'source_date_raw' => '26 November 2026',
+            'source_tab' => '13',
+            'contact_raw' => '+62 851-7777-1996',
+            'imported_cs_name' => 'Nama lama',
+        ];
+        app(LeadImportService::class)->import([$row], null, 'sheet-utama');
+        $row['source_date_raw'] = '13 November 2026';
+        $row['imported_cs_name'] = 'Nama baru';
+        app(LeadImportService::class)->import([$row], null, 'sheet-utama');
+
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771996',
+            'lead_created_on' => '2026-11-26',
+            'imported_cs_name' => 'Nama lama',
+        ]);
+    }
+
+    public function test_reconciliation_preview_compares_source_without_changing_work(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $row = [
+            'source_row_no' => '1', 'source_tab' => '13', 'source_date_raw' => '26 November 2026',
+            'contact_raw' => '+62 851-7777-1995', 'imported_cs_name' => 'Dilla',
+        ];
+        $importer = app(LeadImportService::class);
+        $importer->import([$row], null, 'sheet-palagan', $branchId);
+        $row['source_date_raw'] = '13 November 2026';
+        $row['imported_cs_name'] = 'Nanda';
+
+        $preview = $importer->previewReconciliation([$row], $branchId);
+
+        $this->assertCount(1, $preview['changes']);
+        $this->assertSame('2026-11-13', $preview['changes'][0]['new_date']);
+        $this->assertSame('Nanda', $preview['changes'][0]['new_cs']);
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771995', 'lead_created_on' => '2026-11-26',
+            'assigned_user_id' => $cs->id, 'imported_cs_name' => 'Dilla',
+        ]);
+    }
+
+    public function test_reconciliation_does_not_choose_between_duplicate_phone_formats(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        foreach (['phone:081234567890', 'phone:6281234567890'] as $key) {
+            \DB::table('leads')->insert(['contact_key' => $key, 'contact_raw' => $key, 'source_branch_id' => $branchId]);
+        }
+        $row = ['source_tab' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        $preview = app(LeadImportService::class)->previewReconciliation([$row], $branchId);
+        $this->assertSame([], $preview['changes']);
+        $this->assertSame(1, $preview['uncertain']);
+    }
+
+    public function test_existing_row_without_cs_does_not_require_fallback(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $existing = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        $importer = app(LeadImportService::class);
+        $importer->import([$existing], null, 'sheet', $branchId);
+        $new = [...$existing, 'source_row_no' => '2', 'contact_raw' => '081234567891'];
+        $importer->import([[...$existing, 'imported_cs_name' => ''], $new], null, 'sheet', $branchId);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567891', 'assigned_user_id' => $cs->id]);
+    }
+
+    public function test_daily_tab_date_supports_numeric_month_and_year(): void
+    {
+        $this->assertSame('2026-11-13', LeadSourceDate::fromDailyTab('13', 'Monitoring 11-2026'));
+        $this->assertNull(LeadSourceDate::fromDailyTab('13', 'Monitoring 11-2026 12-2026'));
+    }
+
+    public function test_reconciliation_applies_only_confirmed_source_fields(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $row = [
+            'source_row_no' => '1', 'source_tab' => '13', 'source_date_raw' => '26 November 2026',
+            'contact_raw' => '+62 851-7777-1994', 'imported_cs_name' => 'Dilla',
+        ];
+        $importer = app(LeadImportService::class);
+        $importer->import([$row], null, 'sheet-palagan', $branchId);
+        $row['source_date_raw'] = '13 November 2026';
+        $row['imported_cs_name'] = 'Nanda';
+        $preview = $importer->previewReconciliation([$row], $branchId);
+
+        $this->assertSame(1, $importer->applyReconciliation($preview['changes'], $branchId, $cs->id));
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771994', 'lead_created_on' => '2026-11-13',
+            'assigned_user_id' => $cs->id, 'imported_cs_name' => 'Nanda',
+        ]);
+        $this->assertDatabaseHas('lead_activity', ['actor_id' => $cs->id, 'action' => 'Data sumber direkonsiliasi']);
+    }
+
+    public function test_changed_source_cs_without_account_is_visible_for_admin_review(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $row = ['source_row_no' => '1', 'source_tab' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        $importer = app(LeadImportService::class);
+        $importer->import([$row], null, 'sheet', $branchId);
+        $preview = $importer->previewReconciliation([[...$row, 'imported_cs_name' => 'Nanda']], $branchId);
+        $importer->applyReconciliation($preview['changes'], $branchId, $admin->id);
+        $this->assertDatabaseHas('leads', ['assigned_user_id' => $cs->id, 'owner_resolution' => 'manual', 'imported_cs_name' => 'Nanda']);
+        $this->actingAs($admin)->get('/accounts')->assertInertia(fn (Assert $page) => $page
+            ->component('Accounts/Index')
+            ->where('unmatched_source_names.0.name', 'Nanda')
+            ->where('unmatched_source_names.0.count', 1)
+            ->where('unmatched_source_names.0.branch_name', 'Palagan'));
+    }
+
+    public function test_reconciliation_rejects_a_stale_preview_without_overwriting_changes(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $row = [
+            'source_row_no' => '1', 'source_tab' => '13', 'source_date_raw' => '26 November 2026',
+            'contact_raw' => '+62 851-7777-1993', 'imported_cs_name' => 'Dilla',
+        ];
+        $importer = app(LeadImportService::class);
+        $importer->import([$row], null, 'sheet-palagan', $branchId);
+        $row['source_date_raw'] = '13 November 2026';
+        $preview = $importer->previewReconciliation([$row], $branchId);
+        \DB::table('leads')->where('id', $preview['changes'][0]['lead_id'])->update(['imported_cs_name' => 'Koreksi lain']);
+
+        try {
+            $importer->applyReconciliation($preview['changes'], $branchId, $cs->id);
+            $this->fail('Pratinjau lama harus ditolak.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('berubah setelah pratinjau', $exception->getMessage());
+        }
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177771993', 'lead_created_on' => '2026-11-26', 'imported_cs_name' => 'Koreksi lain']);
+    }
+
+    public function test_reconciliation_excludes_ambiguous_names_and_cross_branch_contacts(): void
+    {
+        $palagan = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $solo = \DB::table('branches')->insertGetId(['name' => 'Solo']);
+        $row = ['source_row_no' => '1', 'source_tab' => '13', 'source_date_raw' => '13 November 2026', 'contact_raw' => '+62 851-7777-1990', 'imported_cs_name' => 'Dilla'];
+        $other = [...$row, 'contact_raw' => '+62 851-7777-1991'];
+        $shared = [...$row, 'contact_raw' => '+62 851-7777-1989'];
+        $importer = app(LeadImportService::class);
+        $importer->import([$row], null, 'sheet-palagan', $palagan);
+        $importer->import([$other], null, 'sheet-solo', $solo);
+        $importer->import([$shared], null, 'sheet-palagan', $palagan);
+        $importer->import([$shared], null, 'sheet-solo', $solo);
+        $ambiguous = [...$row, 'imported_cs_name' => 'Nanda'];
+
+        $preview = $importer->previewReconciliation([$row, $ambiguous, $other, $shared], $palagan);
+
+        $this->assertSame([], $preview['changes']);
+        $this->assertSame(1, $preview['uncertain']);
+        $this->assertSame(2, $preview['conflicts']);
+    }
+
+    public function test_only_admin_can_preview_and_apply_reconciliation_after_confirming_backup(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet-palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $row = [
+            'source_row_no' => '1', 'source_tab' => '13', 'source_date_raw' => '26 November 2026',
+            'contact_raw' => '+62 851-7777-1992', 'imported_cs_name' => 'Dilla',
+        ];
+        app(LeadImportService::class)->import([$row], null, 'sheet-palagan', $branchId);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];
+        $sourceName = 'Nanda';
+        Http::fake(function (Request $request) use ($headers, &$sourceName) {
+            return str_contains($request->url(), 'fields=sheets.properties')
+                ? Http::response(['properties' => ['title' => 'NOVEMBER 2026'], 'sheets' => [['properties' => ['title' => '13']]]])
+                : Http::response(['valueRanges' => [['values' => [[], ['', '26 November 2026'], ['Whatsapp 1'], $headers, ['1', '+62 851-7777-1992', '0', $sourceName, 'Klik saja', '', '', '', '', '', 'Cold']]]]]);
+        });
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])
+            ->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->andReturn('token');
+        $this->app->instance(GoogleSheetSyncService::class, $sync);
+
+        $this->actingAs($cs)->post("/branches/{$branchId}/preview-reconciliation")->assertForbidden();
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/preview-reconciliation")->assertRedirect('/branches');
+        $this->assertCount(1, session('reconciliation_preview.changes'));
+        $this->actingAs($cs)->post("/branches/{$branchId}/apply-reconciliation", ['backup_confirmed' => true])->assertForbidden();
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/apply-reconciliation", [])->assertSessionHasErrors('backup_confirmed');
+        $sourceName = 'Nama berubah';
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/apply-reconciliation", ['backup_confirmed' => true])->assertRedirect('/branches')
+            ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177771992', 'lead_created_on' => '2026-11-26', 'imported_cs_name' => 'Dilla']);
+        $sourceName = 'Nanda';
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/preview-reconciliation")->assertRedirect('/branches');
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/apply-reconciliation", ['backup_confirmed' => true])->assertRedirect('/branches');
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177771992', 'lead_created_on' => '2026-11-13', 'imported_cs_name' => 'Nanda', 'assigned_user_id' => $cs->id]);
     }
 
     public function test_reimporting_the_same_source_row_enriches_source_data_without_touching_cs_work(): void
@@ -1206,11 +1492,18 @@ class LeadManagementTest extends TestCase
             'imported_definition' => 'Cold',
         ];
         app(LeadImportService::class)->import([$row], null, 'sheet-solo', $soloId);
+        $row['imported_cs_name'] = 'CS Palagan';
+        app(LeadImportService::class)->import([$row], null, 'sheet-palagan', $palaganId);
         app(LeadImportService::class)->import([$row], null, 'sheet-palagan', $palaganId);
 
         $this->assertDatabaseHas('lead_source_occurrences', [
             'spreadsheet_id' => 'sheet-palagan',
             'source_branch_id' => $palaganId,
+        ]);
+        $this->assertDatabaseHas('leads', [
+            'contact_key' => 'phone:6285177771880',
+            'source_branch_id' => $soloId,
+            'imported_cs_name' => 'CS Solo',
         ]);
     }
 
@@ -1891,7 +2184,7 @@ class LeadManagementTest extends TestCase
         );
     }
 
-    public function test_cs_cannot_see_a_lead_waiting_for_its_source_account(): void
+    public function test_cs_can_see_a_lead_waiting_for_its_source_account(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
         $cs = $this->user('cs', ['branch_id' => $branchId]);
@@ -1909,7 +2202,8 @@ class LeadManagementTest extends TestCase
         $this->actingAs($cs)->get('/leads')->assertInertia(
             fn (Assert $page) => $page
                 ->component('Leads/Index')
-                ->has('leads.data', 0),
+                ->has('leads.data', 1)
+                ->where('leads.data.0.imported_cs_name', 'CS Baru'),
         );
     }
 
@@ -1999,7 +2293,7 @@ class LeadManagementTest extends TestCase
         ]);
     }
 
-    public function test_team_member_cannot_update_or_archive_a_lead_before_starting_to_assist(): void
+    public function test_team_member_can_update_but_not_archive_a_branch_lead(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
         $primary = $this->user('cs', ['branch_id' => $branchId]);
@@ -2014,13 +2308,13 @@ class LeadManagementTest extends TestCase
         ]);
 
         $this->actingAs($teamMember)
-            ->patch("/leads/{$leadId}", ['inline' => true, 'keterangan' => 'Tidak boleh tersimpan'])
-            ->assertNotFound();
+            ->patch("/leads/{$leadId}", ['inline' => true, 'keterangan' => 'Diperbarui tim cabang'])
+            ->assertRedirect();
         $this->actingAs($teamMember)
             ->patch("/leads/{$leadId}/archive")
             ->assertNotFound();
 
-        $this->assertDatabaseHas('leads', ['id' => $leadId, 'keterangan' => null, 'archived_at' => null]);
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'keterangan' => 'Diperbarui tim cabang', 'archived_at' => null]);
     }
 
     public function test_admin_cannot_assign_or_add_a_pendamping_from_a_different_source_branch(): void

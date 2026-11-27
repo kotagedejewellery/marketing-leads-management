@@ -78,7 +78,6 @@ const clientError = ref('');
 const archiveDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
 const lifecycleProcessing = ref(false);
-const assisting = ref(false);
 const groups = {
     Cold: [['clicked', 'Klik saja']],
     Warm: [
@@ -242,23 +241,6 @@ function destroyLead() {
         onFinish: () => (lifecycleProcessing.value = false),
     });
 }
-function startAssisting() {
-    router.post(
-        `/leads/${props.lead.id}/start-assisting`,
-        { return_to: `/leads/${props.lead.id}` },
-        {
-            onStart: () => (assisting.value = true),
-            onFinish: () => (assisting.value = false),
-        },
-    );
-}
-function stopAssisting() {
-    router.delete(`/leads/${props.lead.id}/stop-assisting`, {
-        data: { return_to: `/leads/${props.lead.id}` },
-        onStart: () => (assisting.value = true),
-        onFinish: () => (assisting.value = false),
-    });
-}
 </script>
 
 <template>
@@ -297,7 +279,9 @@ function stopAssisting() {
                     Arsipkan
                 </button>
                 <button
-                    v-if="lead.archived_at"
+                    v-if="
+                        lead.archived_at && (isAdmin || handlingRole !== 'team')
+                    "
                     class="kgj-button-primary"
                     type="button"
                     :disabled="lifecycleProcessing"
@@ -306,7 +290,9 @@ function stopAssisting() {
                     Pulihkan
                 </button>
                 <button
-                    v-if="lead.archived_at"
+                    v-if="
+                        lead.archived_at && (isAdmin || handlingRole !== 'team')
+                    "
                     class="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#d8aaa2] px-3 text-sm font-semibold text-kgj-rose transition hover:bg-[#fff3f1]"
                     type="button"
                     :disabled="lifecycleProcessing"
@@ -335,26 +321,6 @@ function stopAssisting() {
             Lead ini berada di arsip dan tidak dapat diperbarui sampai
             dipulihkan.
         </p>
-        <section
-            v-else-if="!isAdmin && handlingRole === 'team'"
-            class="mt-8 rounded-2xl border border-[#dccd9f] bg-[#fbf6e8] p-5 text-[#665a43]"
-        >
-            <h2 class="text-lg font-semibold text-[#302d27]">
-                Lead antrean cabang
-            </h2>
-            <p class="mt-2 text-sm">
-                Mulai bantu untuk mencatat diri Anda sebagai CS pendamping dan
-                memperbarui lead ini.
-            </p>
-            <button
-                class="kgj-button-gold mt-4"
-                type="button"
-                :disabled="assisting"
-                @click="startAssisting"
-            >
-                {{ assisting ? 'Memulai…' : 'Mulai bantu' }}
-            </button>
-        </section>
         <form v-else class="mt-8 grid gap-6" @submit.prevent="save">
             <div class="grid gap-4 md:grid-cols-2">
                 <label class="grid gap-2 text-sm font-semibold"
@@ -663,17 +629,6 @@ function stopAssisting() {
                 {{ form.processing ? 'Menyimpan…' : 'Simpan perubahan' }}
             </button>
         </form>
-        <button
-            v-if="
-                !lead.archived_at && !isAdmin && handlingRole === 'collaborator'
-            "
-            class="kgj-button-secondary mt-6"
-            type="button"
-            :disabled="assisting"
-            @click="stopAssisting"
-        >
-            {{ assisting ? 'Memproses…' : 'Selesai membantu' }}
-        </button>
 
         <section class="mt-10 border-t border-kgj-line pt-6">
             <h2 class="text-lg font-semibold">Data dari import</h2>

@@ -299,6 +299,7 @@ class DashboardController extends Controller
         return Inertia::render('Branches/Index', [
             'branches' => $branches,
             'source_preview' => $request->session()->get('source_preview'),
+            'reconciliation_preview' => $request->session()->get('reconciliation_preview'),
         ]);
     }
 
@@ -321,9 +322,16 @@ class DashboardController extends Controller
         }
         $awaitingByAccount = [];
         $reconcilableByAccount = [];
+        $unmatchedSourceNames = [];
         foreach (DB::table('leads')->whereNotNull('source_branch_id')->whereNotNull('imported_cs_name')->whereNull('archived_at')->get(['assigned_user_id', 'owner_resolution', 'source_branch_id', 'imported_cs_name']) as $lead) {
-            $owners = array_keys($sourceNameOwners[(int) $lead->source_branch_id.'|'.CsName::key((string) $lead->imported_cs_name)] ?? []);
+            $sourceKey = (int) $lead->source_branch_id.'|'.CsName::key((string) $lead->imported_cs_name);
+            $owners = array_keys($sourceNameOwners[$sourceKey] ?? []);
             if (count($owners) !== 1) {
+                if (trim((string) $lead->imported_cs_name) !== '') {
+                    $unmatchedSourceNames[$sourceKey] ??= ['name' => $lead->imported_cs_name, 'branch_id' => (int) $lead->source_branch_id, 'count' => 0, 'ambiguous' => count($owners) > 1];
+                    $unmatchedSourceNames[$sourceKey]['count']++;
+                }
+
                 continue;
             }
             $accountId = (int) $owners[0];
@@ -342,7 +350,11 @@ class DashboardController extends Controller
                 : 0;
         });
 
-        return Inertia::render('Accounts/Index', ['accounts' => $accounts, 'branches' => DB::table('branches')->orderBy('name')->get(['id', 'name'])]);
+        $branches = DB::table('branches')->orderBy('name')->get(['id', 'name']);
+        $branchNames = $branches->pluck('name', 'id');
+        $unmatchedSourceNames = array_values(array_map(static fn (array $entry): array => [...$entry, 'branch_name' => $branchNames->get($entry['branch_id'], 'Cabang tidak diketahui')], $unmatchedSourceNames));
+
+        return Inertia::render('Accounts/Index', ['accounts' => $accounts, 'branches' => $branches, 'unmatched_source_names' => $unmatchedSourceNames]);
     }
 
     public function storeBranch(Request $request): RedirectResponse
@@ -439,6 +451,46 @@ class DashboardController extends Controller
         }
 
         return back()->with('source_preview', [...$preview, 'branch_id' => $record->id, 'spreadsheet_id' => $spreadsheetId]);
+    }
+
+    public function previewBranchReconciliation(Request $request, GoogleSheetSyncService $sync, int $branch): RedirectResponse
+    {
+        abort_unless(DB::table('branches')->where('id', $branch)->exists(), 404);
+        $request->session()->forget('reconciliation_preview');
+        try {
+            $plan = $sync->previewReconciliation($branch);
+        } catch (\RuntimeException $exception) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
+
+            return back();
+        }
+        $request->session()->put('reconciliation_preview', [
+            ...$plan, 'branch_id' => $branch,
+            'hash' => hash('sha256', json_encode($plan, JSON_THROW_ON_ERROR)),
+        ]);
+
+        return back();
+    }
+
+    public function applyBranchReconciliation(Request $request, GoogleSheetSyncService $sync, int $branch): RedirectResponse
+    {
+        $request->validate(['backup_confirmed' => ['accepted']]);
+        $preview = $request->session()->get('reconciliation_preview');
+        if (! is_array($preview) || ($preview['branch_id'] ?? null) !== $branch || ! is_string($preview['hash'] ?? null)) {
+            throw ValidationException::withMessages(['reconciliation' => 'Buat pratinjau baru sebelum menerapkan koreksi.']);
+        }
+        try {
+            $updated = $sync->applyReconciliation($branch, (int) $request->user()->id, $preview['hash']);
+        } catch (\RuntimeException $exception) {
+            $request->session()->forget('reconciliation_preview');
+            Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
+
+            return back();
+        }
+        $request->session()->forget('reconciliation_preview');
+        Inertia::flash('toast', ['type' => 'success', 'message' => "{$updated} data sumber berhasil direkonsiliasi. Data kerja dan penugasan CS tetap dipertahankan."]);
+
+        return back();
     }
 
     private function assertSpreadsheetBelongsToBranch(?string $spreadsheetId, ?int $branchId): void
@@ -1048,9 +1100,7 @@ class DashboardController extends Controller
                     ->whereNull('c.removed_at');
             });
             if ($branchId > 0) {
-                $visible->orWhere(fn (Builder $teamLead) => $teamLead
-                    ->where("{$alias}.source_branch_id", $branchId)
-                    ->where("{$alias}.owner_resolution", '!=', 'awaiting_account'));
+                $visible->orWhere("{$alias}.source_branch_id", $branchId);
             }
         });
     }

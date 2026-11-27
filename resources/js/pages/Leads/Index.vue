@@ -139,10 +139,10 @@ const props = defineProps<{
 const page = usePage();
 const isAdmin = computed(() => page.props.auth.user?.role === 'admin');
 const ownerLabel = (lead: Lead) =>
-    lead.owner_name ||
-    (lead.owner_resolution === 'awaiting_account' && lead.imported_cs_name
-        ? `Menunggu akun: ${lead.imported_cs_name}`
-        : 'Belum ditugaskan');
+    lead.imported_cs_name ||
+    (lead.owner_resolution === 'fallback'
+        ? 'Nama CS sumber kosong'
+        : lead.owner_name || 'Belum ditugaskan');
 const ownerTitle = (lead: Lead) =>
     isAdmin.value && lead.branch_name
         ? `${ownerLabel(lead)} · Cabang: ${lead.branch_name}`
@@ -177,8 +177,14 @@ const showAdvancedFilters = ref(
     ),
 );
 const isFiltering = ref(false);
-const assistingLeadId = ref<number | null>(null);
 const selectedLeadIds = ref<number[]>([]);
+const canManageSelection = computed(
+    () =>
+        isAdmin.value ||
+        props.leads.data
+            .filter((lead) => selectedLeadIds.value.includes(lead.id))
+            .every((lead) => lead.handling_role !== 'team'),
+);
 const mobileSelectionMode = ref(false);
 const mobileEditorLead = ref<Lead | null>(null);
 const mobileQuickUpdate = ref<InstanceType<typeof LeadQuickUpdate> | null>(
@@ -660,29 +666,6 @@ const createLeadNow = () =>
         },
     });
 const createLead = () => guardUnsavedChanges(createLeadNow);
-const startAssistingNow = (leadId: number) =>
-    router.post(
-        `/leads/${leadId}/start-assisting`,
-        { return_to: `${window.location.pathname}${window.location.search}` },
-        {
-            preserveScroll: true,
-            onStart: () => (assistingLeadId.value = leadId),
-            onFinish: () => (assistingLeadId.value = null),
-        },
-    );
-const startAssisting = (leadId: number) =>
-    guardUnsavedChanges(() => startAssistingNow(leadId));
-const stopAssistingNow = (leadId: number) =>
-    router.delete(`/leads/${leadId}/stop-assisting`, {
-        data: {
-            return_to: `${window.location.pathname}${window.location.search}`,
-        },
-        preserveScroll: true,
-        onStart: () => (assistingLeadId.value = leadId),
-        onFinish: () => (assistingLeadId.value = null),
-    });
-const stopAssisting = (leadId: number) =>
-    guardUnsavedChanges(() => stopAssistingNow(leadId));
 const stageLabel = (value: string | null) =>
     ({
         clicked: 'Klik saja',
@@ -696,8 +679,8 @@ const handlingLabel = (role: Lead['handling_role']) =>
     ({
         admin: 'Admin',
         primary: 'Milik Anda',
-        collaborator: 'Anda membantu',
-        team: 'Antrean cabang',
+        collaborator: 'Tim cabang',
+        team: 'Tim cabang',
     })[role];
 const formatLeadDate = (value: string | null) =>
     value
@@ -1641,7 +1624,7 @@ onBeforeUnmount(() => {
                 <button
                     class="kgj-button-secondary"
                     type="button"
-                    :disabled="selectionForm.processing"
+                    :disabled="selectionForm.processing || !canManageSelection"
                     @click="openArchiveDialog"
                 >
                     Arsipkan
@@ -1651,7 +1634,7 @@ onBeforeUnmount(() => {
                 <button
                     class="kgj-button-primary sm:ml-auto"
                     type="button"
-                    :disabled="selectionForm.processing"
+                    :disabled="selectionForm.processing || !canManageSelection"
                     @click="restoreSelected"
                 >
                     {{ selectionForm.processing ? 'Memproses…' : 'Pulihkan' }}
@@ -1659,7 +1642,7 @@ onBeforeUnmount(() => {
                 <button
                     class="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#d8aaa2] px-3 text-sm font-semibold text-kgj-rose transition hover:bg-[#fff3f1]"
                     type="button"
-                    :disabled="selectionForm.processing"
+                    :disabled="selectionForm.processing || !canManageSelection"
                     @click="openDeleteDialog"
                 >
                     Hapus permanen
@@ -1672,6 +1655,13 @@ onBeforeUnmount(() => {
             >
                 Batal
             </button>
+            <p
+                v-if="!canManageSelection"
+                class="basis-full text-sm text-[#865124]"
+                role="status"
+            >
+                Arsip hanya tersedia untuk lead yang Anda tangani.
+            </p>
             <p
                 v-if="isAdmin && bulkSelectionMessage"
                 class="basis-full text-sm text-[#865124]"
@@ -1815,32 +1805,7 @@ onBeforeUnmount(() => {
                 />
 
                 <div
-                    v-if="
-                        !archiveMode &&
-                        !isAdmin &&
-                        lead.handling_role === 'team'
-                    "
-                    class="mt-4 rounded-xl bg-[#fbf6e8] p-3 text-sm text-[#665a43]"
-                >
-                    <p>
-                        Lead antrean cabang. Mulai bantu untuk dapat
-                        memperbarui.
-                    </p>
-                    <button
-                        class="kgj-button-gold mt-3"
-                        type="button"
-                        :disabled="assistingLeadId === lead.id"
-                        @click="startAssisting(lead.id)"
-                    >
-                        {{
-                            assistingLeadId === lead.id
-                                ? 'Memulai...'
-                                : 'Mulai bantu'
-                        }}
-                    </button>
-                </div>
-                <div
-                    v-else-if="!archiveMode"
+                    v-if="!archiveMode"
                     class="mt-4 flex flex-wrap items-center gap-3"
                 >
                     <button
@@ -1849,19 +1814,6 @@ onBeforeUnmount(() => {
                         @click="openMobileEditor(lead)"
                     >
                         <Pencil class="size-4" /> Update lead
-                    </button>
-                    <button
-                        v-if="!isAdmin && lead.handling_role === 'collaborator'"
-                        class="min-h-11 text-sm font-semibold text-[#62665b] underline underline-offset-4"
-                        type="button"
-                        :disabled="assistingLeadId === lead.id"
-                        @click="stopAssisting(lead.id)"
-                    >
-                        {{
-                            assistingLeadId === lead.id
-                                ? 'Memproses...'
-                                : 'Selesai membantu'
-                        }}
                     </button>
                     <Link
                         :href="`/leads/${lead.id}`"
@@ -2186,40 +2138,6 @@ onBeforeUnmount(() => {
                                     class="mt-1 block font-semibold text-[#8a6b2d]"
                                     >Diambil alih CRM</small
                                 >
-                                <button
-                                    v-if="
-                                        !archiveMode &&
-                                        !isAdmin &&
-                                        lead.handling_role === 'team'
-                                    "
-                                    class="mt-3 min-h-11 text-sm font-semibold text-kgj-gold-deep underline underline-offset-4"
-                                    type="button"
-                                    :disabled="assistingLeadId === lead.id"
-                                    @click="startAssisting(lead.id)"
-                                >
-                                    {{
-                                        assistingLeadId === lead.id
-                                            ? 'Memulai…'
-                                            : 'Mulai bantu'
-                                    }}
-                                </button>
-                                <button
-                                    v-else-if="
-                                        !archiveMode &&
-                                        !isAdmin &&
-                                        lead.handling_role === 'collaborator'
-                                    "
-                                    class="mt-3 min-h-11 text-sm font-semibold text-[#62665b] underline underline-offset-4"
-                                    type="button"
-                                    :disabled="assistingLeadId === lead.id"
-                                    @click="stopAssisting(lead.id)"
-                                >
-                                    {{
-                                        assistingLeadId === lead.id
-                                            ? 'Memproses…'
-                                            : 'Selesai membantu'
-                                    }}
-                                </button>
                             </td>
                             <td
                                 class="w-40 min-w-40 p-4 text-sm text-[#4f514a]"
@@ -2233,10 +2151,7 @@ onBeforeUnmount(() => {
                                 <span v-else>—</span>
                             </td>
                             <LeadQuickUpdate
-                                v-if="
-                                    !archiveMode &&
-                                    (isAdmin || lead.handling_role !== 'team')
-                                "
+                                v-if="!archiveMode"
                                 variant="table"
                                 :lead="lead"
                                 :outcome-factors="outcomeFactors"

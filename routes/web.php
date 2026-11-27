@@ -33,6 +33,8 @@ Route::middleware('auth')->group(function () {
         Route::post('branches', [DashboardController::class, 'storeBranch'])->name('branches.store');
         Route::patch('branches/{branch}', [DashboardController::class, 'updateBranch'])->name('branches.update');
         Route::post('branches/{branch}/preview-google-sheet', [DashboardController::class, 'previewBranchGoogleSheet'])->name('branches.preview-google-sheet');
+        Route::post('branches/{branch}/preview-reconciliation', [DashboardController::class, 'previewBranchReconciliation'])->name('branches.preview-reconciliation');
+        Route::post('branches/{branch}/apply-reconciliation', [DashboardController::class, 'applyBranchReconciliation'])->name('branches.apply-reconciliation');
         Route::post('branches/{branch}/replace-google-sheet', [DashboardController::class, 'replaceBranchGoogleSheet'])->name('branches.replace-google-sheet');
         Route::delete('branches/{branch}/google-sheet', [DashboardController::class, 'disconnectBranchGoogleSheet'])->name('branches.disconnect-google-sheet');
         Route::delete('branches/{branch}', [DashboardController::class, 'destroyBranch'])->name('branches.destroy');

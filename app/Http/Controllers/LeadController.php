@@ -144,18 +144,9 @@ class LeadController extends Controller
         if ($importMode === 'daily_tabs' && empty($data['branch_id'])) {
             throw ValidationException::withMessages(['branch_id' => 'Pilih cabang pemilik data harian.']);
         }
-        if ($importMode === 'daily_tabs' && ! DB::table('branches as b')
-            ->join('users as u', 'u.id', '=', 'b.default_import_user_id')
-            ->where('b.id', $data['branch_id'])
-            ->whereColumn('u.branch_id', 'b.id')
-            ->where('u.role', 'cs')
-            ->where('u.active', true)
-            ->exists()) {
-            throw ValidationException::withMessages(['branch_id' => 'Cabang sumber harus memiliki CS fallback impor yang aktif sebelum data harian dapat diimpor.']);
-        }
         $dailyErrors = [];
         if ($importMode === 'daily_tabs') {
-            [$headers, $valueRows, $dailyErrors] = $this->readDailyTabsXlsx($request->file('csv_file')->getRealPath());
+            [$headers, $valueRows, $dailyErrors] = $this->readDailyTabsXlsx($request->file('csv_file')->getRealPath(), $request->file('csv_file')->getClientOriginalName());
         } else {
             [$headers, $valueRows] = $extension === 'xlsx'
                 ? $this->readXlsx($request->file('csv_file')->getRealPath())
@@ -181,7 +172,11 @@ class LeadController extends Controller
             }
         }
         $sourceBranchId = $importMode === 'daily_tabs' ? (int) $data['branch_id'] : null;
-        $summary = $this->leadImporter->import($rows, $request->user()->id, null, $sourceBranchId);
+        try {
+            $summary = $this->leadImporter->import($rows, $request->user()->id, null, $sourceBranchId);
+        } catch (\RuntimeException $exception) {
+            throw ValidationException::withMessages(['branch_id' => $exception->getMessage()]);
+        }
 
         $message = "Import selesai: {$summary['inserted']} baru, {$summary['skipped']} duplikat dilewati, {$summary['unassigned']} perlu ditugaskan, {$summary['needs_review']} perlu review, {$summary['missing_dates']} tanpa tanggal lead.";
         if ($summary['awaiting_account']) {
@@ -524,7 +519,7 @@ class LeadController extends Controller
 
     public function update(UpdateLeadRequest $request, int $lead): RedirectResponse
     {
-        $record = $this->visibleLead($request, $lead, false, true);
+        $record = $this->visibleLead($request, $lead, false);
         abort_if($record->archived_at !== null, 404);
         $data = $request->validated();
         $selected = array_key_exists('milestones', $data)
@@ -833,9 +828,7 @@ class LeadController extends Controller
                     ->whereNull('lead_collaborators.removed_at');
             });
             if (! $requiresHandling && $branchId > 0) {
-                $visible->orWhere(fn (Builder $teamLead) => $teamLead
-                    ->where('source_branch_id', $branchId)
-                    ->where('owner_resolution', '!=', 'awaiting_account'));
+                $visible->orWhere('source_branch_id', $branchId);
             }
         });
     }
@@ -976,12 +969,13 @@ class LeadController extends Controller
     }
 
     /** @return array{0: list<string>, 1: list<array<int, string|null>>, 2: list<string>} */
-    private function readDailyTabsXlsx(string $path): array
+    private function readDailyTabsXlsx(string $path, string $filename): array
     {
         $reader = new XlsxReader;
         $reader->open($path);
         $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads', 'Tanggal sumber', 'Tab sumber'];
         $tabs = [];
+        $formulaDates = [];
         $foundDailyTab = false;
 
         foreach ($reader->getSheetIterator() as $sheet) {
@@ -992,6 +986,9 @@ class LeadController extends Controller
             $values = [];
 
             foreach ($sheet->getRowIterator() as $row) {
+                if (count($values) === 1 && ($row->cells[1] ?? null) instanceof FormulaCell) {
+                    $formulaDates[$sheet->getName()] = true;
+                }
                 $values[] = array_map(
                     fn ($cell) => $this->spreadsheetValue($cell instanceof FormulaCell ? $cell->getComputedValue() : $cell->getValue()),
                     $row->cells,
@@ -1005,7 +1002,23 @@ class LeadController extends Controller
             throw ValidationException::withMessages(['csv_file' => 'Tidak menemukan tab harian bernama angka, misalnya 1 sampai 31.']);
         }
 
+        uksort($tabs, static fn ($a, $b): int => (int) $a <=> (int) $b);
         $parsed = $this->dailyLeadTabParser->parseAll($tabs);
+        $hasFilePeriod = LeadSourceDate::fromDailyTab('1', $filename) !== null;
+        foreach ($parsed['rows'] as &$row) {
+            $tab = (string) $row['source_tab'];
+            if ($hasFilePeriod) {
+                $row['source_date_raw'] = LeadSourceDate::fromDailyTab($tab, $filename);
+            } elseif (isset($formulaDates[$tab])) {
+                $row['source_date_raw'] = null;
+            } else {
+                $date = LeadSourceDate::parse($row['source_date_raw']);
+                if ($date !== null && (int) substr($date, 8, 2) !== (int) $tab) {
+                    $row['source_date_raw'] = null;
+                }
+            }
+        }
+        unset($row);
         if ($parsed['rows'] === [] && $parsed['errors'] !== []) {
             throw ValidationException::withMessages(['csv_file' => implode(' ', $parsed['errors'])]);
         }

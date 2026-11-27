@@ -210,6 +210,7 @@ class LeadManagementTest extends TestCase
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Solo', 'google_spreadsheet_id' => 'sheet-solo']);
         $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Solo']);
+        $otherCs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'CS Kedua']);
         \DB::table('branches')->where('id', $branchId)->update(['default_import_user_id' => $cs->id]);
         config(['leads.google_sheets.credentials_path' => __FILE__]);
 
@@ -245,6 +246,12 @@ class LeadManagementTest extends TestCase
         $this->assertSame(1, $summary['inserted']);
         $this->assertSame(2, $batchRequests);
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285100000888', 'greeting' => 'Halo Rini', 'lead_created_on' => '2026-11-01']);
+        foreach ([$cs, $otherCs] as $account) {
+            $this->actingAs($account)->get('/leads')->assertInertia(fn (Assert $page) => $page
+                ->component('Leads/Index')
+                ->where('leads.data.0.imported_cs_name', 'Sisil')
+                ->where('leads.data.0.lead_created_on', '2026-11-01'));
+        }
     }
 
     public function test_admin_imports_a_phone_once_and_maps_its_first_milestone(): void
@@ -1161,6 +1168,33 @@ class LeadManagementTest extends TestCase
         ]);
     }
 
+    public function test_reconciliation_reports_missing_leads_and_protects_older_dates(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $importer = app(LeadImportService::class);
+        $old = ['source_tab' => '15', 'source_date_raw' => '2026-10-15', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        $missing = [...$old, 'contact_raw' => '081234567891'];
+        $importer->import([$old, $missing], null, 'sheet', $branchId);
+        $preview = $importer->previewReconciliation([[...$old, 'source_tab' => '1', 'source_date_raw' => '2026-11-01']], $branchId);
+        $this->assertSame([], $preview['changes']);
+        $this->assertCount(2, $preview['review']);
+    }
+
+    public function test_reconciliation_can_correct_date_when_source_cs_is_missing(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $importer = app(LeadImportService::class);
+        $row = ['source_tab' => '13', 'source_date_raw' => '2026-11-26', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        $importer->import([$row], null, 'sheet', $branchId);
+        $preview = $importer->previewReconciliation([[...$row, 'source_date_raw' => '2026-11-13', 'imported_cs_name' => '']], $branchId);
+        $this->assertSame('2026-11-13', $preview['changes'][0]['new_date']);
+        $this->assertSame('Dilla', $preview['changes'][0]['new_cs']);
+        $this->assertNotEmpty($preview['review']);
+        $importer->applyReconciliation($preview['changes'], $branchId, $cs->id);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567890', 'lead_created_on' => '2026-11-13', 'imported_cs_name' => 'Dilla', 'assigned_user_id' => $cs->id]);
+    }
+
     public function test_reconciliation_does_not_choose_between_duplicate_phone_formats(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
@@ -1303,13 +1337,14 @@ class LeadManagementTest extends TestCase
         $this->assertCount(1, session('reconciliation_preview.changes'));
         $this->actingAs($cs)->post("/branches/{$branchId}/apply-reconciliation", ['backup_confirmed' => true])->assertForbidden();
         $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/apply-reconciliation", [])->assertSessionHasErrors('backup_confirmed');
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/apply-reconciliation", ['backup_confirmed' => true])->assertSessionHasErrors('period_confirmed');
         $sourceName = 'Nama berubah';
-        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/apply-reconciliation", ['backup_confirmed' => true])->assertRedirect('/branches')
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/apply-reconciliation", ['backup_confirmed' => true, 'period_confirmed' => true])->assertRedirect('/branches')
             ->assertSessionHas('inertia.flash_data.toast.type', 'error');
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177771992', 'lead_created_on' => '2026-11-26', 'imported_cs_name' => 'Dilla']);
         $sourceName = 'Nanda';
         $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/preview-reconciliation")->assertRedirect('/branches');
-        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/apply-reconciliation", ['backup_confirmed' => true])->assertRedirect('/branches');
+        $this->actingAs($admin)->from('/branches')->post("/branches/{$branchId}/apply-reconciliation", ['backup_confirmed' => true, 'period_confirmed' => true])->assertRedirect('/branches');
         $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6285177771992', 'lead_created_on' => '2026-11-13', 'imported_cs_name' => 'Nanda', 'assigned_user_id' => $cs->id]);
     }
 

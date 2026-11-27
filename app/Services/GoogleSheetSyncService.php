@@ -65,7 +65,7 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{spreadsheet_id: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string}>, matched: int, conflicts: int, uncertain: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
+    /** @return array{spreadsheet_id: string, spreadsheet_title: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
     public function previewReconciliation(int $branchId): array
     {
         $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
@@ -98,7 +98,7 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{spreadsheet_id: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string}>, matched: int, conflicts: int, uncertain: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
+    /** @return array{spreadsheet_id: string, spreadsheet_title: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
     private function reconciliationPlan(int $branchId): array
     {
         $spreadsheetId = DB::table('branches')->where('id', $branchId)->value('google_spreadsheet_id');
@@ -107,7 +107,7 @@ class GoogleSheetSyncService
         }
         $sourceData = $this->readBranch($this->googleClient(), $spreadsheetId);
 
-        return ['spreadsheet_id' => $spreadsheetId, ...$this->leadImporter->previewReconciliation($sourceData['rows'], $branchId), 'failed_tabs' => count($sourceData['errors'])];
+        return ['spreadsheet_id' => $spreadsheetId, 'spreadsheet_title' => $sourceData['spreadsheet_title'] ?? '', ...$this->leadImporter->previewReconciliation($sourceData['rows'], $branchId), 'failed_tabs' => count($sourceData['errors'])];
     }
 
     /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, missing_source_fields: int, failed: int, partial: int} */
@@ -247,7 +247,7 @@ class GoogleSheetSyncService
         return $summary;
     }
 
-    /** @return array{rows: list<array<string, string|null>>, missing_source_fields: int, errors: list<string>} */
+    /** @return array{rows: list<array<string, string|null>>, missing_source_fields: int, errors: list<string>, spreadsheet_title?: string} */
     protected function readBranch(PendingRequest $client, string $spreadsheetId): array
     {
         $metadata = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?fields=sheets.properties,properties.title")->throw()->json();
@@ -280,7 +280,7 @@ class GoogleSheetSyncService
             throw new RuntimeException('Maksimal 5.000 lead total dari seluruh tab harian.');
         }
 
-        return $parsed;
+        return [...$parsed, 'spreadsheet_title' => $spreadsheetTitle];
     }
 
     protected function accessToken(string $credentialsPath): string

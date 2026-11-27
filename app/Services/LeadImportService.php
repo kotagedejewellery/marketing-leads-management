@@ -275,7 +275,7 @@ class LeadImportService
 
     /**
      * @param  list<array<string, string|null>>  $rows
-     * @return array{changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string}>, matched: int, conflicts: int, uncertain: int, review: list<array{contact: string, tab: string, reason: string}>}
+     * @return array{changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, review: list<array{contact: string, tab: string, reason: string}>}
      */
     public function previewReconciliation(array $rows, int $branchId): array
     {
@@ -283,6 +283,7 @@ class LeadImportService
         $groups = [];
         $conflicts = [];
         $ambiguous = [];
+        $seen = [];
         foreach ($rows as $row) {
             $contact = trim((string) ($row['contact_raw'] ?? ''));
             $lead = null;
@@ -291,6 +292,7 @@ class LeadImportService
                 if (isset($known[$key])) {
                     $lead = $known[$key];
                     $matches[$lead['id']] = $lead;
+                    $seen[$lead['id']] = true;
                 }
             }
             if (count($matches) > 1) {
@@ -310,7 +312,7 @@ class LeadImportService
             $date = LeadSourceDate::parse($row['source_date_raw'] ?? null);
             $name = trim((string) ($row['imported_cs_name'] ?? ''));
             $groups[$id] ??= ['lead' => $lead, 'rows' => [], 'uncertain' => false, 'contact' => $contact, 'tab' => (string) ($row['source_tab'] ?? '')];
-            if ($date === null || $name === '' || empty($row['source_tab'])) {
+            if ($date === null || empty($row['source_tab'])) {
                 $groups[$id]['uncertain'] = true;
 
                 continue;
@@ -323,6 +325,14 @@ class LeadImportService
         $uncertain = count($ambiguous);
         $matched = 0;
         $review = [...array_values($conflicts), ...array_values($ambiguous)];
+        $missingCount = 0;
+        $missing = DB::table('leads')->where('source_branch_id', $branchId)->orderBy('id')->get(['id', 'contact_raw']);
+        foreach ($missing as $lead) {
+            if (! isset($seen[(int) $lead->id])) {
+                $missingCount++;
+                $review[] = ['contact' => (string) $lead->contact_raw, 'tab' => '', 'reason' => 'Lead tidak ditemukan di spreadsheet aktif; periksa sumber historis.'];
+            }
+        }
         foreach ($groups as $id => $group) {
             $sourceRows = $group['rows'];
             if ($group['uncertain'] || $sourceRows === []) {
@@ -336,17 +346,23 @@ class LeadImportService
             $names = [];
             foreach ($sourceRows as $sourceRow) {
                 if ($sourceRow['date'] === $first['date']) {
-                    $names[CsName::key($sourceRow['name'])] = true;
+                    $names[CsName::key($sourceRow['name'])] = $sourceRow['name'];
                 }
             }
-            if (count($names) !== 1) {
+            $lead = $group['lead'];
+            if ($lead['lead_created_on'] !== null && $lead['lead_created_on'] < $first['date']) {
                 $uncertain++;
-                $review[] = ['contact' => $group['contact'], 'tab' => $group['tab'], 'reason' => 'Nama CS pada tanggal pertama saling berbeda.'];
+                $review[] = ['contact' => $group['contact'], 'tab' => $group['tab'], 'reason' => 'Tanggal tersimpan lebih awal dari spreadsheet aktif; periksa sumber historis.'];
 
                 continue;
             }
-            $lead = $group['lead'];
-            if ($lead['lead_created_on'] === $first['date'] && $lead['imported_cs_name'] === $first['name']) {
+            $newCs = $first['name'];
+            if (count($names) !== 1 || $newCs === '') {
+                $uncertain++;
+                $review[] = ['contact' => $group['contact'], 'tab' => $group['tab'], 'reason' => 'Nama CS pada tanggal pertama kosong atau saling berbeda; tanggal diperiksa terpisah.'];
+                $newCs = $lead['imported_cs_name'];
+            }
+            if ($lead['lead_created_on'] === $first['date'] && $lead['imported_cs_name'] === $newCs) {
                 $matched++;
 
                 continue;
@@ -355,14 +371,14 @@ class LeadImportService
                 'lead_id' => $id, 'contact' => $first['contact'], 'tab' => $first['tab'],
                 'old_date' => $lead['lead_created_on'], 'new_date' => $first['date'],
                 'old_source_date' => $lead['source_date_raw'], 'old_revision' => $lead['revision'],
-                'old_cs' => $lead['imported_cs_name'], 'new_cs' => $first['name'],
+                'old_cs' => $lead['imported_cs_name'], 'new_cs' => $newCs,
             ];
         }
 
-        return ['changes' => $changes, 'matched' => $matched, 'conflicts' => count($conflicts), 'uncertain' => $uncertain, 'review' => $review];
+        return ['changes' => $changes, 'matched' => $matched, 'conflicts' => count($conflicts), 'uncertain' => $uncertain, 'missing' => $missingCount, 'review' => $review];
     }
 
-    /** @param list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string}> $changes */
+    /** @param list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null}> $changes */
     public function applyReconciliation(array $changes, int $branchId, int $actorId): int
     {
         return DB::transaction(function () use ($changes, $branchId, $actorId): int {
@@ -375,7 +391,7 @@ class LeadImportService
                 }
                 $updates = [
                     'lead_created_on' => $change['new_date'],
-                    'source_date_raw' => $change['new_date'],
+                    'source_date_raw' => $change['old_date'] === $change['new_date'] ? $change['old_source_date'] : $change['new_date'],
                     'imported_cs_name' => $change['new_cs'],
                     'updated_at' => now(),
                     'revision' => DB::raw('revision + 1'),

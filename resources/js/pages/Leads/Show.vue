@@ -582,7 +582,7 @@ function destroyLead() {
                         { label: 'Kebutuhan awal', value: lead.raw_kebutuhan },
                         { label: 'Respond time', value: lead.respond_time },
                         {
-                            label: 'Nama CS di CSV',
+                            label: 'Nama CS sumber',
                             value: lead.imported_cs_name,
                         },
                         { label: 'Waktu chat', value: lead.chat_time },

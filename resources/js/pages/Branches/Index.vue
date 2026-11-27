@@ -64,6 +64,7 @@ type SourcePreview = {
 };
 type ReconciliationPreview = {
     branch_id: number;
+    spreadsheet_title: string;
     changes: {
         lead_id: number;
         contact: string;
@@ -71,10 +72,11 @@ type ReconciliationPreview = {
         old_date: string | null;
         new_date: string;
         old_cs: string | null;
-        new_cs: string;
+        new_cs: string | null;
     }[];
     conflicts: number;
     uncertain: number;
+    missing: number;
     failed_tabs: number;
     matched: number;
     review: { contact: string; tab: string; reason: string }[];
@@ -93,7 +95,10 @@ const editingId = ref<number | null>(null);
 const branchToDelete = ref<Branch | null>(null);
 const sourceBranch = ref<Branch | null>(null);
 const reconciliationBranch = ref<Branch | null>(null);
-const reconciliationForm = useForm({ backup_confirmed: false });
+const reconciliationForm = useForm({
+    backup_confirmed: false,
+    period_confirmed: false,
+});
 const reconciliationPreview = computed(() =>
     reconciliationBranch.value?.id === props.reconciliation_preview?.branch_id
         ? props.reconciliation_preview
@@ -1072,7 +1077,17 @@ const syncBranch = (branch: Branch) =>
                         {{ reconciliationPreview.changes.length }} lead dapat
                         dikoreksi · {{ reconciliationPreview.uncertain }} perlu
                         diperiksa ·
-                        {{ reconciliationPreview.conflicts }} konflik cabang.
+                        {{ reconciliationPreview.conflicts }} konflik cabang ·
+                        {{ reconciliationPreview.missing }} tidak ditemukan di
+                        spreadsheet aktif.
+                    </p>
+                    <p class="text-sm text-kgj-muted">
+                        Spreadsheet:
+                        {{
+                            reconciliationPreview.spreadsheet_title ||
+                            'Judul tidak tersedia'
+                        }}. Bulan dan tahun tanggal lead diambil dari judul ini;
+                        pastikan sesuai periode tab sebelum menerapkan koreksi.
                     </p>
                     <p
                         v-if="reconciliationPreview.failed_tabs"
@@ -1113,7 +1128,7 @@ const syncBranch = (branch: Branch) =>
                                     </td>
                                     <td class="p-3">
                                         {{ change.old_cs || '—' }} →
-                                        {{ change.new_cs }}
+                                        {{ change.new_cs || '—' }}
                                     </td>
                                 </tr>
                             </tbody>
@@ -1152,6 +1167,25 @@ const syncBranch = (branch: Branch) =>
                         Saya telah memastikan backup database tersedia sebelum
                         menerapkan koreksi.
                     </label>
+                    <label
+                        v-if="reconciliationPreview.changes.length"
+                        class="flex items-start gap-2 text-sm"
+                    >
+                        <input
+                            v-model="reconciliationForm.period_confirmed"
+                            type="checkbox"
+                            class="mt-1"
+                        />
+                        Saya telah memeriksa bulan dan tahun pada judul
+                        spreadsheet sesuai dengan tab sumber.
+                    </label>
+                    <p
+                        v-if="reconciliationForm.errors.period_confirmed"
+                        class="text-sm text-kgj-rose"
+                        role="alert"
+                    >
+                        {{ reconciliationForm.errors.period_confirmed }}
+                    </p>
                     <p
                         v-if="reconciliationForm.errors.backup_confirmed"
                         class="text-sm text-kgj-rose"
@@ -1175,6 +1209,7 @@ const syncBranch = (branch: Branch) =>
                         :disabled="
                             reconciliationForm.processing ||
                             !reconciliationForm.backup_confirmed ||
+                            !reconciliationForm.period_confirmed ||
                             !reconciliationPreview?.changes.length ||
                             Boolean(reconciliationPreview?.failed_tabs)
                         "

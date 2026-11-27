@@ -475,7 +475,7 @@ class DashboardController extends Controller
 
     public function applyBranchReconciliation(Request $request, GoogleSheetSyncService $sync, int $branch): RedirectResponse
     {
-        $request->validate(['backup_confirmed' => ['accepted']]);
+        $request->validate(['backup_confirmed' => ['accepted'], 'period_confirmed' => ['accepted']]);
         $preview = $request->session()->get('reconciliation_preview');
         if (! is_array($preview) || ($preview['branch_id'] ?? null) !== $branch || ! is_string($preview['hash'] ?? null)) {
             throw ValidationException::withMessages(['reconciliation' => 'Buat pratinjau baru sebelum menerapkan koreksi.']);

@@ -671,13 +671,6 @@ const stageLabel = (value: string | null) =>
         online: 'Diskusi Online',
         closing_repeat: 'Closing / Repeat Order',
     })[value || ''];
-const handlingLabel = (role: Lead['handling_role']) =>
-    ({
-        admin: 'Admin',
-        primary: 'Milik Anda',
-        collaborator: 'Tim cabang',
-        team: 'Tim cabang',
-    })[role];
 const formatLeadDate = (value: string | null) =>
     value
         ? new Intl.DateTimeFormat('id-ID', {
@@ -1383,16 +1376,18 @@ onBeforeUnmount(() => {
                 </select>
             </label>
             <label v-if="!isAdmin" class="grid gap-2 text-sm font-semibold"
-                >Peran saya
+                >Penugasan akun
                 <select
                     v-model="handling"
                     class="kgj-input"
                     :disabled="isFiltering"
                     @change="applyFilters"
                 >
-                    <option value="">Semua lead saya</option>
-                    <option value="primary">Milik saya</option>
-                    <option value="team">Tim cabang</option>
+                    <option value="">Semua lead yang dapat diakses</option>
+                    <option value="primary">Ditugaskan ke akun saya</option>
+                    <option value="team">
+                        Ditugaskan ke akun lain / belum ditugaskan
+                    </option>
                 </select>
             </label>
             <label class="grid gap-2 text-sm font-semibold"
@@ -1679,12 +1674,6 @@ onBeforeUnmount(() => {
                             :title="ownerTitle(lead)"
                         >
                             {{ ownerLabel(lead) }}
-                        </dd>
-                    </div>
-                    <div v-if="!isAdmin">
-                        <dt class="text-xs text-kgj-muted">Penanganan</dt>
-                        <dd class="mt-1 font-medium text-[#665a43]">
-                            {{ handlingLabel(lead.handling_role) }}
                         </dd>
                     </div>
                     <div v-if="lead.next_follow_up_at">
@@ -2025,12 +2014,6 @@ onBeforeUnmount(() => {
                                     class="block truncate"
                                     :title="ownerTitle(lead)"
                                     >{{ ownerLabel(lead) }}</span
-                                ><small
-                                    v-if="!isAdmin"
-                                    class="mt-1 block font-semibold text-[#665a43]"
-                                    >{{
-                                        handlingLabel(lead.handling_role)
-                                    }}</small
                                 ><small
                                     v-if="lead.source_conflict_at"
                                     :class="

@@ -146,7 +146,8 @@ const ownerLabel = (lead: Lead) =>
     lead.imported_cs_name?.trim() ||
     (lead.owner_resolution === 'fallback'
         ? 'Nama CS sumber kosong'
-        : lead.owner_name || 'Belum ditugaskan');
+        : lead.owner_name ||
+          (lead.source_branch_id ? 'Tim cabang' : 'Cabang belum ditentukan'));
 const ownerTitle = (lead: Lead) =>
     isAdmin.value && lead.branch_name
         ? `${ownerLabel(lead)} · Cabang: ${lead.branch_name}`
@@ -200,57 +201,12 @@ const showAdvancedFilters = ref(
 );
 const isFiltering = ref(false);
 const selectedLeadIds = ref<number[]>([]);
-const canManageSelection = computed(
-    () =>
-        isAdmin.value ||
-        props.leads.data
-            .filter((lead) => selectedLeadIds.value.includes(lead.id))
-            .every((lead) => lead.handling_role !== 'team'),
-);
 const mobileSelectionMode = ref(false);
 const mobileEditorLead = ref<Lead | null>(null);
 const mobileQuickUpdate = ref<InstanceType<typeof LeadQuickUpdate> | null>(
     null,
 );
 const mobileEditorCloseRequested = ref(false);
-const selectedSourceBranchIds = computed(() =>
-    Array.from(
-        new Set(
-            props.leads.data
-                .filter((lead) => selectedLeadIds.value.includes(lead.id))
-                .map((lead) => lead.source_branch_id)
-                .filter((branchId): branchId is number => branchId !== null),
-        ),
-    ),
-);
-const bulkCsAccounts = computed(() => {
-    const [sourceBranchId] = selectedSourceBranchIds.value;
-
-    return selectedSourceBranchIds.value.length === 1
-        ? props.csAccounts.filter(
-              (account) => account.branch_id === sourceBranchId,
-          )
-        : selectedSourceBranchIds.value.length > 1
-          ? []
-          : props.csAccounts;
-});
-const bulkSelectionMessage = computed(() => {
-    if (selectedSourceBranchIds.value.length > 1) {
-        return 'Pilih lead dari satu cabang sumber untuk menugaskan CS.';
-    }
-
-    if (
-        selectedLeadIds.value.some(
-            (id) =>
-                props.leads.data.find((lead) => lead.id === id)
-                    ?.source_branch_id === null,
-        )
-    ) {
-        return 'Lead tanpa cabang sumber dapat ditugaskan ke CS utama terlebih dahulu.';
-    }
-
-    return '';
-});
 const visibleLeadIds = computed(() => props.leads.data.map((lead) => lead.id));
 const allVisibleSelected = computed(
     () =>
@@ -262,8 +218,21 @@ const someVisibleSelected = computed(
         !allVisibleSelected.value &&
         visibleLeadIds.value.some((id) => selectedLeadIds.value.includes(id)),
 );
-const bulkForm = useForm({ assigned_user_id: '', lead_ids: [] as number[] });
 const selectionForm = useForm({ lead_ids: [] as number[] });
+const sourceBranchForm = useForm({
+    lead_ids: [] as number[],
+    source_branch_id: '',
+});
+const sourceBranchDialogOpen = ref(false);
+const selectionWithoutBranch = computed(
+    () =>
+        selectedLeadIds.value.length > 0 &&
+        selectedLeadIds.value.every(
+            (id) =>
+                props.leads.data.find((lead) => lead.id === id)
+                    ?.source_branch_id === null,
+        ),
+);
 const archiveDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
 const discardChangesDialogOpen = ref(false);
@@ -372,7 +341,7 @@ const newLead = useForm({
     contact_raw: '',
     name: '',
     phone: '',
-    assigned_user_id: '',
+    source_branch_id: '',
     source_date_raw: '',
     respond_time: '',
     imported_cs_name: '',
@@ -655,20 +624,20 @@ const formatLeadDate = (value: string | null) =>
         : '—';
 const formatFollowUp = (value: string | null) =>
     value ? new Date(value).toLocaleString('id-ID') : '—';
-const assignSelectedNow = () => {
-    bulkForm.lead_ids = selectedLeadIds.value;
-    bulkForm.post('/leads/assign', {
-        onSuccess: () => {
-            selectedLeadIds.value = [];
-            bulkForm.reset();
-        },
-    });
-};
-const assignSelected = () => guardUnsavedChanges(assignSelectedNow);
 const clearSelection = () => {
     selectedLeadIds.value = [];
     selectionForm.reset();
-    bulkForm.reset();
+    sourceBranchForm.reset();
+};
+const setSourceBranch = () => {
+    sourceBranchForm.lead_ids = selectedLeadIds.value;
+    sourceBranchForm.post('/leads/source-branch', {
+        preserveScroll: true,
+        onSuccess: () => {
+            sourceBranchDialogOpen.value = false;
+            clearSelection();
+        },
+    });
 };
 const toggleMobileSelectionMode = () => {
     mobileSelectionMode.value = !mobileSelectionMode.value;
@@ -863,6 +832,7 @@ onBeforeUnmount(() => {
                 <button
                     class="text-sm font-semibold text-kgj-gold-deep underline decoration-[#c4a45d] underline-offset-4"
                     type="button"
+                    v-if="isAdmin"
                     @click="toggleArchive"
                 >
                     {{ archiveMode ? 'Kembali ke aktif' : 'Lihat arsip' }}
@@ -911,6 +881,30 @@ onBeforeUnmount(() => {
             >
                 {{ newLead.errors.contact_raw }}
             </p>
+            <label v-if="isAdmin" class="grid gap-2 text-sm font-semibold">
+                Cabang sumber
+                <select
+                    v-model="newLead.source_branch_id"
+                    class="kgj-input"
+                    required
+                    :aria-invalid="Boolean(newLead.errors.source_branch_id)"
+                >
+                    <option value="">Pilih cabang</option>
+                    <option
+                        v-for="branch in branches"
+                        :key="branch.id"
+                        :value="String(branch.id)"
+                    >
+                        {{ branch.name }}
+                    </option>
+                </select>
+                <span
+                    v-if="newLead.errors.source_branch_id"
+                    class="text-[#a23e2b]"
+                    role="alert"
+                    >{{ newLead.errors.source_branch_id }}</span
+                >
+            </label>
             <details
                 class="col-span-full rounded-xl border border-kgj-line bg-[#fffdf8] p-4"
             >
@@ -934,29 +928,6 @@ onBeforeUnmount(() => {
                             v-model="newLead.phone"
                             class="kgj-input"
                     /></label>
-                    <label
-                        v-if="isAdmin"
-                        class="grid gap-2 text-sm font-semibold"
-                        >CS penanggung jawab<select
-                            v-model="newLead.assigned_user_id"
-                            class="kgj-input"
-                        >
-                            <option value="">Belum ditugaskan</option>
-                            <option
-                                v-for="account in csAccounts"
-                                :key="account.id"
-                                :value="String(account.id)"
-                            >
-                                {{ account.branch_name }} — {{ account.name }}
-                            </option>
-                        </select></label
-                    >
-                    <p
-                        v-else
-                        class="rounded-lg border border-kgj-line bg-kgj-canvas px-3 py-3 text-sm leading-5 text-[#4f514a]"
-                    >
-                        Lead ini otomatis menjadi tanggung jawab Anda.
-                    </p>
                     <label class="grid gap-2 text-sm font-semibold"
                         >Tanggal lead<input
                             v-model="newLead.source_date_raw"
@@ -1169,7 +1140,6 @@ onBeforeUnmount(() => {
                     @change="applyFilters"
                 >
                     <option value="">Semua queue</option>
-                    <option value="unassigned">Belum ditugaskan</option>
                     <option value="awaiting_account">Menunggu akun CS</option>
                     <option value="needs_qualification">
                         Perlu kualifikasi
@@ -1353,6 +1323,7 @@ onBeforeUnmount(() => {
                 lead ditampilkan
             </p>
             <button
+                v-if="isAdmin"
                 class="kgj-button-secondary"
                 type="button"
                 @click="toggleMobileSelectionMode"
@@ -1385,7 +1356,7 @@ onBeforeUnmount(() => {
             </p>
         </div>
         <div
-            v-if="visibleLeadIds.length && isDesktopWorkspace"
+            v-if="isAdmin && visibleLeadIds.length && isDesktopWorkspace"
             class="mt-4 flex flex-wrap items-center gap-3"
         >
             <label
@@ -1402,49 +1373,64 @@ onBeforeUnmount(() => {
             </label>
         </div>
         <form
-            v-if="selectedLeadIds.length"
+            v-if="isAdmin && selectedLeadIds.length"
             class="kgj-surface mt-4 flex flex-col gap-3 border border-[#dccd9f] p-4 sm:flex-row sm:items-center"
         >
             <p class="text-sm font-semibold">
                 {{ selectedLeadIds.length }} lead dipilih
             </p>
             <template v-if="!archiveMode">
-                <label v-if="isAdmin" class="sr-only" for="bulk-assignee"
-                    >CS penanggung jawab</label
-                >
-                <select
-                    v-if="isAdmin"
-                    id="bulk-assignee"
-                    v-model="bulkForm.assigned_user_id"
-                    class="kgj-input sm:ml-auto sm:max-w-xs"
-                    required
-                >
-                    <option value="">Pilih CS penanggung jawab</option>
-                    <option
-                        v-for="account in bulkCsAccounts"
-                        :key="account.id"
-                        :value="String(account.id)"
+                <template v-if="selectionWithoutBranch">
+                    <label class="sr-only" for="selected-source-branch"
+                        >Cabang sumber</label
                     >
-                        {{ account.branch_name }} — {{ account.name }}
-                    </option>
-                </select>
-                <button
-                    v-if="isAdmin"
-                    class="kgj-button-gold"
-                    type="button"
-                    :disabled="
-                        bulkForm.processing ||
-                        !bulkForm.assigned_user_id ||
-                        bulkCsAccounts.length === 0
-                    "
-                    @click="assignSelected"
-                >
-                    {{ bulkForm.processing ? 'Menugaskan…' : 'Tugaskan' }}
-                </button>
+                    <select
+                        id="selected-source-branch"
+                        v-model="sourceBranchForm.source_branch_id"
+                        class="kgj-input sm:max-w-xs"
+                    >
+                        <option value="">Pilih cabang sumber</option>
+                        <option
+                            v-for="branch in branches"
+                            :key="branch.id"
+                            :value="String(branch.id)"
+                        >
+                            {{ branch.name }}
+                        </option>
+                    </select>
+                    <button
+                        class="kgj-button-gold"
+                        type="button"
+                        :disabled="
+                            !sourceBranchForm.source_branch_id ||
+                            sourceBranchForm.processing
+                        "
+                        @click="sourceBranchDialogOpen = true"
+                    >
+                        Tetapkan cabang
+                    </button>
+                    <p
+                        v-if="
+                            sourceBranchForm.errors.lead_ids ||
+                            sourceBranchForm.errors.source_branch_id
+                        "
+                        class="text-sm text-kgj-rose"
+                        role="alert"
+                    >
+                        {{
+                            sourceBranchForm.errors.lead_ids ||
+                            sourceBranchForm.errors.source_branch_id
+                        }}
+                    </p>
+                </template>
+                <p v-else class="text-sm text-kgj-muted">
+                    Untuk menetapkan cabang, pilih hanya lead tanpa cabang
+                    sumber.
+                </p>
                 <button
                     class="kgj-button-secondary"
                     type="button"
-                    :disabled="selectionForm.processing || !canManageSelection"
+                    :disabled="selectionForm.processing"
                     @click="openArchiveDialog"
                 >
                     Arsipkan
@@ -1454,7 +1440,7 @@ onBeforeUnmount(() => {
                 <button
                     class="kgj-button-primary sm:ml-auto"
                     type="button"
-                    :disabled="selectionForm.processing || !canManageSelection"
+                    :disabled="selectionForm.processing"
                     @click="restoreSelected"
                 >
                     {{ selectionForm.processing ? 'Memproses…' : 'Pulihkan' }}
@@ -1462,7 +1448,7 @@ onBeforeUnmount(() => {
                 <button
                     class="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#d8aaa2] px-3 text-sm font-semibold text-kgj-rose transition hover:bg-[#fff3f1]"
                     type="button"
-                    :disabled="selectionForm.processing || !canManageSelection"
+                    :disabled="selectionForm.processing"
                     @click="openDeleteDialog"
                 >
                     Hapus permanen
@@ -1475,20 +1461,6 @@ onBeforeUnmount(() => {
             >
                 Batal
             </button>
-            <p
-                v-if="!canManageSelection"
-                class="basis-full text-sm text-[#865124]"
-                role="status"
-            >
-                Arsip hanya tersedia untuk lead yang Anda tangani.
-            </p>
-            <p
-                v-if="isAdmin && bulkSelectionMessage"
-                class="basis-full text-sm text-[#865124]"
-                role="status"
-            >
-                {{ bulkSelectionMessage }}
-            </p>
         </form>
 
         <div v-if="!isDesktopWorkspace" class="mt-3 grid gap-3">
@@ -1826,17 +1798,20 @@ onBeforeUnmount(() => {
                 >
                     <tr>
                         <th
+                            v-if="isAdmin"
                             class="sticky left-0 z-40 w-14 min-w-14 bg-[#f8f5ee] p-4"
                         >
                             <span class="sr-only">Pilih lead</span>
                         </th>
                         <th
-                            class="sticky left-14 z-40 w-56 min-w-56 bg-[#f8f5ee] p-4"
+                            class="sticky z-40 w-56 min-w-56 bg-[#f8f5ee] p-4"
+                            :class="isAdmin ? 'left-14' : 'left-0'"
                         >
                             Lead
                         </th>
                         <th
-                            class="kgj-lead-ledger__sticky-edge sticky left-[17.5rem] z-40 w-44 min-w-44 bg-[#f8f5ee] p-4"
+                            class="kgj-lead-ledger__sticky-edge sticky z-40 w-44 min-w-44 bg-[#f8f5ee] p-4"
+                            :class="isAdmin ? 'left-[17.5rem]' : 'left-56'"
                         >
                             Nama CS
                         </th>
@@ -1858,7 +1833,9 @@ onBeforeUnmount(() => {
                 <tbody>
                     <tr v-if="desktopVirtualTop" aria-hidden="true">
                         <td
-                            :colspan="archiveMode ? 5 : 13"
+                            :colspan="
+                                (archiveMode ? 5 : 13) - (isAdmin ? 0 : 1)
+                            "
                             class="kgj-lead-ledger__spacer h-0 p-0"
                             :style="{ height: `${desktopVirtualTop}px` }"
                         />
@@ -1875,6 +1852,7 @@ onBeforeUnmount(() => {
                             class="group border-t border-[#e7eae5]"
                         >
                             <td
+                                v-if="isAdmin"
                                 class="sticky left-0 z-10 w-14 min-w-14 bg-kgj-paper p-4 group-hover:bg-[#fcfaf5]"
                             >
                                 <input
@@ -1890,7 +1868,8 @@ onBeforeUnmount(() => {
                                 />
                             </td>
                             <td
-                                class="sticky left-14 z-10 w-56 min-w-56 overflow-hidden bg-kgj-paper p-4 font-semibold group-hover:bg-[#fcfaf5]"
+                                class="sticky z-10 w-56 min-w-56 overflow-hidden bg-kgj-paper p-4 font-semibold group-hover:bg-[#fcfaf5]"
+                                :class="isAdmin ? 'left-14' : 'left-0'"
                             >
                                 <strong
                                     class="block truncate"
@@ -1911,7 +1890,8 @@ onBeforeUnmount(() => {
                                 />
                             </td>
                             <td
-                                class="kgj-lead-ledger__sticky-edge sticky left-[17.5rem] z-10 w-44 min-w-44 overflow-hidden bg-kgj-paper p-4 group-hover:bg-[#fcfaf5]"
+                                class="kgj-lead-ledger__sticky-edge sticky z-10 w-44 min-w-44 overflow-hidden bg-kgj-paper p-4 group-hover:bg-[#fcfaf5]"
+                                :class="isAdmin ? 'left-[17.5rem]' : 'left-56'"
                             >
                                 <span
                                     class="block truncate"
@@ -2008,14 +1988,18 @@ onBeforeUnmount(() => {
                     </template>
                     <tr v-if="desktopVirtualBottom" aria-hidden="true">
                         <td
-                            :colspan="archiveMode ? 5 : 13"
+                            :colspan="
+                                (archiveMode ? 5 : 13) - (isAdmin ? 0 : 1)
+                            "
                             class="kgj-lead-ledger__spacer h-0 p-0"
                             :style="{ height: `${desktopVirtualBottom}px` }"
                         />
                     </tr>
                     <tr v-if="!leads.data.length">
                         <td
-                            :colspan="archiveMode ? 5 : 13"
+                            :colspan="
+                                (archiveMode ? 5 : 13) - (isAdmin ? 0 : 1)
+                            "
                             class="p-12 text-center text-[#62665b]"
                         >
                             {{
@@ -2051,6 +2035,53 @@ onBeforeUnmount(() => {
                         Lanjut tanpa menyimpan
                     </button></DialogFooter
                 >
+            </DialogContent>
+        </Dialog>
+        <Dialog v-model:open="sourceBranchDialogOpen">
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Tetapkan cabang sumber?</DialogTitle>
+                    <DialogDescription
+                        >{{ selectedLeadIds.length }} lead akan tersedia bagi
+                        tim cabang
+                        {{
+                            branches.find(
+                                (branch) =>
+                                    String(branch.id) ===
+                                    sourceBranchForm.source_branch_id,
+                            )?.name
+                        }}. Pastikan cabang sesuai sumber lead; penugasan dan
+                        riwayat lama tetap tersimpan.</DialogDescription
+                    >
+                </DialogHeader>
+                <p
+                    v-if="
+                        sourceBranchForm.errors.lead_ids ||
+                        sourceBranchForm.errors.source_branch_id
+                    "
+                    class="text-sm text-kgj-rose"
+                    role="alert"
+                >
+                    {{
+                        sourceBranchForm.errors.lead_ids ||
+                        sourceBranchForm.errors.source_branch_id
+                    }}
+                </p>
+                <DialogFooter>
+                    <DialogClose as-child
+                        ><button class="kgj-button-secondary" type="button">
+                            Batal
+                        </button></DialogClose
+                    >
+                    <button
+                        class="kgj-button-primary"
+                        type="button"
+                        :disabled="sourceBranchForm.processing"
+                        @click="setSourceBranch"
+                    >
+                        Tetapkan cabang
+                    </button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
         <Dialog v-model:open="archiveDialogOpen">

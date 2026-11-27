@@ -63,10 +63,10 @@ const priorityRows = computed(() => [
                   icon: GitCompareArrows,
               },
               {
-                  label: 'Lead belum memiliki penanggung jawab',
-                  detail: 'Bagikan ke CS agar percakapan dapat ditindaklanjuti.',
+                  label: 'Lead belum memiliki cabang sumber',
+                  detail: 'Tetapkan cabang agar lead tersedia bagi tim CS.',
                   value: props.priorities.unassigned,
-                  href: '/leads?queue=unassigned',
+                  href: '/leads?source_branch_missing=1',
                   icon: UserRoundPlus,
               },
           ]

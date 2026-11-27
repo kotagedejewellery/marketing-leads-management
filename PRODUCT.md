@@ -30,7 +30,7 @@ The initial data source is the existing KGJ monitoring spreadsheet. The working 
 ## Capabilities and Constraints
 
 - CS can see and update active leads from their own source branch; admins see all branches.
-- Admins can assign leads and import CSV. Existing archive and deletion permissions continue to depend on the assigned owner or collaborator.
+- Admins manage archives and permanent deletion, and can import CSV. Manual leads created by admins require a source branch; all CS in that branch can update them.
 - The first surface provides lead filtering, lead detail/update, milestone history, and monitoring summaries.
 - Import-ready fields preserve the spreadsheet's No, Nama/Nomor, Respond Time, Nama CS, Keterangan, Kebutuhan, Greeting, Waktu Chat, source, campaign, and initial lead definition alongside CS-maintained fields.
 - CS-maintained qualification is separate from imported source text: Intent Buying (Tunangan, Lamaran, Nikahan, Anniversary, or Lainnya), usage date, budget, keterangan, and grouped Cold/Warm/Hot milestones.

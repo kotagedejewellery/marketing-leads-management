@@ -45,6 +45,7 @@ class DashboardController extends Controller
             ->orderByDesc('l.id');
 
         $showArchived = $request->boolean('archived');
+        abort_if($showArchived && $request->user()->role !== 'admin', 403);
         $query->{$showArchived ? 'whereNotNull' : 'whereNull'}('l.archived_at');
 
         if ($request->filled('q')) {
@@ -1028,7 +1029,7 @@ class DashboardController extends Controller
     private function priorities(Request $request): array
     {
         $counts = (array) $this->activeLeads($request)
-            ->selectRaw('COUNT(*) as total, COALESCE(SUM(CASE WHEN l.assigned_user_id IS NULL THEN 1 ELSE 0 END), 0) as unassigned, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NOT NULL AND l.next_follow_up_at <= ? THEN 1 ELSE 0 END), 0) as follow_up_due, COALESCE(SUM(CASE WHEN l.crm_taken_over_at IS NOT NULL THEN 1 ELSE 0 END), 0) as crm_taken_over, COALESCE(SUM(CASE WHEN l.intent_buying IS NULL OR l.usage_date IS NULL OR l.budget IS NULL THEN 1 ELSE 0 END), 0) as needs_qualification, COALESCE(SUM(CASE WHEN l.source_conflict_at IS NOT NULL THEN 1 ELSE 0 END), 0) as source_conflict', [now()])
+            ->selectRaw('COUNT(*) as total, COALESCE(SUM(CASE WHEN l.source_branch_id IS NULL THEN 1 ELSE 0 END), 0) as unassigned, COALESCE(SUM(CASE WHEN l.next_follow_up_at IS NOT NULL AND l.next_follow_up_at <= ? THEN 1 ELSE 0 END), 0) as follow_up_due, COALESCE(SUM(CASE WHEN l.crm_taken_over_at IS NOT NULL THEN 1 ELSE 0 END), 0) as crm_taken_over, COALESCE(SUM(CASE WHEN l.intent_buying IS NULL OR l.usage_date IS NULL OR l.budget IS NULL THEN 1 ELSE 0 END), 0) as needs_qualification, COALESCE(SUM(CASE WHEN l.source_conflict_at IS NOT NULL THEN 1 ELSE 0 END), 0) as source_conflict', [now()])
             ->first();
 
         return [

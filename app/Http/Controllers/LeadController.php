@@ -48,7 +48,8 @@ class LeadController extends Controller
             'contact_raw' => ['required', 'string', 'max:255'],
             'name' => ['nullable', 'string', 'max:160'],
             'phone' => ['nullable', 'string', 'max:60'],
-            'assigned_user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'source_branch_id' => [Rule::requiredIf($request->user()->role === 'admin'), 'nullable', 'integer', 'exists:branches,id'],
+            'assigned_user_id' => ['prohibited'],
             'source_date_raw' => ['nullable', 'string', 'max:60'],
             'respond_time' => ['nullable', 'string', 'max:60'],
             'imported_cs_name' => ['nullable', 'string', 'max:120'],
@@ -69,18 +70,14 @@ class LeadController extends Controller
             isset($data['next_follow_up_at']) ? (string) $data['next_follow_up_at'] : null,
         );
         $isAdmin = $request->user()->role === 'admin';
-        $assignedUserId = $isAdmin ? ($data['assigned_user_id'] ?? null) : $request->user()->id;
+        $assignedUserId = $isAdmin ? null : $request->user()->id;
         $contact = ($data['phone'] ?? null) ?: $data['contact_raw'];
         $key = $this->contactKey($contact);
         if (DB::table('leads')->whereIn('contact_key', $this->contactKeys($contact))->exists()) {
             throw ValidationException::withMessages(['contact_raw' => 'Lead dengan kontak ini sudah ada.']);
         }
-        if ($assignedUserId && ! DB::table('users')->where('id', $assignedUserId)->where('role', 'cs')->where('active', true)->exists()) {
-            throw ValidationException::withMessages(['assigned_user_id' => 'CS aktif tidak valid.']);
-        }
-
         $sourceBranchId = $isAdmin
-            ? ($assignedUserId ? DB::table('users')->where('id', $assignedUserId)->value('branch_id') : null)
+            ? $data['source_branch_id']
             : $request->user()->branch_id;
         $id = DB::transaction(function () use ($data, $key, $request, $assignedUserId, $isAdmin, $sourceBranchId): int {
             $milestone = $data['milestone'] ?? null;
@@ -90,7 +87,7 @@ class LeadController extends Controller
                 'name' => $data['name'] ?? null,
                 'phone' => $data['phone'] ?? null,
                 'assigned_user_id' => $assignedUserId,
-                'owner_resolution' => 'manual',
+                'owner_resolution' => $isAdmin ? 'unassigned' : 'manual',
                 'source_branch_id' => $sourceBranchId,
                 'source_date_raw' => $data['source_date_raw'] ?? null,
                 'lead_created_on' => LeadSourceDate::parse($data['source_date_raw'] ?? null) ?? now()->toDateString(),
@@ -115,7 +112,7 @@ class LeadController extends Controller
             if ($milestone) {
                 DB::table('lead_milestones')->insert(['lead_id' => $id, 'milestone' => $milestone, 'is_active' => true, 'marked_at' => now(), 'marked_by' => $request->user()->id]);
             }
-            DB::table('lead_activity')->insert(['lead_id' => $id, 'actor_id' => $request->user()->id, 'action' => 'Lead dibuat manual', 'detail' => $isAdmin ? ($assignedUserId ? 'Lead langsung ditugaskan ke CS.' : 'Lead belum ditugaskan ke CS.') : 'Lead dibuat oleh CS dan ditugaskan ke diri sendiri.', 'created_at' => now()]);
+            DB::table('lead_activity')->insert(['lead_id' => $id, 'actor_id' => $request->user()->id, 'action' => 'Lead dibuat manual', 'detail' => $isAdmin ? 'Lead dibuat untuk tim cabang.' : 'Lead dibuat oleh CS untuk tim cabang.', 'created_at' => now()]);
 
             return $id;
         });
@@ -242,7 +239,7 @@ class LeadController extends Controller
 
     public function show(Request $request, int $lead): Response
     {
-        $record = $this->visibleLead($request, $lead, null);
+        $record = $this->visibleLead($request, $lead, $request->user()->role === 'admin' ? null : false);
         $milestones = DB::table('lead_milestones')->where('lead_id', $lead)->where('is_active', true)->pluck('milestone')->all();
         $history = DB::table('lead_activity as a')
             ->leftJoin('users as u', 'u.id', '=', 'a.actor_id')
@@ -267,7 +264,7 @@ class LeadController extends Controller
 
     public function historyPreview(Request $request, int $lead): JsonResponse
     {
-        $record = $this->visibleLead($request, $lead, null);
+        $record = $this->visibleLead($request, $lead, $request->user()->role === 'admin' ? null : false);
 
         $history = DB::table('lead_activity as a')
             ->leftJoin('users as u', 'u.id', '=', 'a.actor_id')
@@ -297,51 +294,39 @@ class LeadController extends Controller
         ]);
     }
 
-    public function assign(Request $request): RedirectResponse
-    {
-        abort_unless($request->user()->role === 'admin', 403);
-        $data = $request->validate([
-            'lead_ids' => ['required', 'array', 'min:1', 'max:100'],
-            'lead_ids.*' => ['integer', 'distinct', 'exists:leads,id'],
-            'assigned_user_id' => ['required', 'integer', 'exists:users,id'],
-        ]);
-        $owner = DB::table('users')->where('id', $data['assigned_user_id'])->where('role', 'cs')->where('active', true)->first(['id', 'name', 'branch_id']);
-        if (! $owner) {
-            throw ValidationException::withMessages(['assigned_user_id' => 'CS aktif tidak valid.']);
-        }
-
-        $assigned = DB::transaction(function () use ($data, $request, $owner): int {
-            $leads = DB::table('leads')->whereIn('id', $data['lead_ids'])->whereNull('archived_at')->get(['id', 'source_branch_id']);
-            if ($leads->isEmpty()) {
-                return 0;
-            }
-            foreach ($leads as $lead) {
-                $this->assertCsMatchesSourceBranch($lead->source_branch_id === null ? null : (int) $lead->source_branch_id, $owner->branch_id === null ? null : (int) $owner->branch_id, 'assigned_user_id');
-            }
-
-            $ids = $leads->pluck('id')->all();
-            $now = now();
-            DB::table('leads')->whereIn('id', $ids)->update(['assigned_user_id' => $owner->id, 'owner_resolution' => 'manual', 'updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
-            DB::table('leads')->whereIn('id', $ids)->whereNull('source_branch_id')->update(['source_branch_id' => $owner->branch_id]);
-            DB::table('lead_activity')->insert(array_map(fn ($id) => [
-                'lead_id' => $id,
-                'actor_id' => $request->user()->id,
-                'action' => 'Lead ditugaskan massal',
-                'detail' => "Ditugaskan ke {$owner->name}. Sumber cabang dilengkapi bila belum ada.",
-                'created_at' => $now,
-            ], $ids));
-
-            return count($ids);
-        });
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => "{$assigned} lead ditugaskan ke {$owner->name}."]);
-
-        return to_route('leads.index');
-    }
-
     public function retiredCollaborators(): never
     {
         abort(410, 'Fitur CS pendamping tidak lagi digunakan. CS satu cabang dapat memperbarui lead secara langsung.');
+    }
+
+    public function retiredAssignment(): never
+    {
+        abort(410, 'Penugasan CS manual tidak lagi digunakan.');
+    }
+
+    public function setSourceBranch(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'lead_ids' => ['required', 'array', 'min:1', 'max:100'],
+            'lead_ids.*' => ['required', 'integer', 'distinct', 'exists:leads,id'],
+            'source_branch_id' => ['required', 'integer', 'exists:branches,id'],
+        ]);
+        $branch = DB::table('branches')->where('id', $data['source_branch_id'])->firstOrFail(['id', 'name']);
+        DB::transaction(function () use ($request, $data, $branch): void {
+            $ids = DB::table('leads')->whereIn('id', $data['lead_ids'])->whereNull('source_branch_id')->whereNull('archived_at')->orderBy('id')->lockForUpdate()->pluck('id')->all();
+            if (count($ids) !== count($data['lead_ids'])) {
+                throw ValidationException::withMessages(['lead_ids' => 'Pilih hanya lead aktif yang belum memiliki cabang sumber.']);
+            }
+            $now = now();
+            DB::table('leads')->whereIn('id', $ids)->update(['source_branch_id' => $branch->id, 'updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+            DB::table('lead_activity')->insert(array_map(fn ($id) => [
+                'lead_id' => $id, 'actor_id' => $request->user()->id,
+                'action' => 'Cabang sumber ditetapkan', 'detail' => 'Cabang sumber: '.$branch->name.'.', 'created_at' => $now,
+            ], $ids));
+        });
+        Inertia::flash('toast', ['type' => 'success', 'message' => count($data['lead_ids']).' lead diberikan cabang sumber.']);
+
+        return back();
     }
 
     public function addCollaboratorSelected(Request $request): RedirectResponse
@@ -557,19 +542,11 @@ class LeadController extends Controller
         $selected = array_values(array_unique($selected));
         $isAdmin = $request->user()->role === 'admin';
 
-        $assignedOwner = null;
-        if ($isAdmin && array_key_exists('assigned_user_id', $data) && $data['assigned_user_id']) {
-            $assignedOwner = DB::table('users')->where('id', $data['assigned_user_id'])->where('role', 'cs')->where('active', true)->first(['id', 'branch_id']);
-            if (! $assignedOwner) {
-                throw ValidationException::withMessages(['assigned_user_id' => 'CS tidak valid.']);
-            }
-            $this->assertCsMatchesSourceBranch($record->source_branch_id === null ? null : (int) $record->source_branch_id, $assignedOwner->branch_id === null ? null : (int) $assignedOwner->branch_id, 'assigned_user_id');
-        }
         if (! $isAdmin && array_key_exists('crm_taken_over', $data)) {
             abort(403);
         }
 
-        DB::transaction(function () use ($request, $lead, $record, $data, $selected, $isAdmin, $assignedOwner): void {
+        DB::transaction(function () use ($request, $lead, $record, $data, $selected, $isAdmin): void {
             if (array_key_exists('revision', $data)) {
                 $revision = (int) DB::table('leads')->where('id', $lead)->lockForUpdate()->value('revision');
                 if ($revision !== (int) $data['revision']) {
@@ -589,18 +566,6 @@ class LeadController extends Controller
                     $updates[$field] = $value;
                     $changes[] = "{$label} diperbarui";
                 }
-            }
-            if ($isAdmin && array_key_exists('assigned_user_id', $data) && (int) $record->assigned_user_id !== (int) ($data['assigned_user_id'] ?? 0)) {
-                $updates['assigned_user_id'] = $data['assigned_user_id'] ?: null;
-                $updates['owner_resolution'] = $data['assigned_user_id'] ? 'manual' : 'unassigned';
-                if ($data['assigned_user_id']) {
-                    DB::table('lead_collaborators')->where('lead_id', $lead)->where('user_id', $data['assigned_user_id'])->whereNull('removed_at')->update(['removed_at' => now()]);
-                }
-                if ($assignedOwner && $record->source_branch_id === null) {
-                    $updates['source_branch_id'] = $assignedOwner->branch_id;
-                    $changes[] = 'Sumber cabang ditetapkan';
-                }
-                $changes[] = $data['assigned_user_id'] ? 'CS penanggung jawab diperbarui' : 'Lead belum ditugaskan';
             }
             if ($isAdmin && array_key_exists('crm_taken_over', $data)) {
                 $takenOver = (bool) $data['crm_taken_over'];

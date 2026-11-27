@@ -1,6 +1,6 @@
 # Glossary
 
-- **Lead arsip**: lead yang tidak tampil pada daftar kerja aktif, tetapi seluruh data, milestone, dan riwayatnya tetap tersimpan serta dapat dipulihkan oleh admin atau CS pemiliknya.
+- **Lead arsip**: lead yang tidak tampil pada daftar kerja aktif, tetapi seluruh data, milestone, dan riwayatnya tetap tersimpan serta dapat dipulihkan oleh admin.
 - **Lead dihapus permanen**: lead yang sudah berada di arsip dan kemudian dihapus bersama milestone serta riwayatnya. Data ini tidak dapat dipulihkan.
 - **Akun nonaktif**: akun pengguna yang tidak lagi dapat masuk. Riwayat aktivitasnya tetap menunjukkan pelaku asli, lead utamanya menjadi belum tertugaskan, dan status pendampingannya berakhir.
 - **Cabang kosong**: cabang yang tidak memiliki akun CS aktif maupun nonaktif dan belum menjadi sumber lead. Hanya cabang seperti ini yang dapat dihapus.
@@ -16,8 +16,8 @@
 - **CS utama**: CS penanggung jawab utama sebuah lead. Hanya ada satu CS utama pada satu waktu.
 - **Nama CS sumber**: nama CS sebagaimana tertulis pada spreadsheet. Nilai ini menjadi acuan penugasan awal melalui nama akun atau alias sumber, tetapi bukan akun pengguna dan tetap tersimpan sebagai data asal.
 - **Alias Nama CS sumber**: variasi nama pada spreadsheet yang secara eksplisit dipetakan admin ke satu akun CS aktif pada cabang yang sama.
-- **Akses tim cabang**: hak melihat dan memperbarui lead aktif dari sumber cabang yang sama tanpa perlu menjadi CS pendamping. Hak pengarsipan dan penghapusan tetap mengikuti penugasan sebelumnya.
-- **CS pendamping historis**: penugasan pendamping yang dibuat sebelum akses tim cabang berlaku. Data dan riwayatnya dipertahankan; hak akses dan arsip berlaku jika cabang sumber sesuai. Lead tanpa cabang sumber hanya dapat diakses CS utama yang ditugaskan. Saat akun pindah cabang, admin mengonfirmasi pengakhiran penugasan historis dan aktivitas dicatat.
+- **Akses tim cabang**: hak melihat dan memperbarui lead aktif dari sumber cabang yang sama tanpa perlu menjadi CS pendamping. Pengarsipan, pemulihan, dan penghapusan hanya tersedia untuk admin.
+- **CS pendamping historis**: penugasan pendamping yang dibuat sebelum akses tim cabang berlaku. Data dan riwayatnya dipertahankan; hak akses berlaku jika cabang sumber sesuai. Lead tanpa cabang sumber hanya dapat diakses CS utama yang ditugaskan. Saat akun pindah cabang, admin mengonfirmasi pengakhiran penugasan historis dan aktivitas dicatat.
 - **CS fallback impor**: salah satu CS aktif pada cabang yang menerima lead baru dari spreadsheet hanya ketika Nama CS sumber kosong.
 - **Menunggu akun CS**: status lead dengan Nama CS sumber yang terisi tetapi belum cocok dengan satu akun CS aktif atau alias sumber yang unik pada cabang sumber. Lead belum memiliki CS utama, tetapi tetap dapat dilihat dan diperbarui tim cabangnya.
 - **Rekonsiliasi lead historis**: tindakan eksplisit admin untuk menetapkan ulang CS utama lead lama berdasarkan Nama CS sumber atau alias yang cocok. Tindakan ini tidak mengubah CS pendamping.

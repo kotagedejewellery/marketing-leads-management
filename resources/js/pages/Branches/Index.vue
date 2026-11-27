@@ -579,7 +579,7 @@ const syncBranch = (branch: Branch) =>
                 {{
                     importForm.import_mode === 'daily_tabs'
                         ? 'Unggah XLSX monitoring dan pilih cabang sumber untuk tab 1–31.'
-                        : 'Unggah CSV atau XLSX dari tab All Leads. Lead baru tidak memiliki cabang sumber dan belum tersedia bagi tim cabang sampai ditugaskan.'
+                        : 'Unggah CSV atau XLSX dari tab All Leads. Tetapkan cabang sumber di daftar Leads agar tim cabang dapat menindaklanjutinya.'
                 }}
             </p>
             <div

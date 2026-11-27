@@ -27,7 +27,7 @@ class UpdateLeadRequest extends FormRequest
             'outcome' => ['nullable', Rule::in(['closing', 'loss'])],
             'outcome_factor' => ['nullable', 'string', 'max:80'],
             'outcome_note' => ['nullable', 'string', 'max:2000'],
-            'assigned_user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'assigned_user_id' => ['prohibited'],
             'crm_taken_over' => ['nullable', 'boolean'],
             'revision' => ['nullable', 'integer', 'min:0'],
             'milestones' => ['array'],

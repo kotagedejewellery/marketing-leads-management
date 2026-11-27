@@ -418,6 +418,18 @@ class DashboardTest extends TestCase
         );
     }
 
+    public function test_dashboard_counts_missing_branches_instead_of_missing_owners(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['role' => 'admin'])->save();
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        \DB::table('leads')->insert([
+            ['name' => 'Tim cabang', 'source_branch_id' => $branchId, 'assigned_user_id' => null],
+            ['name' => 'Tanpa cabang', 'source_branch_id' => null, 'assigned_user_id' => null],
+        ]);
+        $this->actingAs($admin)->get('/dashboard')->assertInertia(fn (Assert $page) => $page->where('priorities.unassigned', 1));
+    }
+
     public function test_cs_only_receives_its_own_dashboard_data(): void
     {
         $cs = User::factory()->create();

@@ -662,9 +662,11 @@ class LeadManagementTest extends TestCase
     public function test_admin_can_create_a_lead_with_optional_source_data(): void
     {
         $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
 
         $response = $this->actingAs($admin)->post('/leads', [
             'contact_raw' => '+62 851-7777-2222',
+            'source_branch_id' => $branchId,
             'source_date_raw' => '31',
             'imported_keterangan' => 'tanya-tanya',
             'raw_kebutuhan' => 'lamaran',
@@ -686,9 +688,10 @@ class LeadManagementTest extends TestCase
     public function test_local_and_international_indonesian_phone_formats_are_the_same_lead(): void
     {
         $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
 
-        $this->actingAs($admin)->post('/leads', ['contact_raw' => '0812-3456-7890'])->assertRedirect();
-        $this->actingAs($admin)->post('/leads', ['contact_raw' => '+62 812 3456 7890'])
+        $this->actingAs($admin)->post('/leads', ['contact_raw' => '0812-3456-7890', 'source_branch_id' => $branchId])->assertRedirect();
+        $this->actingAs($admin)->post('/leads', ['contact_raw' => '+62 812 3456 7890', 'source_branch_id' => $branchId])
             ->assertSessionHasErrors('contact_raw');
 
         $this->assertDatabaseCount('leads', 1);
@@ -698,6 +701,7 @@ class LeadManagementTest extends TestCase
     public function test_international_phone_format_does_not_duplicate_a_legacy_local_phone_key(): void
     {
         $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
         \DB::table('leads')->insert([
             'contact_raw' => '0812-3456-7890',
             'contact_key' => 'phone:081234567890',
@@ -705,7 +709,7 @@ class LeadManagementTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $this->actingAs($admin)->post('/leads', ['contact_raw' => '+62 812 3456 7890'])
+        $this->actingAs($admin)->post('/leads', ['contact_raw' => '+62 812 3456 7890', 'source_branch_id' => $branchId])
             ->assertSessionHasErrors('contact_raw');
 
         $this->assertDatabaseCount('leads', 1);
@@ -1010,19 +1014,59 @@ class LeadManagementTest extends TestCase
             ->assertSessionHasErrors('lead_date_from');
     }
 
-    public function test_admin_can_assign_an_unassigned_lead_to_cs(): void
+    public function test_admin_can_set_missing_source_branch_without_changing_existing_assignment(): void
+    {
+        $admin = $this->user('admin');
+        $branch = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branch]);
+        $lead = \DB::table('leads')->insertGetId(['contact_raw' => '081234567890']);
+        $legacy = \DB::table('leads')->insertGetId(['contact_raw' => '081234567891', 'assigned_user_id' => $cs->id]);
+        $this->actingAs($cs)->post('/leads/source-branch', ['lead_ids' => [$lead], 'source_branch_id' => $branch])->assertForbidden();
+        $this->actingAs($admin)->post('/leads/source-branch', ['lead_ids' => [$lead, $legacy], 'source_branch_id' => $branch])->assertRedirect();
+        $this->assertDatabaseHas('leads', ['id' => $lead, 'source_branch_id' => $branch, 'assigned_user_id' => null]);
+        $this->assertDatabaseHas('leads', ['id' => $legacy, 'source_branch_id' => $branch, 'assigned_user_id' => $cs->id]);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $lead, 'actor_id' => $admin->id, 'action' => 'Cabang sumber ditetapkan']);
+        $this->actingAs($cs)->patch("/leads/{$lead}", ['inline' => true, 'keterangan' => 'Follow-up'])->assertRedirect();
+        $this->actingAs($admin)->post('/leads/source-branch', ['lead_ids' => [$lead], 'source_branch_id' => $branch])->assertSessionHasErrors('lead_ids');
+    }
+
+    public function test_source_branch_selection_rejects_mixed_or_archived_leads_without_partial_updates(): void
+    {
+        $admin = $this->user('admin');
+        $branch = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $empty = \DB::table('leads')->insertGetId(['contact_raw' => 'one']);
+        $existing = \DB::table('leads')->insertGetId(['contact_raw' => 'two', 'source_branch_id' => $branch]);
+        $archived = \DB::table('leads')->insertGetId(['contact_raw' => 'three', 'archived_at' => now()]);
+        foreach ([$existing, $archived] as $ineligible) {
+            $this->actingAs($admin)->post('/leads/source-branch', ['lead_ids' => [$empty, $ineligible], 'source_branch_id' => $branch])->assertSessionHasErrors('lead_ids');
+            $this->assertDatabaseHas('leads', ['id' => $empty, 'source_branch_id' => null]);
+        }
+    }
+
+    public function test_manual_assignment_is_rejected_without_changing_the_lead(): void
     {
         $admin = $this->user('admin');
         $cs = $this->user('cs');
-        $leadId = \DB::table('leads')->insertGetId(['contact_raw' => '+6285200000000', 'contact_key' => 'phone:6285200000000', 'created_at' => now(), 'updated_at' => now()]);
+        $leadId = \DB::table('leads')->insertGetId(['contact_raw' => '+6285200000000']);
+        $this->actingAs($admin)->patch("/leads/{$leadId}", ['assigned_user_id' => $cs->id])->assertSessionHasErrors('assigned_user_id');
+        $this->actingAs($admin)->post('/leads/assign', ['lead_ids' => [$leadId], 'assigned_user_id' => $cs->id])->assertStatus(410);
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'assigned_user_id' => null]);
+    }
 
-        $response = $this->actingAs($admin)->patch("/leads/{$leadId}", ['assigned_user_id' => $cs->id, 'milestones' => []]);
-        $response->assertRedirect("/leads/{$leadId}");
-        $response->assertSessionHas('inertia.flash_data.toast', [
-            'type' => 'success',
-            'message' => 'Lead berhasil diperbarui.',
-        ]);
-        $this->assertDatabaseHas('leads', ['id' => $leadId, 'assigned_user_id' => $cs->id]);
+    public function test_admin_creates_manual_lead_for_a_branch_team(): void
+    {
+        $admin = $this->user('admin');
+        $branch = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branch]);
+        $other = $this->user('cs', ['branch_id' => $branch]);
+        $outsider = $this->user('cs', ['branch_id' => \DB::table('branches')->insertGetId(['name' => 'Solo'])]);
+        $this->actingAs($admin)->post('/leads', ['contact_raw' => '081234567890'])->assertSessionHasErrors('source_branch_id');
+        $this->actingAs($admin)->post('/leads', ['contact_raw' => '081234567890', 'source_branch_id' => $branch])->assertRedirect();
+        $leadId = (int) \DB::table('leads')->where('contact_raw', '081234567890')->value('id');
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'source_branch_id' => $branch, 'assigned_user_id' => null]);
+        $this->actingAs($cs)->patch("/leads/{$leadId}", ['inline' => true, 'keterangan' => 'Follow-up pertama'])->assertRedirect();
+        $this->actingAs($other)->patch("/leads/{$leadId}", ['inline' => true, 'keterangan' => 'Follow-up kedua'])->assertRedirect();
+        $this->actingAs($outsider)->patch("/leads/{$leadId}", ['inline' => true, 'keterangan' => 'Luar cabang'])->assertNotFound();
     }
 
     public function test_lead_list_has_the_data_needed_for_inline_quick_updates(): void
@@ -2258,20 +2302,10 @@ class LeadManagementTest extends TestCase
         ])->assertNotFound();
     }
 
-    public function test_admin_can_assign_selected_leads_in_bulk_and_current_stage_follows_the_highest_milestone(): void
+    public function test_current_stage_follows_the_highest_milestone(): void
     {
         $admin = $this->user('admin');
-        $cs = $this->user('cs');
         $firstLead = \DB::table('leads')->insertGetId(['contact_raw' => '+6285400000001', 'contact_key' => 'phone:6285400000001', 'created_at' => now(), 'updated_at' => now()]);
-        $secondLead = \DB::table('leads')->insertGetId(['contact_raw' => '+6285400000002', 'contact_key' => 'phone:6285400000002', 'created_at' => now(), 'updated_at' => now()]);
-
-        $this->actingAs($admin)->post('/leads/assign', [
-            'lead_ids' => [$firstLead, $secondLead],
-            'assigned_user_id' => $cs->id,
-        ])->assertRedirect('/leads');
-
-        $this->assertDatabaseHas('leads', ['id' => $firstLead, 'assigned_user_id' => $cs->id]);
-        $this->assertDatabaseHas('leads', ['id' => $secondLead, 'assigned_user_id' => $cs->id]);
 
         $this->actingAs($admin)->patch("/leads/{$firstLead}", [
             'milestones' => ['clicked', 'price_list', 'closing_repeat'],
@@ -2351,6 +2385,38 @@ class LeadManagementTest extends TestCase
             );
     }
 
+    public function test_cs_cannot_manage_archives_even_for_their_own_leads(): void
+    {
+        $cs = $this->user('cs');
+        $active = \DB::table('leads')->insertGetId(['assigned_user_id' => $cs->id, 'contact_raw' => 'active']);
+        $archived = \DB::table('leads')->insertGetId(['assigned_user_id' => $cs->id, 'contact_raw' => 'archived', 'archived_at' => now()]);
+
+        $this->actingAs($cs)->patch("/leads/{$active}/archive")->assertForbidden();
+        $this->actingAs($cs)->post('/leads/archive', ['lead_ids' => [$active]])->assertForbidden();
+        $this->actingAs($cs)->patch("/leads/{$archived}/restore")->assertForbidden();
+        $this->actingAs($cs)->post('/leads/restore', ['lead_ids' => [$archived]])->assertForbidden();
+        $this->actingAs($cs)->delete("/leads/{$archived}")->assertForbidden();
+        $this->actingAs($cs)->delete('/leads', ['lead_ids' => [$archived]])->assertForbidden();
+        $this->actingAs($cs)->get('/leads?archived=1')->assertForbidden();
+        $this->actingAs($cs)->get("/leads/{$archived}")->assertNotFound();
+        $this->actingAs($cs)->get("/leads/{$archived}/history-preview")->assertNotFound();
+        $this->assertDatabaseHas('leads', ['id' => $active, 'archived_at' => null]);
+        $this->assertDatabaseHas('leads', ['id' => $archived]);
+    }
+
+    public function test_admin_can_manage_selected_lead_archive_and_delete(): void
+    {
+        $admin = $this->user('admin');
+        $lead = \DB::table('leads')->insertGetId(['contact_raw' => '081234567890']);
+        $this->actingAs($admin)->post('/leads/archive', ['lead_ids' => [$lead]])->assertRedirect();
+        $this->assertNotNull(\DB::table('leads')->where('id', $lead)->value('archived_at'));
+        $this->actingAs($admin)->post('/leads/restore', ['lead_ids' => [$lead]])->assertRedirect();
+        $this->assertDatabaseHas('leads', ['id' => $lead, 'archived_at' => null]);
+        $this->actingAs($admin)->post('/leads/archive', ['lead_ids' => [$lead]])->assertRedirect();
+        $this->actingAs($admin)->delete('/leads', ['lead_ids' => [$lead]])->assertRedirect();
+        $this->assertDatabaseMissing('leads', ['id' => $lead]);
+    }
+
     public function test_admin_can_archive_a_lead_without_removing_its_history(): void
     {
         $admin = $this->user('admin');
@@ -2393,11 +2459,8 @@ class LeadManagementTest extends TestCase
     public function test_cs_can_create_a_lead_that_is_automatically_assigned_to_them(): void
     {
         $cs = $this->user('cs');
-        $otherCs = $this->user('cs');
-
         $response = $this->actingAs($cs)->post('/leads', [
             'contact_raw' => '+62 851-7777-7777',
-            'assigned_user_id' => $otherCs->id,
             'milestone' => 'asked',
         ]);
 
@@ -2407,36 +2470,6 @@ class LeadManagementTest extends TestCase
             'assigned_user_id' => $cs->id,
             'current_stage' => 'asked',
         ]);
-    }
-
-    public function test_cs_can_bulk_archive_and_restore_only_their_own_leads(): void
-    {
-        $cs = $this->user('cs');
-        $otherCs = $this->user('cs');
-        $ownedLead = \DB::table('leads')->insertGetId(['assigned_user_id' => $cs->id, 'contact_raw' => '+6285100000001', 'contact_key' => 'phone:6285100000001', 'created_at' => now(), 'updated_at' => now()]);
-        $otherLead = \DB::table('leads')->insertGetId(['assigned_user_id' => $otherCs->id, 'contact_raw' => '+6285100000002', 'contact_key' => 'phone:6285100000002', 'created_at' => now(), 'updated_at' => now()]);
-
-        $this->actingAs($cs)->post('/leads/archive', ['lead_ids' => [$ownedLead]])->assertRedirect('/leads');
-        $this->assertDatabaseMissing('leads', ['id' => $ownedLead, 'archived_at' => null]);
-
-        $this->actingAs($cs)->post('/leads/archive', ['lead_ids' => [$otherLead]])->assertNotFound();
-
-        $this->actingAs($cs)->post('/leads/restore', ['lead_ids' => [$ownedLead]])->assertRedirect('/leads?archived=1');
-        $this->assertDatabaseHas('leads', ['id' => $ownedLead, 'archived_at' => null]);
-    }
-
-    public function test_cs_can_permanently_delete_only_their_own_archived_leads(): void
-    {
-        $cs = $this->user('cs');
-        $leadId = \DB::table('leads')->insertGetId(['assigned_user_id' => $cs->id, 'contact_raw' => '+6285100000003', 'contact_key' => 'phone:6285100000003', 'archived_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
-        \DB::table('lead_milestones')->insert(['lead_id' => $leadId, 'milestone' => 'asked', 'is_active' => true, 'marked_at' => now()]);
-        \DB::table('lead_activity')->insert(['lead_id' => $leadId, 'action' => 'Lead diarsipkan', 'created_at' => now()]);
-
-        $this->actingAs($cs)->delete('/leads', ['lead_ids' => [$leadId]])->assertRedirect('/leads?archived=1');
-
-        $this->assertDatabaseMissing('leads', ['id' => $leadId]);
-        $this->assertDatabaseMissing('lead_milestones', ['lead_id' => $leadId]);
-        $this->assertDatabaseMissing('lead_activity', ['lead_id' => $leadId]);
     }
 
     public function test_legacy_collaborator_can_update_and_cannot_be_removed_through_retired_endpoint(): void
@@ -2472,8 +2505,8 @@ class LeadManagementTest extends TestCase
                 ->component('Leads/Show')
                 ->where('handlingRole', 'collaborator'),
         );
-        $this->actingAs($collaborator)->patch("/leads/{$leadId}/archive")->assertRedirect();
-        $this->assertNotNull(\DB::table('leads')->where('id', $leadId)->value('archived_at'));
+        $this->actingAs($collaborator)->patch("/leads/{$leadId}/archive")->assertForbidden();
+        $this->assertNull(\DB::table('leads')->where('id', $leadId)->value('archived_at'));
     }
 
     public function test_only_admin_can_mark_a_lead_as_taken_over_by_crm(): void
@@ -2779,7 +2812,7 @@ class LeadManagementTest extends TestCase
             ->assertRedirect();
         $this->actingAs($teamMember)
             ->patch("/leads/{$leadId}/archive")
-            ->assertNotFound();
+            ->assertForbidden();
 
         $this->assertDatabaseHas('leads', ['id' => $leadId, 'assigned_user_id' => $primary->id, 'keterangan' => 'Diperbarui tim cabang', 'archived_at' => null]);
         $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'actor_id' => $teamMember->id, 'action' => 'Lead diperbarui']);
@@ -2811,7 +2844,7 @@ class LeadManagementTest extends TestCase
         $this->actingAs($cs)->get('/leads')->assertInertia(fn (Assert $page) => $page->has('leads.data', 0));
         $this->actingAs($cs)->get("/leads/{$leadId}")->assertNotFound();
         $this->actingAs($cs)->patch("/leads/{$leadId}", ['inline' => true, 'keterangan' => 'lintas cabang'])->assertNotFound();
-        $this->actingAs($cs)->patch("/leads/{$leadId}/archive")->assertNotFound();
+        $this->actingAs($cs)->patch("/leads/{$leadId}/archive")->assertForbidden();
         $this->actingAs($cs)->get("/leads/{$assignedId}")->assertNotFound();
         $this->actingAs($cs)->get("/leads/{$unknownId}")->assertNotFound();
         $this->assertDatabaseHas('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $cs->id, 'removed_at' => null]);
@@ -2876,42 +2909,13 @@ class LeadManagementTest extends TestCase
 
         $this->actingAs($admin)
             ->post('/leads/assign', ['lead_ids' => [$leadId], 'assigned_user_id' => $bandungCs->id])
-            ->assertSessionHasErrors('assigned_user_id');
+            ->assertStatus(410);
         $this->actingAs($admin)
             ->post('/leads/collaborators', ['lead_ids' => [$leadId], 'user_id' => $bandungCs->id])
             ->assertStatus(410);
 
         $this->assertDatabaseHas('leads', ['id' => $leadId, 'assigned_user_id' => $palaganCs->id]);
         $this->assertDatabaseMissing('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $bandungCs->id]);
-    }
-
-    public function test_first_admin_assignment_sets_the_lead_source_branch_and_keeps_the_current_list_filter(): void
-    {
-        $admin = $this->user('admin');
-        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
-        $cs = $this->user('cs', ['branch_id' => $branchId]);
-        $leadId = \DB::table('leads')->insertGetId([
-            'contact_raw' => '+6285100000027',
-            'contact_key' => 'phone:6285100000027',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        $this->actingAs($admin)
-            ->post('/leads/assign', ['lead_ids' => [$leadId], 'assigned_user_id' => $cs->id])
-            ->assertRedirect('/leads');
-
-        $this->assertDatabaseHas('leads', [
-            'id' => $leadId,
-            'assigned_user_id' => $cs->id,
-            'source_branch_id' => $branchId,
-        ]);
-
-        $backup = $this->user('cs', ['branch_id' => $branchId]);
-        $this->actingAs($backup)
-            ->from('/leads?handling=team')
-            ->post("/leads/{$leadId}/start-assisting", ['return_to' => '/leads?handling=team'])
-            ->assertStatus(410);
     }
 
     public function test_manual_lead_created_by_cs_uses_their_branch_as_its_source(): void

@@ -61,9 +61,6 @@ const form = useForm({
     budget: String(props.lead.budget || ''),
     keterangan: String(props.lead.keterangan || ''),
     next_follow_up_at: String(props.lead.next_follow_up_at || '').slice(0, 16),
-    assigned_user_id: props.lead.assigned_user_id
-        ? String(props.lead.assigned_user_id)
-        : '',
     crm_taken_over: Boolean(props.lead.crm_taken_over_at),
     outcome: String(props.lead.outcome || ''),
     outcome_factor: String(props.lead.outcome_factor || ''),
@@ -102,7 +99,6 @@ const formFields = [
     'budget',
     'keterangan',
     'next_follow_up_at',
-    'assigned_user_id',
     'crm_taken_over',
     'outcome',
     'outcome_factor',
@@ -204,6 +200,11 @@ function save() {
         return;
     }
     clientError.value = '';
+    form.transform((data) => {
+        if (isAdmin) return data;
+        const { crm_taken_over: _crmTakenOver, ...fields } = data;
+        return fields;
+    });
     form.patch(`/leads/${props.lead.id}`, {
         preserveScroll: true,
         onError: focusFirstError,
@@ -259,10 +260,7 @@ function destroyLead() {
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 <button
-                    v-if="
-                        !lead.archived_at &&
-                        (isAdmin || handlingRole !== 'team')
-                    "
+                    v-if="!lead.archived_at && isAdmin"
                     class="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#d8aaa2] px-3 text-sm font-semibold text-kgj-rose transition hover:bg-[#fff3f1]"
                     type="button"
                     :disabled="lifecycleProcessing"
@@ -271,9 +269,7 @@ function destroyLead() {
                     Arsipkan
                 </button>
                 <button
-                    v-if="
-                        lead.archived_at && (isAdmin || handlingRole !== 'team')
-                    "
+                    v-if="lead.archived_at && isAdmin"
                     class="kgj-button-primary"
                     type="button"
                     :disabled="lifecycleProcessing"
@@ -282,9 +278,7 @@ function destroyLead() {
                     Pulihkan
                 </button>
                 <button
-                    v-if="
-                        lead.archived_at && (isAdmin || handlingRole !== 'team')
-                    "
+                    v-if="lead.archived_at && isAdmin"
                     class="inline-flex min-h-11 items-center justify-center rounded-lg border border-[#d8aaa2] px-3 text-sm font-semibold text-kgj-rose transition hover:bg-[#fff3f1]"
                     type="button"
                     :disabled="lifecycleProcessing"
@@ -383,26 +377,6 @@ function destroyLead() {
                         v-if="form.errors.next_follow_up_at"
                         class="font-normal text-[#a23e2b]"
                         >{{ form.errors.next_follow_up_at }}</span
-                    ></label
-                ><label v-if="isAdmin" class="grid gap-2 text-sm font-semibold"
-                    >CS penanggung jawab<select
-                        id="assigned_user_id"
-                        v-model="form.assigned_user_id"
-                        class="kgj-input"
-                        :aria-invalid="Boolean(form.errors.assigned_user_id)"
-                    >
-                        <option value="">Belum ditugaskan</option>
-                        <option
-                            v-for="account in csAccounts"
-                            :key="account.id"
-                            :value="String(account.id)"
-                        >
-                            {{ account.branch_name }} — {{ account.name }}
-                        </option></select
-                    ><span
-                        v-if="form.errors.assigned_user_id"
-                        class="font-normal text-[#a23e2b]"
-                        >{{ form.errors.assigned_user_id }}</span
                     ></label
                 >
                 <label v-if="isAdmin" class="grid gap-2 text-sm font-semibold"

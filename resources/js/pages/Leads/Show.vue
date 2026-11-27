@@ -71,9 +71,6 @@ const form = useForm({
     revision: props.lead.revision,
     milestones: [...props.milestones],
 });
-const collaboratorForm = useForm({
-    user_ids: props.collaborators.map((collaborator) => collaborator.id),
-});
 const clientError = ref('');
 const archiveDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
@@ -210,11 +207,6 @@ function save() {
     form.patch(`/leads/${props.lead.id}`, {
         preserveScroll: true,
         onError: focusFirstError,
-    });
-}
-function saveCollaborators() {
-    collaboratorForm.patch(`/leads/${props.lead.id}/collaborators`, {
-        preserveScroll: true,
     });
 }
 function archiveLead() {
@@ -508,62 +500,6 @@ function destroyLead() {
                     Buka kembali hasil akhir
                 </button>
             </fieldset>
-            <section
-                v-if="isAdmin && lead.source_branch_id !== null"
-                class="kgj-surface p-5"
-            >
-                <h2 class="font-semibold">CS pendamping</h2>
-                <p class="mt-1 text-sm text-[#62665b]">
-                    Tambahkan CS pengganti tanpa mengubah CS utama.
-                </p>
-                <label class="mt-4 grid gap-2 text-sm font-semibold"
-                    >CS yang ikut menangani<select
-                        v-model="collaboratorForm.user_ids"
-                        class="kgj-input min-h-32"
-                        multiple
-                        :aria-invalid="
-                            Boolean(collaboratorForm.errors.user_ids)
-                        "
-                    >
-                        <option
-                            v-for="account in csAccounts"
-                            :key="account.id"
-                            :disabled="
-                                String(account.id) === form.assigned_user_id
-                            "
-                            :value="account.id"
-                        >
-                            {{ account.branch_name }} — {{ account.name }}
-                        </option></select
-                    ><span class="font-normal text-[#62665b]"
-                        >Gunakan Ctrl atau Cmd untuk memilih lebih dari satu
-                        CS.</span
-                    ><span
-                        v-if="collaboratorForm.errors.user_ids"
-                        class="font-normal text-[#a23e2b]"
-                        >{{ collaboratorForm.errors.user_ids }}</span
-                    ></label
-                >
-                <button
-                    class="kgj-button-secondary mt-4"
-                    type="button"
-                    :disabled="
-                        collaboratorForm.processing ||
-                        collaboratorForm.isDirty === false
-                    "
-                    @click="saveCollaborators"
-                >
-                    {{
-                        collaboratorForm.processing
-                            ? 'Menyimpan…'
-                            : 'Simpan CS pendamping'
-                    }}
-                </button>
-            </section>
-            <p v-else-if="isAdmin" class="text-sm text-[#665a43]" role="status">
-                Tetapkan CS utama terlebih dahulu sebelum menambahkan CS
-                pendamping.
-            </p>
             <label class="grid gap-2 text-sm font-semibold"
                 >Keterangan<textarea
                     id="keterangan"

@@ -327,6 +327,11 @@ class LeadController extends Controller
         return to_route('leads.index');
     }
 
+    public function retiredCollaborators(): never
+    {
+        abort(410, 'Fitur CS pendamping tidak lagi digunakan. CS satu cabang dapat memperbarui lead secara langsung.');
+    }
+
     public function addCollaboratorSelected(Request $request): RedirectResponse
     {
         abort_unless($request->user()->role === 'admin', 403);
@@ -819,6 +824,8 @@ class LeadController extends Controller
 
         $userId = $request->user()->id;
         $branchId = (int) ($request->user()->branch_id ?? 0);
+        $query->where(fn (Builder $source) => $source->where('source_branch_id', $branchId)
+            ->orWhere(fn (Builder $unknown) => $unknown->whereNull('source_branch_id')->where('assigned_user_id', $userId)));
         $query->where(function (Builder $visible) use ($userId, $branchId, $requiresHandling): void {
             $visible->where('assigned_user_id', $userId)->orWhereExists(function (Builder $collaborator) use ($userId): void {
                 $collaborator->selectRaw('1')

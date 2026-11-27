@@ -842,17 +842,14 @@ class LeadManagementTest extends TestCase
         $this->actingAs($cs)->get("/leads?cs_user_id={$otherCs->id}")->assertInertia(
             fn (Assert $page) => $page
                 ->component('Leads/Index')
-                ->where('leads.total', 1)
-                ->where('leads.data.0.contact_raw', '+6285200000001')
-                ->where('leads.data.0.cs_filter_match', 'CS pendamping'),
+                ->where('leads.total', 0),
         );
 
         $this->actingAs($admin)->get("/leads?cs_user_id={$otherCs->id}")->assertInertia(
             fn (Assert $page) => $page
                 ->component('Leads/Index')
-                ->where('leads.total', 2)
-                ->where('leads.data.0.cs_filter_match', 'CS pendamping')
-                ->where('leads.data.1.cs_filter_match', 'CS utama'),
+                ->where('leads.total', 1)
+                ->where('leads.data.0.cs_filter_match', 'CS utama'),
         );
     }
 
@@ -2016,7 +2013,7 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseMissing('lead_activity', ['lead_id' => $leadId]);
     }
 
-    public function test_admin_can_add_a_cs_pendamping_who_can_update_the_lead(): void
+    public function test_legacy_collaborator_can_update_and_cannot_be_removed_through_retired_endpoint(): void
     {
         $admin = $this->user('admin');
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
@@ -2031,9 +2028,7 @@ class LeadManagementTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $this->actingAs($admin)
-            ->patch("/leads/{$leadId}/collaborators", ['user_ids' => [$collaborator->id]])
-            ->assertRedirect();
+        \DB::table('lead_collaborators')->insert(['lead_id' => $leadId, 'user_id' => $collaborator->id, 'added_at' => now()]);
         $this->assertDatabaseHas('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $collaborator->id, 'removed_at' => null]);
 
         $this->actingAs($collaborator)
@@ -2044,13 +2039,15 @@ class LeadManagementTest extends TestCase
 
         $this->actingAs($admin)
             ->patch("/leads/{$leadId}/collaborators", ['user_ids' => []])
-            ->assertRedirect();
-        $this->assertDatabaseMissing('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $collaborator->id, 'removed_at' => null]);
+            ->assertStatus(410);
+        $this->assertDatabaseHas('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $collaborator->id, 'removed_at' => null]);
         $this->actingAs($collaborator)->get("/leads/{$leadId}")->assertInertia(
             fn (Assert $page) => $page
                 ->component('Leads/Show')
-                ->where('handlingRole', 'team'),
+                ->where('handlingRole', 'collaborator'),
         );
+        $this->actingAs($collaborator)->patch("/leads/{$leadId}/archive")->assertRedirect();
+        $this->assertNotNull(\DB::table('leads')->where('id', $leadId)->value('archived_at'));
     }
 
     public function test_only_admin_can_mark_a_lead_as_taken_over_by_crm(): void
@@ -2123,7 +2120,7 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('leads', ['id' => $closedLead, 'crm_taken_over_at' => null]);
     }
 
-    public function test_admin_can_add_a_cs_pendamping_to_selected_leads(): void
+    public function test_admin_cannot_add_collaborators_through_retired_bulk_endpoint(): void
     {
         $admin = $this->user('admin');
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
@@ -2140,10 +2137,9 @@ class LeadManagementTest extends TestCase
 
         $this->actingAs($admin)
             ->post('/leads/collaborators', ['lead_ids' => [$leadId], 'user_id' => $collaborator->id])
-            ->assertRedirect('/leads');
+            ->assertStatus(410);
 
-        $this->assertDatabaseHas('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $collaborator->id, 'removed_at' => null]);
-        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'action' => 'CS pendamping ditambahkan']);
+        $this->assertDatabaseMissing('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $collaborator->id]);
     }
 
     public function test_cs_can_see_leads_from_its_branch_but_not_other_branches(): void
@@ -2207,7 +2203,7 @@ class LeadManagementTest extends TestCase
         );
     }
 
-    public function test_cs_can_start_and_finish_assisting_a_lead_from_its_branch(): void
+    public function test_retired_assistance_endpoints_preserve_existing_collaborators(): void
     {
         $palaganId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
         $primary = $this->user('cs', ['name' => 'CS Utama', 'branch_id' => $palaganId]);
@@ -2223,32 +2219,21 @@ class LeadManagementTest extends TestCase
 
         $this->actingAs($backup)
             ->post("/leads/{$leadId}/start-assisting")
-            ->assertRedirect('/leads');
+            ->assertStatus(410);
+
+        $this->assertDatabaseMissing('lead_collaborators', [
+            'lead_id' => $leadId,
+            'user_id' => $backup->id,
+        ]);
+        \DB::table('lead_collaborators')->insert(['lead_id' => $leadId, 'user_id' => $backup->id, 'added_at' => now()]);
+        $this->actingAs($backup)
+            ->delete("/leads/{$leadId}/stop-assisting")
+            ->assertStatus(410);
 
         $this->assertDatabaseHas('lead_collaborators', [
             'lead_id' => $leadId,
             'user_id' => $backup->id,
             'removed_at' => null,
-        ]);
-        $this->assertDatabaseHas('lead_activity', [
-            'lead_id' => $leadId,
-            'actor_id' => $backup->id,
-            'action' => 'CS mulai membantu',
-        ]);
-
-        $this->actingAs($backup)
-            ->delete("/leads/{$leadId}/stop-assisting")
-            ->assertRedirect('/leads');
-
-        $this->assertDatabaseMissing('lead_collaborators', [
-            'lead_id' => $leadId,
-            'user_id' => $backup->id,
-            'removed_at' => null,
-        ]);
-        $this->assertDatabaseHas('lead_activity', [
-            'lead_id' => $leadId,
-            'actor_id' => $backup->id,
-            'action' => 'CS selesai membantu',
         ]);
     }
 
@@ -2268,7 +2253,7 @@ class LeadManagementTest extends TestCase
         );
     }
 
-    public function test_cs_cannot_start_assisting_a_lead_from_another_branch(): void
+    public function test_retired_assistance_endpoint_does_not_add_collaborators_across_branches(): void
     {
         $palaganId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
         $bandungId = \DB::table('branches')->insertGetId(['name' => 'Bandung']);
@@ -2285,7 +2270,7 @@ class LeadManagementTest extends TestCase
 
         $this->actingAs($palaganCs)
             ->post("/leads/{$leadId}/start-assisting")
-            ->assertNotFound();
+            ->assertStatus(410);
 
         $this->assertDatabaseMissing('lead_collaborators', [
             'lead_id' => $leadId,
@@ -2314,7 +2299,81 @@ class LeadManagementTest extends TestCase
             ->patch("/leads/{$leadId}/archive")
             ->assertNotFound();
 
-        $this->assertDatabaseHas('leads', ['id' => $leadId, 'keterangan' => 'Diperbarui tim cabang', 'archived_at' => null]);
+        $this->assertDatabaseHas('leads', ['id' => $leadId, 'assigned_user_id' => $primary->id, 'keterangan' => 'Diperbarui tim cabang', 'archived_at' => null]);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'actor_id' => $teamMember->id, 'action' => 'Lead diperbarui']);
+    }
+
+    public function test_team_filter_includes_legacy_collaborators_and_leads_without_an_owner(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $owner = $this->user('cs', ['branch_id' => $branchId]);
+        $member = $this->user('cs', ['branch_id' => $branchId]);
+        $first = \DB::table('leads')->insertGetId(['assigned_user_id' => $owner->id, 'source_branch_id' => $branchId, 'contact_raw' => '081234567890']);
+        \DB::table('leads')->insert(['source_branch_id' => $branchId, 'contact_raw' => '081234567891']);
+        \DB::table('lead_collaborators')->insert(['lead_id' => $first, 'user_id' => $member->id, 'added_at' => now()]);
+        $this->actingAs($member)->get('/leads?handling=team')->assertInertia(
+            fn (Assert $page) => $page->component('Leads/Index')->has('leads.data', 2),
+        );
+    }
+
+    public function test_cross_branch_legacy_collaboration_does_not_grant_access(): void
+    {
+        $a = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $b = \DB::table('branches')->insertGetId(['name' => 'Solo']);
+        $cs = $this->user('cs', ['branch_id' => $a]);
+        $leadId = \DB::table('leads')->insertGetId(['source_branch_id' => $b, 'contact_raw' => '081234567890']);
+        $assignedId = \DB::table('leads')->insertGetId(['source_branch_id' => $b, 'assigned_user_id' => $cs->id, 'contact_raw' => '081234567899']);
+        $unknownId = \DB::table('leads')->insertGetId(['contact_raw' => '081234567898']);
+        \DB::table('lead_collaborators')->insert(['lead_id' => $leadId, 'user_id' => $cs->id, 'added_at' => now()]);
+        \DB::table('lead_collaborators')->insert(['lead_id' => $unknownId, 'user_id' => $cs->id, 'added_at' => now()]);
+        $this->actingAs($cs)->get('/leads')->assertInertia(fn (Assert $page) => $page->has('leads.data', 0));
+        $this->actingAs($cs)->get("/leads/{$leadId}")->assertNotFound();
+        $this->actingAs($cs)->patch("/leads/{$leadId}", ['inline' => true, 'keterangan' => 'lintas cabang'])->assertNotFound();
+        $this->actingAs($cs)->patch("/leads/{$leadId}/archive")->assertNotFound();
+        $this->actingAs($cs)->get("/leads/{$assignedId}")->assertNotFound();
+        $this->actingAs($cs)->get("/leads/{$unknownId}")->assertNotFound();
+        $this->assertDatabaseHas('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $cs->id, 'removed_at' => null]);
+    }
+
+    public function test_old_collaborator_filter_is_normalized_to_team(): void
+    {
+        $branch = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branch]);
+        \DB::table('leads')->insert(['source_branch_id' => $branch, 'contact_raw' => '081234567891']);
+        $this->actingAs($cs)->get('/leads?handling=collaborator')->assertInertia(
+            fn (Assert $page) => $page->where('filters.handling', 'team')->has('leads.data', 1),
+        );
+    }
+
+    public function test_cs_filter_matches_source_name_and_alias_not_legacy_collaboration(): void
+    {
+        $branch = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $other = $this->user('cs', ['branch_id' => $branch, 'name' => 'Nanda']);
+        $cs = $this->user('cs', ['branch_id' => $branch, 'name' => 'Dilla']);
+        \DB::table('cs_source_name_aliases')->insert(['branch_id' => $branch, 'user_id' => $cs->id, 'source_name' => 'Dil', 'source_name_key' => 'dil']);
+        $wrong = \DB::table('leads')->insertGetId(['source_branch_id' => $branch, 'assigned_user_id' => $other->id, 'imported_cs_name' => 'Nanda', 'contact_raw' => '081234567890']);
+        \DB::table('lead_collaborators')->insert(['lead_id' => $wrong, 'user_id' => $cs->id, 'added_at' => now()]);
+        \DB::table('leads')->insert(['source_branch_id' => $branch, 'assigned_user_id' => $other->id, 'imported_cs_name' => 'Dil', 'contact_raw' => '081234567891']);
+        $this->actingAs($cs)->get("/leads?cs_user_id={$cs->id}")->assertInertia(
+            fn (Assert $page) => $page->has('leads.data', 1)->where('leads.data.0.imported_cs_name', 'Dil'),
+        );
+    }
+
+    public function test_branch_transfer_requires_confirmation_to_end_legacy_assignments(): void
+    {
+        $admin = $this->user('admin');
+        $a = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $b = \DB::table('branches')->insertGetId(['name' => 'Solo']);
+        $cs = $this->user('cs', ['branch_id' => $a, 'name' => 'Dilla']);
+        $leadId = \DB::table('leads')->insertGetId(['source_branch_id' => $a, 'contact_raw' => '081234567890']);
+        \DB::table('lead_collaborators')->insert(['lead_id' => $leadId, 'user_id' => $cs->id, 'added_at' => now()]);
+        $data = ['name' => 'Dilla', 'email' => $cs->email, 'role' => 'cs', 'branch_id' => $b, 'active' => true];
+        $this->actingAs($admin)->patch("/accounts/{$cs->id}", $data)->assertSessionHasErrors('release_historical_confirmed');
+        $this->assertDatabaseHas('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $cs->id, 'removed_at' => null]);
+        $this->actingAs($admin)->patch("/accounts/{$cs->id}", [...$data, 'release_historical_confirmed' => true])->assertRedirect();
+        $this->assertNotNull(\DB::table('lead_collaborators')->where('lead_id', $leadId)->where('user_id', $cs->id)->value('removed_at'));
+        $this->assertDatabaseHas('users', ['id' => $cs->id, 'branch_id' => $b]);
+        $this->assertDatabaseHas('lead_activity', ['lead_id' => $leadId, 'actor_id' => $admin->id, 'action' => 'Hak pendamping historis diakhiri']);
     }
 
     public function test_admin_cannot_assign_or_add_a_pendamping_from_a_different_source_branch(): void
@@ -2338,7 +2397,7 @@ class LeadManagementTest extends TestCase
             ->assertSessionHasErrors('assigned_user_id');
         $this->actingAs($admin)
             ->post('/leads/collaborators', ['lead_ids' => [$leadId], 'user_id' => $bandungCs->id])
-            ->assertSessionHasErrors('user_id');
+            ->assertStatus(410);
 
         $this->assertDatabaseHas('leads', ['id' => $leadId, 'assigned_user_id' => $palaganCs->id]);
         $this->assertDatabaseMissing('lead_collaborators', ['lead_id' => $leadId, 'user_id' => $bandungCs->id]);
@@ -2370,7 +2429,7 @@ class LeadManagementTest extends TestCase
         $this->actingAs($backup)
             ->from('/leads?handling=team')
             ->post("/leads/{$leadId}/start-assisting", ['return_to' => '/leads?handling=team'])
-            ->assertRedirect('/leads?handling=team');
+            ->assertStatus(410);
     }
 
     public function test_manual_lead_created_by_cs_uses_their_branch_as_its_source(): void

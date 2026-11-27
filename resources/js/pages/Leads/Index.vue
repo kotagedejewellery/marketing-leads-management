@@ -241,10 +241,6 @@ const someVisibleSelected = computed(
         visibleLeadIds.value.some((id) => selectedLeadIds.value.includes(id)),
 );
 const bulkForm = useForm({ assigned_user_id: '', lead_ids: [] as number[] });
-const collaboratorBulkForm = useForm({
-    user_id: '',
-    lead_ids: [] as number[],
-});
 const selectionForm = useForm({ lead_ids: [] as number[] });
 const archiveDialogOpen = ref(false);
 const deleteDialogOpen = ref(false);
@@ -702,22 +698,10 @@ const assignSelectedNow = () => {
     });
 };
 const assignSelected = () => guardUnsavedChanges(assignSelectedNow);
-const addCollaboratorSelectedNow = () => {
-    collaboratorBulkForm.lead_ids = selectedLeadIds.value;
-    collaboratorBulkForm.post('/leads/collaborators', {
-        onSuccess: () => {
-            selectedLeadIds.value = [];
-            collaboratorBulkForm.reset();
-        },
-    });
-};
-const addCollaboratorSelected = () =>
-    guardUnsavedChanges(addCollaboratorSelectedNow);
 const clearSelection = () => {
     selectedLeadIds.value = [];
     selectionForm.reset();
     bulkForm.reset();
-    collaboratorBulkForm.reset();
 };
 const toggleMobileSelectionMode = () => {
     mobileSelectionMode.value = !mobileSelectionMode.value;
@@ -1408,7 +1392,6 @@ onBeforeUnmount(() => {
                 >
                     <option value="">Semua lead saya</option>
                     <option value="primary">Milik saya</option>
-                    <option value="collaborator">Saya bantu</option>
                     <option value="team">Tim cabang</option>
                 </select>
             </label>
@@ -1586,41 +1569,6 @@ onBeforeUnmount(() => {
                 >
                     {{ bulkForm.processing ? 'Menugaskan…' : 'Tugaskan' }}
                 </button>
-                <label v-if="isAdmin" class="sr-only" for="bulk-collaborator"
-                    >CS pendamping</label
-                ><select
-                    v-if="isAdmin"
-                    id="bulk-collaborator"
-                    v-model="collaboratorBulkForm.user_id"
-                    class="kgj-input sm:max-w-xs"
-                >
-                    <option value="">Pilih CS pendamping</option>
-                    <option
-                        v-for="account in bulkCsAccounts"
-                        :key="account.id"
-                        :value="String(account.id)"
-                    >
-                        {{ account.branch_name }} — {{ account.name }}
-                    </option>
-                </select>
-                <button
-                    v-if="isAdmin"
-                    class="kgj-button-secondary"
-                    type="button"
-                    :disabled="
-                        collaboratorBulkForm.processing ||
-                        !collaboratorBulkForm.user_id ||
-                        bulkCsAccounts.length === 0 ||
-                        Boolean(bulkSelectionMessage)
-                    "
-                    @click="addCollaboratorSelected"
-                >
-                    {{
-                        collaboratorBulkForm.processing
-                            ? 'Menambahkan…'
-                            : 'Tambah pendamping'
-                    }}
-                </button>
                 <button
                     class="kgj-button-secondary"
                     type="button"
@@ -1748,21 +1696,6 @@ onBeforeUnmount(() => {
                 </dl>
 
                 <div class="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
-                    <span
-                        v-if="lead.cs_filter_match"
-                        class="rounded-full bg-[#fbf6e8] px-2 py-1 text-kgj-gold-deep"
-                        >Cocok sebagai: {{ lead.cs_filter_match }}</span
-                    >
-                    <span
-                        v-if="lead.collaborators.length"
-                        class="rounded-full bg-[#f1eee7] px-2 py-1 text-[#665a43]"
-                        >Pendamping:
-                        {{
-                            lead.collaborators
-                                .map((item) => item.name)
-                                .join(', ')
-                        }}</span
-                    >
                     <span
                         v-if="lead.crm_taken_over_at"
                         class="rounded-full bg-[#fbf6e8] px-2 py-1 text-[#8a6b2d]"
@@ -2093,11 +2026,6 @@ onBeforeUnmount(() => {
                                     :title="ownerTitle(lead)"
                                     >{{ ownerLabel(lead) }}</span
                                 ><small
-                                    v-if="lead.cs_filter_match"
-                                    class="mt-1 block truncate font-semibold text-kgj-gold-deep"
-                                    >Cocok sebagai:
-                                    {{ lead.cs_filter_match }}</small
-                                ><small
                                     v-if="!isAdmin"
                                     class="mt-1 block font-semibold text-[#665a43]"
                                     >{{
@@ -2125,13 +2053,6 @@ onBeforeUnmount(() => {
                                         lead.source_conflict_branch_name ||
                                         'cabang lain'
                                     }}</small
-                                >
-                                <small
-                                    v-if="lead.collaborators.length"
-                                    class="mt-1 block truncate font-semibold text-[#665a43]"
-                                    :title="`CS pendamping: ${lead.collaborators.map((item) => item.name).join(', ')}`"
-                                    >Pendamping:
-                                    {{ lead.collaborators.length }} CS</small
                                 >
                                 <small
                                     v-if="lead.crm_taken_over_at"

@@ -17,7 +17,7 @@
 - **Nama CS sumber**: nama CS sebagaimana tertulis pada spreadsheet. Nilai ini menjadi acuan penugasan awal melalui nama akun atau alias sumber, tetapi bukan akun pengguna dan tetap tersimpan sebagai data asal.
 - **Alias Nama CS sumber**: variasi nama pada spreadsheet yang secara eksplisit dipetakan admin ke satu akun CS aktif pada cabang yang sama.
 - **Akses tim cabang**: hak melihat dan memperbarui lead aktif dari sumber cabang yang sama tanpa perlu menjadi CS pendamping. Hak pengarsipan dan penghapusan tetap mengikuti penugasan sebelumnya.
-- **CS pendamping**: CS yang secara eksplisit memilih mulai membantu atau ditambahkan admin untuk ikut menangani lead tanpa mengganti CS utama. CS pendamping dapat memperbarui lead dan dapat memilih selesai membantu saat tugasnya selesai.
+- **CS pendamping historis**: penugasan pendamping yang dibuat sebelum akses tim cabang berlaku. Data dan riwayatnya dipertahankan; hak akses dan arsip berlaku jika cabang sumber sesuai. Lead tanpa cabang sumber hanya dapat diakses CS utama yang ditugaskan. Saat akun pindah cabang, admin mengonfirmasi pengakhiran penugasan historis dan aktivitas dicatat.
 - **CS fallback impor**: salah satu CS aktif pada cabang yang menerima lead baru dari spreadsheet hanya ketika Nama CS sumber kosong.
 - **Menunggu akun CS**: status lead dengan Nama CS sumber yang terisi tetapi belum cocok dengan satu akun CS aktif atau alias sumber yang unik pada cabang sumber. Lead belum memiliki CS utama, tetapi tetap dapat dilihat dan diperbarui tim cabangnya.
 - **Rekonsiliasi lead historis**: tindakan eksplisit admin untuk menetapkan ulang CS utama lead lama berdasarkan Nama CS sumber atau alias yang cocok. Tindakan ini tidak mengubah CS pendamping.

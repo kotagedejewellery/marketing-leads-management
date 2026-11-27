@@ -21,6 +21,7 @@ type Account = {
     active: boolean;
     awaiting_lead_count: number;
     reconcilable_lead_count: number;
+    legacy_collaborator_count: number;
     source_name_aliases: string[];
 };
 const props = defineProps<{
@@ -42,12 +43,25 @@ const form = useForm({
     branch_id: '',
     source_name_aliases: '',
     active: true,
+    release_historical_confirmed: false,
 });
 const editingId = ref<number | null>(null);
 const accountToToggle = ref<{ account: Account; active: boolean } | null>(null);
 const accountToLink = ref<Account | null>(null);
 const accountToReconcile = ref<Account | null>(null);
 const needsBranch = computed(() => form.role === 'cs');
+const editingAccount = computed(() =>
+    props.accounts.find((account) => account.id === editingId.value),
+);
+const needsLegacyRelease = computed(() =>
+    Boolean(
+        editingAccount.value?.active &&
+        form.active &&
+        form.role === 'cs' &&
+        editingAccount.value.branch_id !== Number(form.branch_id) &&
+        editingAccount.value.legacy_collaborator_count,
+    ),
+);
 const cancel = () => {
     editingId.value = null;
     form.reset();
@@ -62,6 +76,7 @@ const edit = (account: Account) => {
     form.branch_id = account.branch_id ? String(account.branch_id) : '';
     form.source_name_aliases = account.source_name_aliases.join('\n');
     form.active = account.active;
+    form.release_historical_confirmed = false;
     form.clearErrors();
 };
 const save = () => {
@@ -240,6 +255,27 @@ const reconcileSourceLeads = () => {
                 />
                 Akun aktif</label
             >
+            <label
+                v-if="needsLegacyRelease"
+                class="flex items-start gap-2 text-sm md:col-span-2"
+            >
+                <input
+                    v-model="form.release_historical_confirmed"
+                    type="checkbox"
+                    class="mt-1 size-4"
+                />
+                <span
+                    >Saya mengakhiri
+                    {{ editingAccount?.legacy_collaborator_count }} hak
+                    pendamping historis saat akun pindah cabang. Riwayat tetap
+                    tersimpan.
+                    <span
+                        v-if="form.errors.release_historical_confirmed"
+                        class="block text-kgj-rose"
+                        >{{ form.errors.release_historical_confirmed }}</span
+                    >
+                </span>
+            </label>
             <div class="flex items-end gap-2">
                 <button class="kgj-button-primary" :disabled="form.processing">
                     {{

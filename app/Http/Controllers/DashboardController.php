@@ -27,6 +27,9 @@ class DashboardController extends Controller
 
     public function leads(Request $request): Response
     {
+        if ($request->input('handling') === 'collaborator') {
+            $request->merge(['handling' => 'team']);
+        }
         $this->validateLeadFilters($request);
         $filteredCsUserId = $request->filled('cs_user_id')
             ? $request->integer('cs_user_id')
@@ -106,14 +109,7 @@ class DashboardController extends Controller
                         ->whereNull('c.removed_at');
                 }),
                 'team' => $query->where('l.source_branch_id', $branchId)
-                    ->where('l.assigned_user_id', '!=', $userId)
-                    ->whereNotExists(function (Builder $collaborator) use ($userId): void {
-                        $collaborator->selectRaw('1')
-                            ->from('lead_collaborators as c')
-                            ->whereColumn('c.lead_id', 'l.id')
-                            ->where('c.user_id', $userId)
-                            ->whereNull('c.removed_at');
-                    }),
+                    ->where(fn (Builder $owner) => $owner->whereNull('l.assigned_user_id')->orWhere('l.assigned_user_id', '!=', $userId)),
                 default => null,
             };
         }
@@ -125,14 +121,17 @@ class DashboardController extends Controller
             };
         }
         if ($filteredCsUserId !== null) {
-            $query->where(function (Builder $handlingCs) use ($filteredCsUserId): void {
-                $handlingCs->where('l.assigned_user_id', $filteredCsUserId)->orWhereExists(function (Builder $collaborator) use ($filteredCsUserId): void {
-                    $collaborator->selectRaw('1')
-                        ->from('lead_collaborators as c')
-                        ->whereColumn('c.lead_id', 'l.id')
-                        ->where('c.user_id', $filteredCsUserId)
-                        ->whereNull('c.removed_at');
-                });
+            /** @var object{id: int, name: string, branch_id: int|null}|null $account */
+            $account = DB::table('users')->where('id', $filteredCsUserId)->first(['id', 'name', 'branch_id']);
+            abort_if($account === null, 404);
+            $keys = $this->sourceNameKeysForAccount($account);
+            $sourceNames = DB::table('leads')->where('source_branch_id', $account->branch_id)
+                ->whereNotNull('imported_cs_name')->distinct()->pluck('imported_cs_name')
+                ->filter(fn (string $name): bool => in_array(CsName::key($name), $keys, true))->values()->all();
+            $query->where(function (Builder $source) use ($account, $sourceNames, $filteredCsUserId): void {
+                $source->where(fn (Builder $named) => $named->where('l.source_branch_id', $account->branch_id)->whereIn('l.imported_cs_name', $sourceNames))
+                    ->orWhere(fn (Builder $fallback) => $fallback->where('l.assigned_user_id', $filteredCsUserId)
+                        ->where(fn (Builder $blank) => $blank->whereNull('l.imported_cs_name')->orWhere('l.imported_cs_name', '')));
             });
         }
         if ($request->filled('queue')) {
@@ -172,7 +171,7 @@ class DashboardController extends Controller
             $lead->collaborators = $collaboratorsByLead[$lead->id] ?? [];
             $lead->cs_filter_match = $filteredCsUserId === null
                 ? null
-                : ((int) $lead->assigned_user_id === $filteredCsUserId ? 'CS utama' : 'CS pendamping');
+                : (trim((string) $lead->imported_cs_name) !== '' ? 'CS sumber' : 'CS utama');
             $activity = $latestActivityByLead[$lead->id] ?? null;
             $lead->latest_activity = $activity->action ?? null;
             $lead->latest_activity_detail = $activity->detail ?? null;
@@ -322,6 +321,7 @@ class DashboardController extends Controller
         }
         $awaitingByAccount = [];
         $reconcilableByAccount = [];
+        $legacyCounts = DB::table('lead_collaborators')->whereNull('removed_at')->select('user_id')->selectRaw('COUNT(*) as total')->groupBy('user_id')->pluck('total', 'user_id');
         $unmatchedSourceNames = [];
         foreach (DB::table('leads')->whereNotNull('source_branch_id')->whereNotNull('imported_cs_name')->whereNull('archived_at')->get(['assigned_user_id', 'owner_resolution', 'source_branch_id', 'imported_cs_name']) as $lead) {
             $sourceKey = (int) $lead->source_branch_id.'|'.CsName::key((string) $lead->imported_cs_name);
@@ -341,7 +341,8 @@ class DashboardController extends Controller
                 $reconcilableByAccount[$accountId] = ($reconcilableByAccount[$accountId] ?? 0) + 1;
             }
         }
-        $accounts->each(function (object $account) use ($awaitingByAccount, $reconcilableByAccount): void {
+        $accounts->each(function (object $account) use ($awaitingByAccount, $reconcilableByAccount, $legacyCounts): void {
+            $account->legacy_collaborator_count = (int) ($legacyCounts[$account->id] ?? 0);
             $account->awaiting_lead_count = $account->role === 'cs' && $account->active
                 ? ($awaitingByAccount[$account->id] ?? 0)
                 : 0;
@@ -629,17 +630,29 @@ class DashboardController extends Controller
             && $data['role'] === 'cs'
             && $active
             && (int) $record->branch_id !== $data['branch_id'];
-        if ($isMovingActiveCs && (
-            DB::table('leads')->where('assigned_user_id', $record->id)->whereNull('archived_at')->exists()
-            || DB::table('lead_collaborators as c')->join('leads as l', 'l.id', '=', 'c.lead_id')->where('c.user_id', $record->id)->whereNull('c.removed_at')->whereNull('l.archived_at')->exists()
-        )) {
-            throw ValidationException::withMessages(['branch_id' => 'Pindahkan atau lepaskan penugasan lead aktif sebelum memindahkan cabang CS.']);
+        if ($isMovingActiveCs && DB::table('leads')->where('assigned_user_id', $record->id)->whereNull('archived_at')->exists()) {
+            throw ValidationException::withMessages(['branch_id' => 'Pindahkan penugasan CS utama pada lead aktif sebelum memindahkan cabang.']);
         }
         if ($data['role'] === 'cs') {
             $this->assertCsSourceNamesAvailable($data['branch_id'], $record->id, [$data['name'], ...$data['source_name_aliases']]);
         }
 
-        DB::transaction(function () use ($record, $data, $active, $request): void {
+        DB::transaction(function () use ($record, $data, $active, $request, $isMovingActiveCs): void {
+            if ($isMovingActiveCs) {
+                $legacyLeadIds = DB::table('lead_collaborators')->where('user_id', $record->id)->whereNull('removed_at')->lockForUpdate()->pluck('lead_id');
+                if ($legacyLeadIds->isNotEmpty() && ! $request->boolean('release_historical_confirmed')) {
+                    throw ValidationException::withMessages(['release_historical_confirmed' => 'Konfirmasi pengakhiran hak pendamping historis sebelum pindah cabang.']);
+                }
+                if ($legacyLeadIds->isNotEmpty()) {
+                    $now = now();
+                    DB::table('lead_collaborators')->where('user_id', $record->id)->whereNull('removed_at')->update(['removed_at' => $now]);
+                    DB::table('leads')->whereIn('id', $legacyLeadIds)->update(['updated_at' => $now, 'revision' => DB::raw('revision + 1')]);
+                    DB::table('lead_activity')->insert($legacyLeadIds->map(fn ($leadId): array => [
+                        'lead_id' => $leadId, 'actor_id' => $request->user()->id,
+                        'action' => 'Hak pendamping historis diakhiri', 'detail' => "{$record->name} pindah cabang; riwayat penugasan dipertahankan.", 'created_at' => $now,
+                    ])->all());
+                }
+            }
             $updates = ['name' => $data['name'], 'email' => $data['email'], 'role' => $data['role'], 'branch_id' => $data['role'] === 'cs' ? $data['branch_id'] : null, 'active' => $active];
             if ($data['password']) {
                 $updates['password_hash'] = bcrypt($data['password']);
@@ -1091,6 +1104,8 @@ class DashboardController extends Controller
 
         $userId = $request->user()->id;
         $branchId = (int) ($request->user()->branch_id ?? 0);
+        $query->where(fn (Builder $source) => $source->where("{$alias}.source_branch_id", $branchId)
+            ->orWhere(fn (Builder $unknown) => $unknown->whereNull("{$alias}.source_branch_id")->where("{$alias}.assigned_user_id", $userId)));
         $query->where(function (Builder $visible) use ($alias, $userId, $branchId): void {
             $visible->where("{$alias}.assigned_user_id", $userId)->orWhereExists(function (Builder $collaborator) use ($alias, $userId): void {
                 $collaborator->selectRaw('1')

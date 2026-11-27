@@ -326,6 +326,24 @@ class LeadManagementTest extends TestCase
         $this->assertDatabaseHas('branches', ['id' => $branchId, 'google_sheets_sync_error' => 'Tab 2: Header lead utama pada tab 2 belum lengkap.']);
     }
 
+    public function test_google_sheet_sync_uses_primary_columns_when_follow_up_columns_repeat_headers(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet-palagan']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $header = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];
+        $neighbor = ['', 'No', 'Nama/Nomor', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];
+        Http::fake(fn (Request $request) => str_contains($request->url(), 'fields=sheets.properties')
+            ? Http::response(['properties' => ['title' => 'NOVEMBER 2026'], 'sheets' => [['properties' => ['title' => '15']]]])
+            : Http::response(['valueRanges' => [['range' => "'15'!A1:AZ10", 'values' => [[], [], [...array_fill(0, 15, ''), ...$header, ...$neighbor], [...array_fill(0, 15, ''), '1', '081234567890', '0', 'Dilla', 'Tanya', 'Cincin', 'Halo', '10.30', 'Iklan', 'Bio', 'Warm', '', '2', '081299999999', 'Lain']]]]]));
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+        $summary = $sync->sync(null, $branchId);
+        $this->assertSame(1, $summary['inserted']);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567890', 'assigned_user_id' => $cs->id, 'imported_cs_name' => 'Dilla', 'lead_created_on' => '2026-11-15', 'chat_time' => '10.30']);
+        $this->assertDatabaseMissing('leads', ['contact_key' => 'phone:6281299999999']);
+    }
+
     public function test_google_sheet_sync_retries_a_temporary_failure_and_reads_headers_beyond_column_z(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Solo', 'google_spreadsheet_id' => 'sheet-solo']);
@@ -850,10 +868,11 @@ class LeadManagementTest extends TestCase
         $writer->addRow(Row::fromValues([null, '1 November 2026']));
         $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting*', 'Waktu Chat', 'Keterangan Sumber*', 'Keterangan Campaign*', 'Definisi Leads'];
         $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['Whatsapp 1'])));
-        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), $headers)));
+        $neighbor = ['', 'No', 'Nama/Nomor', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), $headers, $neighbor)));
         $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['1', '+62 851-7777-7111', '0', 'Dila', 'klik saja', '', 'Halo pertama', '10.38', 'Iklan', 'Bio', 'Cold'])));
         $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['Whatsapp 2'])));
-        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), $headers)));
+        $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), $headers, $neighbor)));
         $writer->addRow(Row::fromValues(array_merge(array_fill(0, 15, ''), ['1', '+62 851-7777-7222', '0', 'Dila', 'diskusi online', 'nikah', 'Halo kedua', '11.40', 'Organik', 'Other', 'Hot'])));
         $writer->close();
 
@@ -1408,6 +1427,23 @@ class LeadManagementTest extends TestCase
         $sync->shouldReceive('accessToken')->once()->andReturn('token');
         $sync->shouldReceive('readBranch')->once()->andReturn(['rows' => [$row, [...$row, 'source_row_no' => '2', 'chat_time' => '16.56']], 'missing_source_fields' => 0, 'errors' => []]);
         $this->assertSame(1, $sync->sync(null, $branchId)['chat_time_review']);
+    }
+
+    public function test_active_source_preview_reports_new_and_existing_rows_without_importing(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        $row = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        app(LeadImportService::class)->import([$row], null, 'sheet', $branchId);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+        $sync->shouldReceive('readBranch')->once()->andReturn(['rows' => [$row, [...$row, 'contact_raw' => '081234567891']], 'missing_source_fields' => 0, 'errors' => []]);
+
+        $plan = $sync->previewReconciliation($branchId);
+
+        $this->assertSame(1, $plan['source_comparison']['matching']);
+        $this->assertSame(1, $plan['source_comparison']['new']);
+        $this->assertSame(1, \DB::table('leads')->count());
     }
 
     public function test_reconciliation_reports_missing_leads_and_protects_older_dates(): void

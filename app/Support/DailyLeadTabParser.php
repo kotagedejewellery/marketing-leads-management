@@ -73,6 +73,14 @@ final class DailyLeadTabParser
                 if ($headers === []) {
                     $this->ensureCompleteHeaders($candidateHeaders, $tab, $index + 1);
                     $headers = $candidateHeaders;
+                    $sequenceColumn = array_search('source_sequence', $headers, true);
+                    $previousRow = $values[$index - 1] ?? [];
+                    $label = is_array($previousRow) && $sequenceColumn !== false
+                        ? $this->value($previousRow[$sequenceColumn] ?? null)
+                        : null;
+                    if ($label !== null && ! ctype_digit($label)) {
+                        $block = $label;
+                    }
                 } elseif (count($candidateHeaders) === count(self::FIELDS)) {
                     $headers = $candidateHeaders;
                 }
@@ -161,6 +169,9 @@ final class DailyLeadTabParser
         foreach ($headerRow as $column => $header) {
             $key = $this->headerKey($header);
             if (isset(self::FIELDS[$key])) {
+                if (in_array(self::FIELDS[$key], $headers, true)) {
+                    break;
+                }
                 $headers[$column] = self::FIELDS[$key];
             }
         }

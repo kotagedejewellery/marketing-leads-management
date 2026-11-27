@@ -63,7 +63,7 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{spreadsheet_id: string, spreadsheet_title: string, source_rows: int, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, archive_candidates: list<array{lead_id: int, contact: string, revision: int}>, reappeared_archived: list<array{lead_id: int, contact: string, tab: string}>, coverage_errors: list<string>, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
+    /** @return array{spreadsheet_id: string, spreadsheet_title: string, source_rows: int, source_comparison: array{rows: int, matching: int, new: int, updates: int, conflicts: int}, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, archive_candidates: list<array{lead_id: int, contact: string, revision: int}>, reappeared_archived: list<array{lead_id: int, contact: string, tab: string}>, coverage_errors: list<string>, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
     public function previewReconciliation(int $branchId): array
     {
         $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
@@ -115,7 +115,7 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{spreadsheet_id: string, spreadsheet_title: string, source_rows: int, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, archive_candidates: list<array{lead_id: int, contact: string, revision: int}>, reappeared_archived: list<array{lead_id: int, contact: string, tab: string}>, coverage_errors: list<string>, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
+    /** @return array{spreadsheet_id: string, spreadsheet_title: string, source_rows: int, source_comparison: array{rows: int, matching: int, new: int, updates: int, conflicts: int}, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, archive_candidates: list<array{lead_id: int, contact: string, revision: int}>, reappeared_archived: list<array{lead_id: int, contact: string, tab: string}>, coverage_errors: list<string>, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
     private function reconciliationPlan(int $branchId): array
     {
         $spreadsheetId = DB::table('branches')->where('id', $branchId)->value('google_spreadsheet_id');
@@ -128,7 +128,7 @@ class GoogleSheetSyncService
             throw new RuntimeException($this->failureMessage($exception), previous: $exception);
         }
 
-        return ['spreadsheet_id' => $spreadsheetId, 'spreadsheet_title' => $sourceData['spreadsheet_title'] ?? '', 'source_rows' => count($sourceData['rows']), ...$this->leadImporter->previewReconciliation($sourceData['rows'], $branchId), 'failed_tabs' => count($sourceData['errors']), 'coverage_errors' => $sourceData['coverage_errors'] ?? []];
+        return ['spreadsheet_id' => $spreadsheetId, 'spreadsheet_title' => $sourceData['spreadsheet_title'] ?? '', 'source_rows' => count($sourceData['rows']), 'source_comparison' => $this->leadImporter->preview($sourceData['rows'], $branchId), ...$this->leadImporter->previewReconciliation($sourceData['rows'], $branchId), 'failed_tabs' => count($sourceData['errors']), 'coverage_errors' => $sourceData['coverage_errors'] ?? []];
     }
 
     /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, chat_time_review: int, missing_source_fields: int, failed: int, partial: int} */

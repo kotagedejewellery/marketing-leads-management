@@ -8,6 +8,37 @@ use Tests\TestCase;
 
 class DailyLeadTabParserTest extends TestCase
 {
+    public function test_it_reads_the_first_block_label_when_other_tables_have_titles(): void
+    {
+        $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];
+        $result = (new DailyLeadTabParser)->parse('15', [
+            [], ['', '27 November 2026'],
+            $this->dailyRow(['Whatsapp 1', ...array_fill(0, 11, ''), 'Whatsapp 1', ...array_fill(0, 11, ''), 'FU Whatsapp']),
+            $this->dailyRow($headers),
+            $this->dailyRow(['1', '081234567890', '0', 'Dilla', 'Tanya', 'Cincin', 'Halo', '10.30', 'Iklan', 'Bio', 'Warm']),
+        ]);
+
+        $this->assertSame('Whatsapp 1 #1', $result['rows'][0]['source_row_no']);
+    }
+
+    public function test_daily_primary_columns_are_not_overwritten_by_neighboring_tables(): void
+    {
+        $primary = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];
+        $neighbor = ['No', 'Nama/Nomor', 'Nama CS', 'Keterangan Sebelumnya', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads', '', 'No', 'Nama / Nomor'];
+        $headers = [...$primary, '', ...$neighbor];
+        $first = ['1', '081234567890', '0', 'Dilla', 'Tanya', 'Cincin', 'Halo', '10.30', 'Iklan', 'Bio', 'Warm'];
+        $second = ['2', '081234567891', '1', 'Nanda', 'Klik', 'Gelang', 'Hai', '11.30', 'Organik', 'Other', 'Cold'];
+        $result = (new DailyLeadTabParser)->parse('15', [
+            [], ['', '15 November 2026'], $this->dailyRow($headers),
+            $this->dailyRow([...$first, '', ...array_fill(0, count($neighbor), '')]),
+            $this->dailyRow($headers),
+            $this->dailyRow([...$second, '', '7', '081299999999', 'Lain', 'Sebelumnya', 'Berbeda', 'Lain', 'Pesan lain', '14.00', 'Lain', 'Lain', 'Hot', '', '9', '081288888888']),
+        ]);
+        $this->assertSame(['081234567890', '081234567891'], array_column($result['rows'], 'contact_raw'));
+        $this->assertSame(['Dilla', 'Nanda'], array_column($result['rows'], 'imported_cs_name'));
+        $this->assertSame(['10.30', '11.30'], array_column($result['rows'], 'chat_time'));
+    }
+
     public function test_it_reads_repeated_daily_blocks_without_colliding_their_row_numbers(): void
     {
         $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];

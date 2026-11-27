@@ -66,8 +66,14 @@ type SourcePreview = {
 };
 type ReconciliationPreview = {
     branch_id: number;
+    spreadsheet_id: string;
     spreadsheet_title: string;
     source_rows: number;
+    source_comparison: {
+        matching: number;
+        new: number;
+        conflicts: number;
+    };
     archive_candidates: {
         lead_id: number;
         contact: string;
@@ -1321,6 +1327,21 @@ const syncBranch = (branch: Branch) =>
                 </p>
                 <template v-else-if="reconciliationPreview">
                     <p class="text-sm">
+                        {{ reconciliationPreview.source_rows }} baris sumber ·
+                        {{ reconciliationPreview.source_comparison.matching }}
+                        cocok dengan lead tersimpan ·
+                        {{ reconciliationPreview.source_comparison.new }} belum
+                        memiliki lead ·
+                        {{ reconciliationPreview.source_comparison.conflicts }}
+                        tercatat di cabang lain.
+                    </p>
+                    <p class="text-sm text-kgj-muted">
+                        Hitungan berdasarkan baris, sehingga kontak yang muncul
+                        beberapa kali dapat dihitung lebih dari sekali.
+                        Sinkronisasi terjadwal dapat menambahkan lead yang belum
+                        tersimpan.
+                    </p>
+                    <p class="text-sm">
                         {{ reconciliationPreview.matched }} lead sudah sesuai ·
                         {{ reconciliationPreview.changes.length }} lead dapat
                         dikoreksi · {{ reconciliationPreview.uncertain }} perlu
@@ -1329,6 +1350,17 @@ const syncBranch = (branch: Branch) =>
                         {{ reconciliationPreview.missing }} lead aktif tidak
                         ditemukan di spreadsheet aktif.
                     </p>
+                    <p
+                        v-if="
+                            !reconciliationPreview.changes.length &&
+                            !reconciliationPreview.failed_tabs
+                        "
+                        class="text-sm text-kgj-muted"
+                    >
+                        Tidak ada koreksi yang dapat diterapkan. Lead yang tidak
+                        ditemukan atau berkonflik perlu diperiksa secara
+                        terpisah.
+                    </p>
                     <p class="text-sm text-kgj-muted">
                         Spreadsheet:
                         {{
@@ -1336,6 +1368,10 @@ const syncBranch = (branch: Branch) =>
                             'Judul tidak tersedia'
                         }}. Bulan dan tahun tanggal lead diambil dari judul ini;
                         pastikan sesuai periode tab sebelum menerapkan koreksi.
+                    </p>
+                    <p class="text-sm break-all text-kgj-muted">
+                        ID sumber aktif:
+                        {{ reconciliationPreview.spreadsheet_id }}
                     </p>
                     <details
                         v-if="reconciliationPreview.archive_candidates.length"

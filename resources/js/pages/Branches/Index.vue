@@ -358,7 +358,7 @@ const syncBranch = (branch: Branch) =>
                 class="kgj-surface min-w-0 p-5 sm:p-6"
                 aria-labelledby="source-management-heading"
             >
-                <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
                     <div>
                         <h2
                             id="source-management-heading"
@@ -379,20 +379,23 @@ const syncBranch = (branch: Branch) =>
                             Bagikan setiap spreadsheet sumber kepada akun
                             berikut dengan akses <strong>Pelihat</strong>:
                         </p>
-                        <p
+                        <div
                             v-if="service_account_email"
-                            class="mt-1 text-sm font-medium break-all text-kgj-ink select-all"
+                            class="mt-2 flex flex-wrap items-center gap-3"
                         >
-                            {{ service_account_email }}
-                        </p>
-                        <button
-                            v-if="service_account_email"
-                            type="button"
-                            class="kgj-button-secondary mt-2"
-                            @click="copyServiceAccountEmail"
-                        >
-                            Salin email
-                        </button>
+                            <p
+                                class="min-w-0 flex-1 basis-64 text-sm font-medium break-all text-kgj-ink select-all"
+                            >
+                                {{ service_account_email }}
+                            </p>
+                            <button
+                                type="button"
+                                class="kgj-button-secondary shrink-0"
+                                @click="copyServiceAccountEmail"
+                            >
+                                Salin email
+                            </button>
+                        </div>
                         <p
                             v-if="service_account_email"
                             class="mt-1 text-xs text-kgj-muted"
@@ -406,25 +409,27 @@ const syncBranch = (branch: Branch) =>
                             konfigurasi kredensial Google Sheets di server.
                         </p>
                     </div>
-                    <button
-                        type="button"
-                        class="kgj-button-secondary"
-                        :disabled="
-                            syncingAll ||
-                            importForm.processing ||
-                            syncingBranchId !== null ||
-                            !branches.some(
-                                (branch) => branch.google_spreadsheet_id,
-                            )
-                        "
-                        @click="syncAll"
-                    >
-                        {{
-                            syncingAll
-                                ? 'Menyinkronkan…'
-                                : 'Sinkronkan semua cabang'
-                        }}
-                    </button>
+                    <div class="mt-4 border-t border-kgj-line pt-4">
+                        <button
+                            type="button"
+                            class="kgj-button-secondary"
+                            :disabled="
+                                syncingAll ||
+                                importForm.processing ||
+                                syncingBranchId !== null ||
+                                !branches.some(
+                                    (branch) => branch.google_spreadsheet_id,
+                                )
+                            "
+                            @click="syncAll"
+                        >
+                            {{
+                                syncingAll
+                                    ? 'Menyinkronkan…'
+                                    : 'Sinkronkan semua cabang'
+                            }}
+                        </button>
+                    </div>
                 </div>
             </section>
             <form class="kgj-surface min-w-0 p-5 sm:p-6" @submit.prevent="save">

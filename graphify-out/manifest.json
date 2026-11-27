@@ -1428,9 +1428,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Branches/Index.vue": {
-    "mtime": 1795764968.668006,
-    "seen": 1795764986.4275382,
-    "ast_hash": "803798b8e1f7debece48fb5c2a69a996",
+    "mtime": 1795768014.5156593,
+    "seen": 1795768027.039746,
+    "ast_hash": "8d90ddcd73e9d4343dade7078b084b71",
     "semantic_hash": ""
   },
   "resources/js/pages/Dashboard.vue": {

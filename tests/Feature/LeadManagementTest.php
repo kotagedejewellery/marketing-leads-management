@@ -2593,6 +2593,22 @@ class LeadManagementTest extends TestCase
         );
     }
 
+    public function test_branches_show_only_the_configured_service_account_email(): void
+    {
+        $admin = $this->user('admin');
+        $path = tempnam(sys_get_temp_dir(), 'kgj-credentials-');
+        $this->assertNotFalse($path);
+        try {
+            file_put_contents($path, json_encode(['client_email' => 'sync@example.test', 'private_key' => 'secret-test-key'], JSON_THROW_ON_ERROR));
+            config(['leads.google_sheets.credentials_path' => $path]);
+            $this->actingAs($admin)->get('/branches')->assertInertia(fn (Assert $page) => $page->where('service_account_email', 'sync@example.test')->missing('private_key'));
+            file_put_contents($path, '{invalid');
+            $this->actingAs($admin)->get('/branches')->assertInertia(fn (Assert $page) => $page->where('service_account_email', null));
+        } finally {
+            unlink($path);
+        }
+    }
+
     public function test_source_cs_account_status_uses_active_branch_accounts_and_aliases(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);

@@ -326,9 +326,23 @@ class DashboardController extends Controller
 
         return Inertia::render('Branches/Index', [
             'branches' => $branches,
+            'service_account_email' => $this->serviceAccountEmail(),
             'source_preview' => $request->session()->get('source_preview'),
             'reconciliation_preview' => $request->session()->get('reconciliation_preview'),
         ]);
+    }
+
+    private function serviceAccountEmail(): ?string
+    {
+        $path = config('leads.google_sheets.credentials_path');
+        if (! is_string($path) || $path === '' || ! is_file($path) || ! is_readable($path)) {
+            return null;
+        }
+        $contents = @file_get_contents($path);
+        $credentials = is_string($contents) ? json_decode($contents, true) : null;
+        $email = is_array($credentials) ? ($credentials['client_email'] ?? null) : null;
+
+        return is_string($email) && filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
     }
 
     public function accounts(): Response

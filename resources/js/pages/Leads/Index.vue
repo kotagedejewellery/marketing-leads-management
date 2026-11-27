@@ -158,9 +158,8 @@ const sourceCsStatus = (lead: Lead) =>
           ? 'Nama CS perlu diperiksa'
           : lead.source_cs_account_status === 'awaiting_link'
             ? 'Akun ditemukan · lead belum dihubungkan'
-            : lead.source_cs_account_status === 'source_empty' &&
-                lead.owner_resolution !== 'fallback'
-              ? 'Nama CS sumber kosong'
+            : lead.source_cs_account_status === 'source_empty'
+              ? 'Periksa Nama CS di spreadsheet'
               : lead.source_cs_account_status === 'branch_missing' &&
                   isAdmin.value
                 ? 'Cabang sumber perlu diperiksa'
@@ -1568,6 +1567,16 @@ onBeforeUnmount(() => {
                                 class="block underline underline-offset-4"
                                 >Periksa akun</Link
                             >
+                            <Link
+                                v-else-if="
+                                    isAdmin &&
+                                    lead.source_cs_account_status ===
+                                        'source_empty'
+                                "
+                                href="/branches"
+                                class="block underline underline-offset-4"
+                                >Periksa data historis di Cabang</Link
+                            >
                         </dd>
                     </div>
                     <div v-if="lead.next_follow_up_at">
@@ -1917,6 +1926,15 @@ onBeforeUnmount(() => {
                                         href="/accounts"
                                         class="block underline underline-offset-4"
                                         >Periksa akun</Link
+                                    ><Link
+                                        v-else-if="
+                                            isAdmin &&
+                                            lead.source_cs_account_status ===
+                                                'source_empty'
+                                        "
+                                        href="/branches"
+                                        class="block underline underline-offset-4"
+                                        >Periksa data historis di Cabang</Link
                                     ></small
                                 ><small
                                     v-if="lead.source_conflict_at"

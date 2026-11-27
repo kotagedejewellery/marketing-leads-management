@@ -95,6 +95,7 @@ type ReconciliationPreview = {
 };
 const props = defineProps<{
     branches: Branch[];
+    service_account_email: string | null;
     source_preview: SourcePreview | null;
     reconciliation_preview: ReconciliationPreview | null;
 }>();
@@ -341,255 +342,284 @@ const syncBranch = (branch: Branch) =>
             }}</span>
             siap impor
         </p>
-        <section
-            class="kgj-surface mt-6 max-w-4xl p-5 sm:p-6"
-            aria-labelledby="source-management-heading"
-        >
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                    <h2 id="source-management-heading" class="font-semibold">
-                        Sumber data lead
-                    </h2>
-                    <p class="mt-1 text-sm text-kgj-muted">
-                        Sinkronkan Google Sheets per cabang di bawah, atau semua
-                        cabang yang terhubung. Cabang tanpa CS fallback dapat
-                        disinkronkan jika setiap lead memiliki nama CS sumber.
-                    </p>
-                </div>
-                <button
-                    type="button"
-                    class="kgj-button-secondary"
-                    :disabled="
-                        syncingAll ||
-                        importForm.processing ||
-                        syncingBranchId !== null ||
-                        !branches.some((branch) => branch.google_spreadsheet_id)
-                    "
-                    @click="syncAll"
-                >
-                    {{
-                        syncingAll
-                            ? 'Menyinkronkan…'
-                            : 'Sinkronkan semua cabang'
-                    }}
-                </button>
-            </div>
-            <form
-                class="mt-5 border-t border-kgj-line pt-5"
-                @submit.prevent="importFile"
+        <div class="mt-6 grid items-start gap-6 xl:grid-cols-2">
+            <section
+                class="kgj-surface min-w-0 p-5 sm:p-6"
+                aria-labelledby="source-management-heading"
             >
-                <h3 class="font-semibold">Impor berkas</h3>
-                <p class="mt-1 text-sm text-kgj-muted">
-                    {{
-                        importForm.import_mode === 'daily_tabs'
-                            ? 'Unggah XLSX monitoring dan pilih cabang sumber untuk tab 1–31.'
-                            : 'Unggah CSV atau XLSX dari tab All Leads. Lead baru tidak memiliki cabang sumber dan belum tersedia bagi tim cabang sampai ditugaskan.'
-                    }}
-                </p>
-                <div class="mt-3 flex flex-wrap items-end gap-3">
-                    <label class="grid gap-1 text-sm font-medium"
-                        >Mode impor
-                        <select
-                            v-model="importForm.import_mode"
-                            class="kgj-input"
-                            :disabled="importForm.processing"
-                            @change="importForm.branch_id = ''"
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h2
+                            id="source-management-heading"
+                            class="font-semibold"
                         >
-                            <option value="all_leads">All Leads</option>
-                            <option value="daily_tabs">Tab harian</option>
-                        </select>
-                    </label>
-                    <label
-                        v-if="importForm.import_mode === 'daily_tabs'"
-                        class="grid gap-1 text-sm font-medium"
-                        >Cabang sumber
-                        <select
-                            v-model="importForm.branch_id"
-                            class="kgj-input"
-                            :disabled="importForm.processing"
-                            required
+                            Sumber data lead
+                        </h2>
+                        <p class="mt-1 text-sm text-kgj-muted">
+                            Sinkronkan Google Sheets per cabang di bawah, atau
+                            semua cabang yang terhubung. Cabang tanpa CS
+                            fallback dapat disinkronkan jika setiap lead
+                            memiliki nama CS sumber.
+                        </p>
+                        <p
+                            v-if="service_account_email"
+                            class="mt-4 text-sm text-kgj-muted"
                         >
-                            <option value="">Pilih cabang</option>
-                            <option
-                                v-for="branch in branches"
-                                :key="branch.id"
-                                :value="String(branch.id)"
-                            >
-                                {{ branch.name }}
-                            </option>
-                        </select>
-                    </label>
-                    <label class="grid gap-1 text-sm font-medium"
-                        >Berkas CSV / XLSX
-                        <input
-                            :key="fileInputKey"
-                            type="file"
-                            accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                            :disabled="importForm.processing"
-                            @change="selectImportFile"
-                        />
-                    </label>
+                            Bagikan setiap spreadsheet sumber kepada akun
+                            berikut dengan akses <strong>Pelihat</strong>:
+                        </p>
+                        <p
+                            v-if="service_account_email"
+                            class="mt-1 text-sm font-medium break-all text-kgj-ink select-all"
+                        >
+                            {{ service_account_email }}
+                        </p>
+                        <p v-else class="mt-4 text-sm text-kgj-rose">
+                            Email service account belum tersedia. Periksa
+                            konfigurasi kredensial Google Sheets di server.
+                        </p>
+                    </div>
                     <button
-                        class="kgj-button-gold"
+                        type="button"
+                        class="kgj-button-secondary"
                         :disabled="
-                            !importForm.csv_file ||
-                            importForm.processing ||
                             syncingAll ||
-                            syncingBranchId !== null
+                            importForm.processing ||
+                            syncingBranchId !== null ||
+                            !branches.some(
+                                (branch) => branch.google_spreadsheet_id,
+                            )
                         "
+                        @click="syncAll"
                     >
                         {{
-                            importForm.processing
-                                ? 'Mengimpor…'
-                                : 'Impor berkas'
+                            syncingAll
+                                ? 'Menyinkronkan…'
+                                : 'Sinkronkan semua cabang'
                         }}
                     </button>
                 </div>
-                <p
-                    v-if="importForm.errors.csv_file"
-                    class="mt-2 text-sm text-kgj-rose"
-                    role="alert"
+                <form
+                    class="mt-5 border-t border-kgj-line pt-5"
+                    @submit.prevent="importFile"
                 >
-                    {{ importForm.errors.csv_file }}
-                </p>
-                <p
-                    v-if="importForm.errors.branch_id"
-                    class="mt-2 text-sm text-kgj-rose"
-                    role="alert"
-                >
-                    {{ importForm.errors.branch_id }}
-                </p>
-            </form>
-        </section>
-        <form
-            class="kgj-surface mt-7 max-w-4xl p-5 sm:p-6"
-            @submit.prevent="save"
-        >
-            <div class="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <h2 class="text-base font-semibold text-kgj-ink">
-                        {{ editingId ? 'Perbarui cabang' : 'Tambah cabang' }}
-                    </h2>
+                    <h3 class="font-semibold">Impor berkas</h3>
                     <p class="mt-1 text-sm text-kgj-muted">
-                        Hubungkan spreadsheet ketika cabang siap disinkronkan.
+                        {{
+                            importForm.import_mode === 'daily_tabs'
+                                ? 'Unggah XLSX monitoring dan pilih cabang sumber untuk tab 1–31.'
+                                : 'Unggah CSV atau XLSX dari tab All Leads. Lead baru tidak memiliki cabang sumber dan belum tersedia bagi tim cabang sampai ditugaskan.'
+                        }}
+                    </p>
+                    <div class="mt-4 grid items-end gap-3 sm:grid-cols-2">
+                        <label class="grid min-w-0 gap-1.5 text-sm font-medium"
+                            >Mode impor
+                            <select
+                                v-model="importForm.import_mode"
+                                class="kgj-input"
+                                :disabled="importForm.processing"
+                                @change="importForm.branch_id = ''"
+                            >
+                                <option value="all_leads">All Leads</option>
+                                <option value="daily_tabs">Tab harian</option>
+                            </select>
+                        </label>
+                        <label
+                            v-if="importForm.import_mode === 'daily_tabs'"
+                            class="grid min-w-0 gap-1.5 text-sm font-medium"
+                            >Cabang sumber
+                            <select
+                                v-model="importForm.branch_id"
+                                class="kgj-input"
+                                :disabled="importForm.processing"
+                                required
+                            >
+                                <option value="">Pilih cabang</option>
+                                <option
+                                    v-for="branch in branches"
+                                    :key="branch.id"
+                                    :value="String(branch.id)"
+                                >
+                                    {{ branch.name }}
+                                </option>
+                            </select>
+                        </label>
+                        <label
+                            class="grid min-w-0 gap-1.5 text-sm font-medium sm:col-span-2"
+                            >Berkas CSV / XLSX
+                            <input
+                                :key="fileInputKey"
+                                type="file"
+                                class="kgj-input w-full min-w-0 p-0 text-sm text-kgj-muted file:mr-3 file:h-full file:cursor-pointer file:border-0 file:border-r file:border-kgj-line file:bg-[#f6f2ea] file:px-4 file:font-semibold file:text-kgj-ink"
+                                accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                :disabled="importForm.processing"
+                                @change="selectImportFile"
+                            />
+                        </label>
+                        <button
+                            class="kgj-button-gold justify-self-start"
+                            :disabled="
+                                !importForm.csv_file ||
+                                importForm.processing ||
+                                syncingAll ||
+                                syncingBranchId !== null
+                            "
+                        >
+                            {{
+                                importForm.processing
+                                    ? 'Mengimpor…'
+                                    : 'Impor berkas'
+                            }}
+                        </button>
+                    </div>
+                    <p
+                        v-if="importForm.errors.csv_file"
+                        class="mt-2 text-sm text-kgj-rose"
+                        role="alert"
+                    >
+                        {{ importForm.errors.csv_file }}
+                    </p>
+                    <p
+                        v-if="importForm.errors.branch_id"
+                        class="mt-2 text-sm text-kgj-rose"
+                        role="alert"
+                    >
+                        {{ importForm.errors.branch_id }}
+                    </p>
+                </form>
+            </section>
+            <form class="kgj-surface min-w-0 p-5 sm:p-6" @submit.prevent="save">
+                <div class="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                        <h2 class="text-base font-semibold text-kgj-ink">
+                            {{
+                                editingId ? 'Perbarui cabang' : 'Tambah cabang'
+                            }}
+                        </h2>
+                        <p class="mt-1 text-sm text-kgj-muted">
+                            Hubungkan spreadsheet ketika cabang siap
+                            disinkronkan.
+                        </p>
+                    </div>
+                    <button
+                        v-if="editingId"
+                        class="text-sm font-semibold text-kgj-gold-deep underline decoration-[#c4a45d] underline-offset-4"
+                        type="button"
+                        @click="cancel"
+                    >
+                        Batal ubah
+                    </button>
+                </div>
+                <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                    <label
+                        class="grid gap-1.5 text-sm font-medium"
+                        for="branch-name"
+                        >Nama cabang
+                        <input
+                            id="branch-name"
+                            v-model="form.name"
+                            class="kgj-input"
+                            placeholder="Contoh: Palagan"
+                            required
+                            maxlength="100"
+                            :aria-invalid="Boolean(form.errors.name)"
+                        />
+                        <span
+                            v-if="form.errors.name"
+                            class="text-sm font-normal text-[#a23e2b]"
+                            role="alert"
+                            >{{ form.errors.name }}</span
+                        >
+                    </label>
+                    <label
+                        class="grid gap-1.5 text-sm font-medium"
+                        for="branch-sheet"
+                        ><span
+                            >ID Google Spreadsheet
+                            <span class="font-normal text-kgj-muted"
+                                >(opsional)</span
+                            ></span
+                        >
+                        <input
+                            id="branch-sheet"
+                            v-model="form.google_spreadsheet_id"
+                            class="kgj-input"
+                            :placeholder="
+                                editingId
+                                    ? 'Gunakan tindakan Ganti spreadsheet sumber'
+                                    : 'Tempel ID dari URL spreadsheet'
+                            "
+                            maxlength="128"
+                            :readonly="Boolean(editingId)"
+                            :aria-invalid="
+                                Boolean(form.errors.google_spreadsheet_id)
+                            "
+                        />
+                        <span
+                            v-if="form.errors.google_spreadsheet_id"
+                            class="text-sm font-normal text-[#a23e2b]"
+                            role="alert"
+                            >{{ form.errors.google_spreadsheet_id }}</span
+                        >
+                        <span
+                            v-if="editingId"
+                            class="text-xs font-normal text-kgj-muted"
+                            >Gunakan menu Lainnya untuk mengganti atau
+                            memutuskan sumber spreadsheet.</span
+                        >
+                    </label>
+                </div>
+                <label
+                    v-if="editingId"
+                    class="mt-4 grid gap-1.5 text-sm font-medium"
+                    >CS fallback impor
+                    <select
+                        v-model="form.default_import_user_id"
+                        class="kgj-input"
+                        :aria-invalid="
+                            Boolean(form.errors.default_import_user_id)
+                        "
+                    >
+                        <option value="">Pilih CS fallback impor</option>
+                        <option
+                            v-for="account in importCsOptions"
+                            :key="account.id"
+                            :value="String(account.id)"
+                        >
+                            {{ account.name }} · {{ account.email }}
+                        </option>
+                    </select>
+                    <span class="text-xs font-normal text-kgj-muted"
+                        >Dipakai hanya bila Nama CS sumber kosong.</span
+                    >
+                    <span
+                        v-if="form.errors.default_import_user_id"
+                        class="text-sm font-normal text-[#a23e2b]"
+                        role="alert"
+                        >{{ form.errors.default_import_user_id }}</span
+                    >
+                </label>
+                <div
+                    class="mt-5 flex flex-wrap items-center gap-3 border-t border-kgj-line pt-4"
+                >
+                    <button
+                        class="kgj-button-primary min-w-40"
+                        :disabled="form.processing"
+                    >
+                        {{
+                            form.processing
+                                ? 'Menyimpan…'
+                                : editingId
+                                  ? 'Simpan perubahan'
+                                  : 'Tambah cabang'
+                        }}
+                    </button>
+                    <p class="text-xs text-kgj-muted">
+                        Pengaturan dapat diubah kembali kapan saja.
                     </p>
                 </div>
-                <button
-                    v-if="editingId"
-                    class="text-sm font-semibold text-kgj-gold-deep underline decoration-[#c4a45d] underline-offset-4"
-                    type="button"
-                    @click="cancel"
-                >
-                    Batal ubah
-                </button>
-            </div>
-            <div class="mt-5 grid gap-4 sm:grid-cols-2">
-                <label
-                    class="grid gap-1.5 text-sm font-medium"
-                    for="branch-name"
-                    >Nama cabang
-                    <input
-                        id="branch-name"
-                        v-model="form.name"
-                        class="kgj-input"
-                        placeholder="Contoh: Palagan"
-                        required
-                        maxlength="100"
-                        :aria-invalid="Boolean(form.errors.name)"
-                    />
-                    <span
-                        v-if="form.errors.name"
-                        class="text-sm font-normal text-[#a23e2b]"
-                        role="alert"
-                        >{{ form.errors.name }}</span
-                    >
-                </label>
-                <label
-                    class="grid gap-1.5 text-sm font-medium"
-                    for="branch-sheet"
-                    ><span
-                        >ID Google Spreadsheet
-                        <span class="font-normal text-kgj-muted"
-                            >(opsional)</span
-                        ></span
-                    >
-                    <input
-                        id="branch-sheet"
-                        v-model="form.google_spreadsheet_id"
-                        class="kgj-input"
-                        :placeholder="
-                            editingId
-                                ? 'Gunakan tindakan Ganti spreadsheet sumber'
-                                : 'Tempel ID dari URL spreadsheet'
-                        "
-                        maxlength="128"
-                        :readonly="Boolean(editingId)"
-                        :aria-invalid="
-                            Boolean(form.errors.google_spreadsheet_id)
-                        "
-                    />
-                    <span
-                        v-if="form.errors.google_spreadsheet_id"
-                        class="text-sm font-normal text-[#a23e2b]"
-                        role="alert"
-                        >{{ form.errors.google_spreadsheet_id }}</span
-                    >
-                    <span
-                        v-if="editingId"
-                        class="text-xs font-normal text-kgj-muted"
-                        >Gunakan menu Lainnya untuk mengganti atau memutuskan
-                        sumber spreadsheet.</span
-                    >
-                </label>
-            </div>
-            <label
-                v-if="editingId"
-                class="mt-4 grid gap-1.5 text-sm font-medium"
-                >CS fallback impor
-                <select
-                    v-model="form.default_import_user_id"
-                    class="kgj-input"
-                    :aria-invalid="Boolean(form.errors.default_import_user_id)"
-                >
-                    <option value="">Pilih CS fallback impor</option>
-                    <option
-                        v-for="account in importCsOptions"
-                        :key="account.id"
-                        :value="String(account.id)"
-                    >
-                        {{ account.name }} · {{ account.email }}
-                    </option>
-                </select>
-                <span class="text-xs font-normal text-kgj-muted"
-                    >Dipakai hanya bila Nama CS sumber kosong.</span
-                >
-                <span
-                    v-if="form.errors.default_import_user_id"
-                    class="text-sm font-normal text-[#a23e2b]"
-                    role="alert"
-                    >{{ form.errors.default_import_user_id }}</span
-                >
-            </label>
-            <div
-                class="mt-5 flex flex-wrap items-center gap-3 border-t border-kgj-line pt-4"
-            >
-                <button
-                    class="kgj-button-primary min-w-40"
-                    :disabled="form.processing"
-                >
-                    {{
-                        form.processing
-                            ? 'Menyimpan…'
-                            : editingId
-                              ? 'Simpan perubahan'
-                              : 'Tambah cabang'
-                    }}
-                </button>
-                <p class="text-xs text-kgj-muted">
-                    Pengaturan dapat diubah kembali kapan saja.
-                </p>
-            </div>
-        </form>
+            </form>
+        </div>
         <div class="mt-6 grid gap-3 md:hidden">
             <article
                 v-for="branch in branches"

@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "app/Http/Controllers/DashboardController.php": {
-    "mtime": 1795760144.251677,
-    "seen": 1795760220.18414,
-    "ast_hash": "a0649c1580401d6eeb8ec26b10698ef0",
+    "mtime": 1795764115.2386127,
+    "seen": 1795764134.8655605,
+    "ast_hash": "a7ef8d68682fb4e3fa7508bc1366d6dc",
     "semantic_hash": ""
   },
   "app/Http/Controllers/LeadController.php": {
@@ -1428,9 +1428,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Branches/Index.vue": {
-    "mtime": 1795763566.7504811,
-    "seen": 1795763579.138991,
-    "ast_hash": "2d88eee319190a519ba969b6453a50fa",
+    "mtime": 1795764126.6230545,
+    "seen": 1795764134.865971,
+    "ast_hash": "2fd183a6d1cd015ad8bc58c303af9238",
     "semantic_hash": ""
   },
   "resources/js/pages/Dashboard.vue": {
@@ -1440,9 +1440,9 @@
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Index.vue": {
-    "mtime": 1795763306.2014978,
-    "seen": 1795763329.30847,
-    "ast_hash": "b1692ee16ae53bfc65652006ddcc84a0",
+    "mtime": 1795764126.6755621,
+    "seen": 1795764134.8659742,
+    "ast_hash": "8f463529d7e6d1bfa849b2c22004f9a4",
     "semantic_hash": ""
   },
   "resources/js/pages/Leads/Show.vue": {
@@ -1638,9 +1638,9 @@
     "semantic_hash": ""
   },
   "tests/Feature/LeadManagementTest.php": {
-    "mtime": 1795760694.5844097,
-    "seen": 1795760739.6769204,
-    "ast_hash": "4f69d36ede71d96c02a94a96465fe47a",
+    "mtime": 1795764075.3833368,
+    "seen": 1795764134.8660288,
+    "ast_hash": "ce3802d4402c6be72a7915c587d746a3",
     "semantic_hash": ""
   },
   "tests/Feature/Settings/ProfileUpdateTest.php": {

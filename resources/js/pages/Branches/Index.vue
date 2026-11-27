@@ -117,6 +117,17 @@ const importForm = useForm<{
 });
 const fileInputKey = ref(0);
 const syncingAll = ref(false);
+const copyStatus = ref('');
+const copyServiceAccountEmail = async () => {
+    if (!props.service_account_email) return;
+    try {
+        await navigator.clipboard.writeText(props.service_account_email);
+        copyStatus.value = 'Email berhasil disalin.';
+    } catch {
+        copyStatus.value =
+            'Email belum dapat disalin. Pilih dan salin email secara manual.';
+    }
+};
 const selectImportFile = (event: Event) => {
     importForm.csv_file = (event.target as HTMLInputElement).files?.[0] || null;
 };
@@ -374,6 +385,22 @@ const syncBranch = (branch: Branch) =>
                         >
                             {{ service_account_email }}
                         </p>
+                        <button
+                            v-if="service_account_email"
+                            type="button"
+                            class="kgj-button-secondary mt-2"
+                            @click="copyServiceAccountEmail"
+                        >
+                            Salin email
+                        </button>
+                        <p
+                            v-if="service_account_email"
+                            class="mt-1 text-xs text-kgj-muted"
+                            role="status"
+                            aria-live="polite"
+                        >
+                            {{ copyStatus }}
+                        </p>
                         <p v-else class="mt-4 text-sm text-kgj-rose">
                             Email service account belum tersedia. Periksa
                             konfigurasi kredensial Google Sheets di server.
@@ -399,94 +426,6 @@ const syncBranch = (branch: Branch) =>
                         }}
                     </button>
                 </div>
-                <form
-                    class="mt-5 border-t border-kgj-line pt-5"
-                    @submit.prevent="importFile"
-                >
-                    <h3 class="font-semibold">Impor berkas</h3>
-                    <p class="mt-1 text-sm text-kgj-muted">
-                        {{
-                            importForm.import_mode === 'daily_tabs'
-                                ? 'Unggah XLSX monitoring dan pilih cabang sumber untuk tab 1–31.'
-                                : 'Unggah CSV atau XLSX dari tab All Leads. Lead baru tidak memiliki cabang sumber dan belum tersedia bagi tim cabang sampai ditugaskan.'
-                        }}
-                    </p>
-                    <div class="mt-4 grid items-end gap-3 sm:grid-cols-2">
-                        <label class="grid min-w-0 gap-1.5 text-sm font-medium"
-                            >Mode impor
-                            <select
-                                v-model="importForm.import_mode"
-                                class="kgj-input"
-                                :disabled="importForm.processing"
-                                @change="importForm.branch_id = ''"
-                            >
-                                <option value="all_leads">All Leads</option>
-                                <option value="daily_tabs">Tab harian</option>
-                            </select>
-                        </label>
-                        <label
-                            v-if="importForm.import_mode === 'daily_tabs'"
-                            class="grid min-w-0 gap-1.5 text-sm font-medium"
-                            >Cabang sumber
-                            <select
-                                v-model="importForm.branch_id"
-                                class="kgj-input"
-                                :disabled="importForm.processing"
-                                required
-                            >
-                                <option value="">Pilih cabang</option>
-                                <option
-                                    v-for="branch in branches"
-                                    :key="branch.id"
-                                    :value="String(branch.id)"
-                                >
-                                    {{ branch.name }}
-                                </option>
-                            </select>
-                        </label>
-                        <label
-                            class="grid min-w-0 gap-1.5 text-sm font-medium sm:col-span-2"
-                            >Berkas CSV / XLSX
-                            <input
-                                :key="fileInputKey"
-                                type="file"
-                                class="kgj-input w-full min-w-0 p-0 text-sm text-kgj-muted file:mr-3 file:h-full file:cursor-pointer file:border-0 file:border-r file:border-kgj-line file:bg-[#f6f2ea] file:px-4 file:font-semibold file:text-kgj-ink"
-                                accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                :disabled="importForm.processing"
-                                @change="selectImportFile"
-                            />
-                        </label>
-                        <button
-                            class="kgj-button-gold justify-self-start"
-                            :disabled="
-                                !importForm.csv_file ||
-                                importForm.processing ||
-                                syncingAll ||
-                                syncingBranchId !== null
-                            "
-                        >
-                            {{
-                                importForm.processing
-                                    ? 'Mengimpor…'
-                                    : 'Impor berkas'
-                            }}
-                        </button>
-                    </div>
-                    <p
-                        v-if="importForm.errors.csv_file"
-                        class="mt-2 text-sm text-kgj-rose"
-                        role="alert"
-                    >
-                        {{ importForm.errors.csv_file }}
-                    </p>
-                    <p
-                        v-if="importForm.errors.branch_id"
-                        class="mt-2 text-sm text-kgj-rose"
-                        role="alert"
-                    >
-                        {{ importForm.errors.branch_id }}
-                    </p>
-                </form>
             </section>
             <form class="kgj-surface min-w-0 p-5 sm:p-6" @submit.prevent="save">
                 <div class="flex flex-wrap items-end justify-between gap-3">
@@ -620,6 +559,97 @@ const syncBranch = (branch: Branch) =>
                 </div>
             </form>
         </div>
+        <form
+            class="kgj-surface mt-6 min-w-0 p-5 sm:p-6"
+            @submit.prevent="importFile"
+        >
+            <h2 class="font-semibold">Impor berkas</h2>
+            <p class="mt-1 text-sm text-kgj-muted">
+                {{
+                    importForm.import_mode === 'daily_tabs'
+                        ? 'Unggah XLSX monitoring dan pilih cabang sumber untuk tab 1–31.'
+                        : 'Unggah CSV atau XLSX dari tab All Leads. Lead baru tidak memiliki cabang sumber dan belum tersedia bagi tim cabang sampai ditugaskan.'
+                }}
+            </p>
+            <div
+                class="mt-4 grid items-end gap-3 sm:grid-cols-2"
+                :class="
+                    importForm.import_mode === 'daily_tabs'
+                        ? 'xl:grid-cols-[minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(16rem,2fr)_auto]'
+                        : 'xl:grid-cols-[minmax(10rem,1fr)_minmax(16rem,3fr)_auto]'
+                "
+            >
+                <label class="grid min-w-0 gap-1.5 text-sm font-medium"
+                    >Mode impor
+                    <select
+                        v-model="importForm.import_mode"
+                        class="kgj-input"
+                        :disabled="importForm.processing"
+                        @change="importForm.branch_id = ''"
+                    >
+                        <option value="all_leads">All Leads</option>
+                        <option value="daily_tabs">Tab harian</option>
+                    </select>
+                </label>
+                <label
+                    v-if="importForm.import_mode === 'daily_tabs'"
+                    class="grid min-w-0 gap-1.5 text-sm font-medium"
+                    >Cabang sumber
+                    <select
+                        v-model="importForm.branch_id"
+                        class="kgj-input"
+                        :disabled="importForm.processing"
+                        required
+                    >
+                        <option value="">Pilih cabang</option>
+                        <option
+                            v-for="branch in branches"
+                            :key="branch.id"
+                            :value="String(branch.id)"
+                        >
+                            {{ branch.name }}
+                        </option>
+                    </select>
+                </label>
+                <label
+                    class="grid min-w-0 gap-1.5 text-sm font-medium sm:col-span-2 xl:col-span-1"
+                    >Berkas CSV / XLSX
+                    <input
+                        :key="fileInputKey"
+                        type="file"
+                        class="kgj-input w-full min-w-0 p-0 text-sm text-kgj-muted file:mr-3 file:h-full file:cursor-pointer file:border-0 file:border-r file:border-kgj-line file:bg-[#f6f2ea] file:px-4 file:font-semibold file:text-kgj-ink"
+                        accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        :disabled="importForm.processing"
+                        @change="selectImportFile"
+                    />
+                </label>
+                <button
+                    class="kgj-button-gold justify-self-start"
+                    :disabled="
+                        !importForm.csv_file ||
+                        importForm.processing ||
+                        syncingAll ||
+                        syncingBranchId !== null
+                    "
+                >
+                    {{ importForm.processing ? 'Mengimpor…' : 'Impor berkas' }}
+                </button>
+            </div>
+            <p
+                v-if="importForm.errors.csv_file"
+                class="mt-2 text-sm text-kgj-rose"
+                role="alert"
+            >
+                {{ importForm.errors.csv_file }}
+            </p>
+            <p
+                v-if="importForm.errors.branch_id"
+                class="mt-2 text-sm text-kgj-rose"
+                role="alert"
+            >
+                {{ importForm.errors.branch_id }}
+            </p>
+        </form>
         <div class="mt-6 grid gap-3 md:hidden">
             <article
                 v-for="branch in branches"

@@ -39,7 +39,7 @@ class DashboardController extends Controller
             ->leftJoin('branches as b', 'b.id', '=', 'u.branch_id')
             ->leftJoin('branches as source_b', 'source_b.id', '=', 'l.source_branch_id')
             ->leftJoin('branches as conflict_b', 'conflict_b.id', '=', 'l.source_conflict_branch_id')
-            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.assigned_user_id', 'l.owner_resolution', 'l.imported_cs_name', 'l.source_branch_id', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.outcome', 'l.outcome_factor', 'l.outcome_note', 'l.outcome_recorded_at', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
+            ->select('l.id', 'l.name', 'l.contact_raw', 'l.phone', 'l.assigned_user_id', 'l.owner_resolution', 'l.imported_cs_name', 'l.source_branch_id', 'l.intent_buying', 'l.usage_date', 'l.budget', 'l.keterangan', 'l.imported_definition', 'l.current_stage', 'l.outcome', 'l.outcome_factor', 'l.outcome_note', 'l.outcome_recorded_at', 'l.next_follow_up_at', 'l.crm_taken_over_at', 'l.revision', 'l.source_conflict_at', 'l.lead_created_on', 'l.chat_time', 'l.created_at', 'l.updated_at', 'u.name as owner_name', DB::raw('COALESCE(b.name, source_b.name) as branch_name'), 'conflict_b.name as source_conflict_branch_name')
             ->orderByDesc('l.updated_at');
 
         $showArchived = $request->boolean('archived');
@@ -494,6 +494,27 @@ class DashboardController extends Controller
         }
         $request->session()->forget('reconciliation_preview');
         Inertia::flash('toast', ['type' => 'success', 'message' => "{$updated} data sumber berhasil direkonsiliasi. Data kerja dan penugasan CS tetap dipertahankan."]);
+
+        return back();
+    }
+
+    public function archiveMissingBranchLeads(Request $request, GoogleSheetSyncService $sync, int $branch): RedirectResponse
+    {
+        $request->validate(['backup_confirmed' => ['accepted'], 'period_confirmed' => ['accepted'], 'source_coverage_confirmed' => ['accepted']]);
+        $preview = $request->session()->get('reconciliation_preview');
+        if (! is_array($preview) || ($preview['branch_id'] ?? null) !== $branch || ! is_string($preview['hash'] ?? null)) {
+            throw ValidationException::withMessages(['reconciliation' => 'Buat pratinjau baru sebelum mengarsipkan lead.']);
+        }
+        try {
+            $archived = $sync->archiveMissing($branch, (int) $request->user()->id, $preview['hash']);
+        } catch (\RuntimeException $exception) {
+            $request->session()->forget('reconciliation_preview');
+            Inertia::flash('toast', ['type' => 'error', 'message' => $exception->getMessage()]);
+
+            return back();
+        }
+        $request->session()->forget('reconciliation_preview');
+        Inertia::flash('toast', ['type' => 'success', 'message' => "{$archived} lead impor diarsipkan. Lead dapat dipulihkan dari arsip."]);
 
         return back();
     }

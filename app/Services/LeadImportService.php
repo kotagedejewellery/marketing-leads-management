@@ -275,7 +275,7 @@ class LeadImportService
 
     /**
      * @param  list<array<string, string|null>>  $rows
-     * @return array{changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>}
+     * @return array{changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, archive_candidates: list<array{lead_id: int, contact: string, revision: int}>, reappeared_archived: list<array{lead_id: int, contact: string, tab: string}>, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>}
      */
     public function previewReconciliation(array $rows, int $branchId): array
     {
@@ -284,6 +284,7 @@ class LeadImportService
         $conflicts = [];
         $ambiguous = [];
         $seen = [];
+        $reappearedArchived = [];
         foreach ($rows as $row) {
             $contact = trim((string) ($row['contact_raw'] ?? ''));
             $lead = null;
@@ -309,6 +310,11 @@ class LeadImportService
 
                 continue;
             }
+            if ($lead['archived_at'] !== null) {
+                $reappearedArchived[$id] = ['lead_id' => $id, 'contact' => $contact, 'tab' => (string) ($row['source_tab'] ?? '')];
+
+                continue;
+            }
             $date = LeadSourceDate::parse($row['source_date_raw'] ?? null);
             $name = trim((string) ($row['imported_cs_name'] ?? ''));
             $groups[$id] ??= ['lead' => $lead, 'rows' => [], 'uncertain' => false, 'contact' => $contact, 'tab' => (string) ($row['source_tab'] ?? '')];
@@ -327,11 +333,17 @@ class LeadImportService
         $chatTimeReview = 0;
         $review = [...array_values($conflicts), ...array_values($ambiguous)];
         $missingCount = 0;
-        $missing = DB::table('leads')->where('source_branch_id', $branchId)->orderBy('id')->get(['id', 'contact_raw']);
+        $archiveCandidates = [];
+        $missing = DB::table('leads')->where('source_branch_id', $branchId)->whereNull('archived_at')->orderBy('id')->get(['id', 'contact_raw', 'import_fingerprint', 'archived_at', 'source_conflict_at', 'revision']);
+        $origins = DB::table('lead_activity')->whereIn('lead_id', $missing->pluck('id'))->whereIn('action', ['Lead dibuat manual', 'Diimpor dari tab harian', 'Diimpor dari CSV/XLSX'])->get(['lead_id', 'action'])->groupBy('lead_id');
         foreach ($missing as $lead) {
             if (! isset($seen[(int) $lead->id])) {
                 $missingCount++;
                 $review[] = ['contact' => (string) $lead->contact_raw, 'tab' => '', 'reason' => 'Lead tidak ditemukan di spreadsheet aktif; periksa sumber historis.'];
+                $actions = $origins->get($lead->id, collect())->pluck('action')->all();
+                if (! in_array('Lead dibuat manual', $actions, true) && ($lead->import_fingerprint !== null || in_array('Diimpor dari tab harian', $actions, true) || in_array('Diimpor dari CSV/XLSX', $actions, true)) && $lead->source_conflict_at === null) {
+                    $archiveCandidates[] = ['lead_id' => (int) $lead->id, 'contact' => (string) $lead->contact_raw, 'revision' => (int) $lead->revision];
+                }
             }
         }
         foreach ($groups as $id => $group) {
@@ -397,7 +409,26 @@ class LeadImportService
             ];
         }
 
-        return ['changes' => $changes, 'matched' => $matched, 'conflicts' => count($conflicts), 'uncertain' => $uncertain, 'missing' => $missingCount, 'chat_time_review' => $chatTimeReview, 'review' => $review];
+        return ['changes' => $changes, 'matched' => $matched, 'conflicts' => count($conflicts), 'uncertain' => $uncertain, 'missing' => $missingCount, 'archive_candidates' => $archiveCandidates, 'reappeared_archived' => array_values($reappearedArchived), 'chat_time_review' => $chatTimeReview, 'review' => $review];
+    }
+
+    /** @param list<array{lead_id: int, contact: string, revision: int}> $candidates */
+    public function archiveMissing(array $candidates, int $branchId, int $actorId): int
+    {
+        return DB::transaction(function () use ($candidates, $branchId, $actorId): int {
+            foreach ($candidates as $candidate) {
+                $lead = DB::table('leads')->where('id', $candidate['lead_id'])->lockForUpdate()->first();
+                $actions = DB::table('lead_activity')->where('lead_id', $candidate['lead_id'])->whereIn('action', ['Lead dibuat manual', 'Diimpor dari tab harian', 'Diimpor dari CSV/XLSX'])->pluck('action')->all();
+                if (! $lead || (int) $lead->source_branch_id !== $branchId || $lead->archived_at !== null
+                    || in_array('Lead dibuat manual', $actions, true) || ($lead->import_fingerprint === null && ! in_array('Diimpor dari tab harian', $actions, true) && ! in_array('Diimpor dari CSV/XLSX', $actions, true)) || $lead->source_conflict_at !== null || (int) $lead->revision !== $candidate['revision']) {
+                    throw new \RuntimeException('Data lead berubah setelah pratinjau. Periksa kembali sebelum mengarsipkan.');
+                }
+                DB::table('leads')->where('id', $candidate['lead_id'])->update(['archived_at' => now(), 'updated_at' => now(), 'revision' => DB::raw('revision + 1')]);
+                DB::table('lead_activity')->insert(['lead_id' => $candidate['lead_id'], 'actor_id' => $actorId, 'action' => 'Lead diarsipkan', 'detail' => 'Lead impor tidak ditemukan di spreadsheet aktif; arsip dapat dipulihkan.', 'created_at' => now()]);
+            }
+
+            return count($candidates);
+        });
     }
 
     /** @param list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}> $changes */
@@ -437,7 +468,7 @@ class LeadImportService
 
     /**
      * @param  list<array<string, string|null>>  $rows
-     * @return array<string, array{id: int, source_branch_id: int|null, source_branch_name: string|null, source_conflict_at: string|null, source_date_raw: string|null, lead_created_on: string|null, revision: int, respond_time: string|null, imported_cs_name: string|null, imported_keterangan: string|null, raw_kebutuhan: string|null, greeting: string|null, chat_time: string|null, source_description: string|null, campaign_description: string|null, imported_definition: string|null}>
+     * @return array<string, array{id: int, source_branch_id: int|null, source_branch_name: string|null, source_conflict_at: string|null, archived_at: string|null, source_date_raw: string|null, lead_created_on: string|null, revision: int, respond_time: string|null, imported_cs_name: string|null, imported_keterangan: string|null, raw_kebutuhan: string|null, greeting: string|null, chat_time: string|null, source_description: string|null, campaign_description: string|null, imported_definition: string|null}>
      */
     private function knownContacts(array $rows): array
     {
@@ -453,7 +484,7 @@ class LeadImportService
             ->leftJoin('branches as b', 'b.id', '=', 'l.source_branch_id')
             ->whereIn('l.contact_key', array_keys($keys))
             ->get([
-                'l.id', 'l.contact_key', 'l.source_branch_id', 'l.source_conflict_at', 'b.name as source_branch_name',
+                'l.id', 'l.contact_key', 'l.source_branch_id', 'l.source_conflict_at', 'l.archived_at', 'b.name as source_branch_name',
                 'l.source_date_raw', 'l.lead_created_on', 'l.revision', 'l.respond_time', 'l.imported_cs_name',
                 'l.imported_keterangan', 'l.raw_kebutuhan', 'l.greeting', 'l.chat_time',
                 'l.source_description', 'l.campaign_description', 'l.imported_definition',
@@ -463,6 +494,7 @@ class LeadImportService
                 'source_branch_id' => $lead->source_branch_id === null ? null : (int) $lead->source_branch_id,
                 'source_branch_name' => $lead->source_branch_name,
                 'source_conflict_at' => $lead->source_conflict_at,
+                'archived_at' => $lead->archived_at,
                 'source_date_raw' => $lead->source_date_raw,
                 'lead_created_on' => $lead->lead_created_on,
                 'revision' => (int) $lead->revision,

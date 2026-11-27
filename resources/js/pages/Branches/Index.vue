@@ -66,6 +66,14 @@ type SourcePreview = {
 type ReconciliationPreview = {
     branch_id: number;
     spreadsheet_title: string;
+    source_rows: number;
+    archive_candidates: {
+        lead_id: number;
+        contact: string;
+        revision: number;
+    }[];
+    reappeared_archived: { lead_id: number; contact: string; tab: string }[];
+    coverage_errors: string[];
     changes: {
         lead_id: number;
         contact: string;
@@ -101,6 +109,7 @@ const reconciliationBranch = ref<Branch | null>(null);
 const reconciliationForm = useForm({
     backup_confirmed: false,
     period_confirmed: false,
+    source_coverage_confirmed: false,
 });
 const reconciliationPreview = computed(() =>
     reconciliationBranch.value?.id === props.reconciliation_preview?.branch_id
@@ -243,6 +252,16 @@ const applyReconciliation = () => {
     if (!reconciliationBranch.value || !reconciliationPreview.value) return;
     reconciliationForm.post(
         `/branches/${reconciliationBranch.value.id}/apply-reconciliation`,
+        {
+            preserveScroll: true,
+            onSuccess: () => (reconciliationBranch.value = null),
+        },
+    );
+};
+const archiveMissing = () => {
+    if (!reconciliationBranch.value || !reconciliationPreview.value) return;
+    reconciliationForm.post(
+        `/branches/${reconciliationBranch.value.id}/archive-missing-leads`,
         {
             preserveScroll: true,
             onSuccess: () => (reconciliationBranch.value = null),
@@ -1081,8 +1100,8 @@ const syncBranch = (branch: Branch) =>
                         dikoreksi · {{ reconciliationPreview.uncertain }} perlu
                         diperiksa ·
                         {{ reconciliationPreview.conflicts }} konflik cabang ·
-                        {{ reconciliationPreview.missing }} tidak ditemukan di
-                        spreadsheet aktif.
+                        {{ reconciliationPreview.missing }} lead aktif tidak
+                        ditemukan di spreadsheet aktif.
                     </p>
                     <p class="text-sm text-kgj-muted">
                         Spreadsheet:
@@ -1092,6 +1111,32 @@ const syncBranch = (branch: Branch) =>
                         }}. Bulan dan tahun tanggal lead diambil dari judul ini;
                         pastikan sesuai periode tab sebelum menerapkan koreksi.
                     </p>
+                    <details
+                        v-if="reconciliationPreview.archive_candidates.length"
+                        class="text-sm"
+                    >
+                        <summary
+                            class="cursor-pointer font-semibold text-kgj-gold-deep"
+                        >
+                            {{
+                                reconciliationPreview.archive_candidates.length
+                            }}
+                            lead impor dapat diarsipkan
+                        </summary>
+                        <p class="mt-2 text-kgj-muted">
+                            Lead impor ini tidak ditemukan di spreadsheet aktif.
+                            Lead manual dan konflik cabang tidak disertakan;
+                            lead yang diarsipkan dapat dipulihkan.
+                        </p>
+                        <ul class="mt-2 max-h-48 overflow-y-auto">
+                            <li
+                                v-for="candidate in reconciliationPreview.archive_candidates"
+                                :key="candidate.lead_id"
+                            >
+                                {{ candidate.contact }}
+                            </li>
+                        </ul>
+                    </details>
                     <p
                         v-if="reconciliationPreview.failed_tabs"
                         class="text-sm text-kgj-rose"
@@ -1101,6 +1146,40 @@ const syncBranch = (branch: Branch) =>
                         dibaca. Perbaiki sumber dan periksa kembali sebelum
                         menerapkan koreksi.
                     </p>
+                    <div
+                        v-if="reconciliationPreview.coverage_errors.length"
+                        class="text-sm text-red-700"
+                    >
+                        <p
+                            v-for="error in reconciliationPreview.coverage_errors"
+                            :key="error"
+                        >
+                            {{ error }}
+                        </p>
+                    </div>
+                    <div
+                        v-if="reconciliationPreview.reappeared_archived.length"
+                        class="space-y-2 text-sm"
+                    >
+                        <p>
+                            {{
+                                reconciliationPreview.reappeared_archived.length
+                            }}
+                            lead arsip ditemukan kembali di spreadsheet. Periksa
+                            sebelum memulihkan.
+                        </p>
+                        <ul class="max-h-32 overflow-auto">
+                            <li
+                                v-for="lead in reconciliationPreview.reappeared_archived"
+                                :key="lead.lead_id"
+                            >
+                                {{ lead.contact }} · Tab {{ lead.tab }}
+                            </li>
+                        </ul>
+                        <a href="/leads?archived=1" class="underline"
+                            >Buka arsip lead</a
+                        >
+                    </div>
                     <div
                         v-if="reconciliationPreview.changes.length"
                         class="max-h-72 overflow-auto rounded-lg border border-kgj-line"
@@ -1164,7 +1243,10 @@ const syncBranch = (branch: Branch) =>
                         </ul>
                     </details>
                     <label
-                        v-if="reconciliationPreview.changes.length"
+                        v-if="
+                            reconciliationPreview.changes.length ||
+                            reconciliationPreview.archive_candidates.length
+                        "
                         class="flex items-start gap-2 text-sm"
                     >
                         <input
@@ -1173,10 +1255,13 @@ const syncBranch = (branch: Branch) =>
                             class="mt-1"
                         />
                         Saya telah memastikan backup database tersedia sebelum
-                        menerapkan koreksi.
+                        menerapkan koreksi atau mengarsipkan lead.
                     </label>
                     <label
-                        v-if="reconciliationPreview.changes.length"
+                        v-if="
+                            reconciliationPreview.changes.length ||
+                            reconciliationPreview.archive_candidates.length
+                        "
                         class="flex items-start gap-2 text-sm"
                     >
                         <input
@@ -1193,6 +1278,31 @@ const syncBranch = (branch: Branch) =>
                         role="alert"
                     >
                         {{ reconciliationForm.errors.period_confirmed }}
+                    </p>
+                    <label
+                        v-if="reconciliationPreview.archive_candidates.length"
+                        class="flex items-start gap-2 text-sm"
+                    >
+                        <input
+                            v-model="
+                                reconciliationForm.source_coverage_confirmed
+                            "
+                            type="checkbox"
+                            class="mt-1"
+                        />
+                        Saya telah memastikan semua lead yang harus tetap aktif
+                        berada pada tab harian 1–31, dalam area A1:AZ5000.
+                    </label>
+                    <p
+                        v-if="
+                            reconciliationForm.errors.source_coverage_confirmed
+                        "
+                        class="text-sm text-kgj-rose"
+                        role="alert"
+                    >
+                        {{
+                            reconciliationForm.errors.source_coverage_confirmed
+                        }}
                     </p>
                     <p
                         v-if="reconciliationForm.errors.backup_confirmed"
@@ -1211,6 +1321,27 @@ const syncBranch = (branch: Branch) =>
                             Tutup
                         </button></DialogClose
                     >
+                    <button
+                        v-if="reconciliationPreview?.archive_candidates.length"
+                        class="kgj-button-secondary"
+                        type="button"
+                        :disabled="
+                            reconciliationForm.processing ||
+                            !reconciliationForm.backup_confirmed ||
+                            !reconciliationForm.period_confirmed ||
+                            !reconciliationForm.source_coverage_confirmed ||
+                            !reconciliationPreview.source_rows ||
+                            Boolean(reconciliationPreview.failed_tabs) ||
+                            Boolean(
+                                reconciliationPreview.coverage_errors.length,
+                            )
+                        "
+                        @click="archiveMissing"
+                    >
+                        Arsipkan
+                        {{ reconciliationPreview.archive_candidates.length }}
+                        lead impor
+                    </button>
                     <button
                         class="kgj-button-primary"
                         type="button"

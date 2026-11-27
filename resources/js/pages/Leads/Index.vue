@@ -70,6 +70,7 @@ type Lead = {
     source_conflict_at: string | null;
     source_conflict_branch_name: string | null;
     lead_created_on: string | null;
+    chat_time: string | null;
     revision: number;
     created_at: string;
     updated_at: string;
@@ -1666,6 +1667,10 @@ onBeforeUnmount(() => {
                         <dd class="mt-1 font-medium">
                             {{ formatLeadDate(lead.lead_created_on) }}
                         </dd>
+                        <dd class="mt-1 text-xs text-kgj-muted">
+                            Chat sumber (cek tanggal):
+                            {{ lead.chat_time || '—' }}
+                        </dd>
                     </div>
                     <div>
                         <dt class="text-xs text-kgj-muted">Nama CS</dt>
@@ -2053,6 +2058,12 @@ onBeforeUnmount(() => {
                                     {{ formatLeadDate(lead.lead_created_on) }}
                                 </time>
                                 <span v-else>—</span>
+                                <small
+                                    class="mt-1 block text-xs text-kgj-muted"
+                                >
+                                    Chat sumber (cek tanggal):
+                                    {{ lead.chat_time || '—' }}
+                                </small>
                             </td>
                             <LeadQuickUpdate
                                 v-if="!archiveMode"

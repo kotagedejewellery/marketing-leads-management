@@ -17,8 +17,6 @@ class GoogleSheetSyncService
 {
     private const ROW_LIMIT = 5000;
 
-    private const LAST_COLUMN = 'AZ';
-
     private const LOCK_NAME = 'lead-google-sheets-sync';
 
     private const LOCK_SECONDS = 600;
@@ -65,7 +63,7 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{spreadsheet_id: string, spreadsheet_title: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
+    /** @return array{spreadsheet_id: string, spreadsheet_title: string, source_rows: int, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, archive_candidates: list<array{lead_id: int, contact: string, revision: int}>, reappeared_archived: list<array{lead_id: int, contact: string, tab: string}>, coverage_errors: list<string>, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
     public function previewReconciliation(int $branchId): array
     {
         $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
@@ -98,16 +96,39 @@ class GoogleSheetSyncService
         }
     }
 
-    /** @return array{spreadsheet_id: string, spreadsheet_title: string, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
+    public function archiveMissing(int $branchId, int $actorId, string $expectedHash): int
+    {
+        $lock = Cache::lock(self::LOCK_NAME, self::LOCK_SECONDS);
+        if (! $lock->get()) {
+            throw new RuntimeException('Sinkronisasi Google Sheets sedang berjalan. Coba lagi beberapa saat lagi.');
+        }
+        try {
+            $plan = $this->reconciliationPlan($branchId);
+            if ($plan['failed_tabs'] > 0 || $plan['coverage_errors'] !== [] || $plan['source_rows'] === 0 || $plan['archive_candidates'] === []
+                || ! hash_equals($expectedHash, hash('sha256', json_encode($plan, JSON_THROW_ON_ERROR)))) {
+                throw new RuntimeException('Sumber atau data lead berubah, tidak ada data sumber, atau ada tab gagal dibaca. Buat pratinjau baru.');
+            }
+
+            return $this->leadImporter->archiveMissing($plan['archive_candidates'], $branchId, $actorId);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** @return array{spreadsheet_id: string, spreadsheet_title: string, source_rows: int, changes: list<array{lead_id: int, contact: string, tab: string, old_date: string|null, old_source_date: string|null, old_revision: int, new_date: string, old_cs: string|null, new_cs: string|null, old_chat_time: string|null, new_chat_time: string|null}>, matched: int, conflicts: int, uncertain: int, missing: int, archive_candidates: list<array{lead_id: int, contact: string, revision: int}>, reappeared_archived: list<array{lead_id: int, contact: string, tab: string}>, coverage_errors: list<string>, chat_time_review: int, review: list<array{contact: string, tab: string, reason: string}>, failed_tabs: int} */
     private function reconciliationPlan(int $branchId): array
     {
         $spreadsheetId = DB::table('branches')->where('id', $branchId)->value('google_spreadsheet_id');
         if (! is_string($spreadsheetId) || $spreadsheetId === '') {
             throw new RuntimeException('Cabang ini belum memiliki spreadsheet sumber.');
         }
-        $sourceData = $this->readBranch($this->googleClient(), $spreadsheetId);
+        try {
+            $sourceData = $this->readBranch($this->googleClient(), $spreadsheetId);
+        } catch (Throwable $exception) {
+            throw new RuntimeException($this->failureMessage($exception), previous: $exception);
+        }
 
-        return ['spreadsheet_id' => $spreadsheetId, 'spreadsheet_title' => $sourceData['spreadsheet_title'] ?? '', ...$this->leadImporter->previewReconciliation($sourceData['rows'], $branchId), 'failed_tabs' => count($sourceData['errors'])];
+        return ['spreadsheet_id' => $spreadsheetId, 'spreadsheet_title' => $sourceData['spreadsheet_title'] ?? '', 'source_rows' => count($sourceData['rows']), ...$this->leadImporter->previewReconciliation($sourceData['rows'], $branchId), 'failed_tabs' => count($sourceData['errors']), 'coverage_errors' => $sourceData['coverage_errors'] ?? []];
     }
 
     /** @return array{enriched: int, inserted: int, skipped: int, resurfaced: int, unassigned: int, awaiting_account: int, needs_review: int, missing_dates: int, chat_time_review: int, missing_source_fields: int, failed: int, partial: int} */
@@ -248,7 +269,7 @@ class GoogleSheetSyncService
         return $summary;
     }
 
-    /** @return array{rows: list<array<string, string|null>>, missing_source_fields: int, errors: list<string>, spreadsheet_title?: string} */
+    /** @return array{rows: list<array<string, string|null>>, missing_source_fields: int, errors: list<string>, spreadsheet_title?: string, coverage_errors?: list<string>} */
     protected function readBranch(PendingRequest $client, string $spreadsheetId): array
     {
         $metadata = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}?fields=sheets.properties,properties.title")->throw()->json();
@@ -260,13 +281,31 @@ class GoogleSheetSyncService
         if ($tabs === []) {
             throw new RuntimeException('Tidak menemukan tab harian bernama angka, misalnya 1 sampai 31.');
         }
-        $ranges = array_map(fn (string $tab) => "{$tab}!A1:".self::LAST_COLUMN.self::ROW_LIMIT, $tabs);
+        $ranges = array_map(fn (string $tab) => "'{$tab}'", $tabs);
         $query = implode('&', array_map(fn (string $range) => 'ranges='.rawurlencode($range), $ranges));
         $response = $client->get("https://sheets.googleapis.com/v4/spreadsheets/{$spreadsheetId}/values:batchGet?{$query}")->throw()->json('valueRanges', []);
         $valueRanges = is_array($response) ? $response : [];
+        if (count($valueRanges) !== count($tabs)) {
+            throw new RuntimeException('Respons Google Sheets tidak mencakup seluruh tab harian. Coba lagi sebelum mengarsipkan lead.');
+        }
         $tabValues = [];
+        $coverageErrors = [];
         foreach ($tabs as $index => $tab) {
-            $tabValues[$tab] = is_array($valueRanges[$index]['values'] ?? null) ? $valueRanges[$index]['values'] : [];
+            $range = $valueRanges[$index];
+            if (! is_array($range) || (array_key_exists('values', $range) && ! is_array($range['values']))
+                || ! is_string($range['range'] ?? null) || (! str_starts_with($range['range'], "'{$tab}'!") && ! str_starts_with($range['range'], "{$tab}!"))) {
+                throw new RuntimeException('Respons Google Sheets tidak valid untuk tab '.$tab.'. Coba lagi.');
+            }
+            $values = $range['values'] ?? [];
+            foreach ($values as $rowIndex => $row) {
+                if (! is_array($row)) {
+                    throw new RuntimeException('Respons Google Sheets tidak valid untuk tab '.$tab.'. Coba lagi.');
+                }
+                if (($rowIndex >= self::ROW_LIMIT || count($row) > 52) && array_filter($rowIndex >= self::ROW_LIMIT ? $row : array_slice($row, 52), fn ($cell) => $cell !== null && $cell !== '') !== []) {
+                    $coverageErrors[$tab] = 'Tab '.$tab.' berisi data di luar batas A1:AZ5000; pengarsipan ditahan.';
+                }
+            }
+            $tabValues[$tab] = array_map(fn (array $row) => array_slice($row, 0, 52), array_slice($values, 0, self::ROW_LIMIT));
         }
         $parsed = $this->dailyLeadTabParser->parseAll($tabValues);
         $spreadsheetTitle = is_string($metadata['properties']['title'] ?? null) ? $metadata['properties']['title'] : '';
@@ -281,7 +320,7 @@ class GoogleSheetSyncService
             throw new RuntimeException('Maksimal 5.000 lead total dari seluruh tab harian.');
         }
 
-        return [...$parsed, 'spreadsheet_title' => $spreadsheetTitle];
+        return [...$parsed, 'spreadsheet_title' => $spreadsheetTitle, 'coverage_errors' => array_values($coverageErrors)];
     }
 
     protected function accessToken(string $credentialsPath): string

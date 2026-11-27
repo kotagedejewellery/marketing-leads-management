@@ -167,6 +167,91 @@ class LeadManagementTest extends TestCase
         }
     }
 
+    public function test_google_sheet_sync_rejects_an_incomplete_batch_response(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        Http::fake(fn (Request $request) => str_contains($request->url(), 'fields=sheets.properties')
+            ? Http::response(['properties' => ['title' => 'November 2026'], 'sheets' => [['properties' => ['title' => '1']], ['properties' => ['title' => '2']]]])
+            : Http::response(['valueRanges' => [['values' => []]]]));
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('tidak mencakup seluruh tab');
+        $sync->sync(null, $branchId);
+    }
+
+    public function test_reconciliation_rejects_malformed_sheet_response(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        Http::fake(fn (Request $request) => str_contains($request->url(), 'fields=sheets.properties')
+            ? Http::response(['properties' => ['title' => 'November 2026'], 'sheets' => [['properties' => ['title' => '1']]]])
+            : Http::response(['valueRanges' => [null]]));
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Respons Google Sheets');
+        $sync->previewReconciliation($branchId);
+    }
+
+    public function test_reconciliation_reports_google_sheets_access_failure(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        Http::fake(['*' => Http::response([], 403)]);
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->once()->andReturn('token');
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Google Sheets tidak dapat diakses');
+        $sync->previewReconciliation($branchId);
+    }
+
+    public function test_reconciliation_keeps_manual_leads_and_detects_legacy_imports_and_archived_leads(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $importer = app(LeadImportService::class);
+        $row = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        $importer->import([$row, [...$row, 'source_row_no' => '2', 'contact_raw' => '081234567891']], null, 'sheet', $branchId);
+        $legacy = (int) \DB::table('leads')->where('contact_raw', '081234567891')->value('id');
+        \DB::table('leads')->where('id', $legacy)->update(['import_fingerprint' => null]);
+        $archived = (int) \DB::table('leads')->where('contact_raw', '081234567890')->value('id');
+        \DB::table('leads')->where('id', $archived)->update(['archived_at' => now()]);
+        $manual = \DB::table('leads')->insertGetId(['source_branch_id' => $branchId, 'contact_key' => 'phone:6281234567892', 'contact_raw' => '081234567892']);
+        \DB::table('lead_activity')->insert(['lead_id' => $manual, 'action' => 'Lead dibuat manual', 'created_at' => now()]);
+        $preview = $importer->previewReconciliation([$row], $branchId);
+        $this->assertSame([$legacy], array_column($preview['archive_candidates'], 'lead_id'));
+        $this->assertSame([$archived], array_column($preview['reappeared_archived'], 'lead_id'));
+        $this->assertSame(1, $importer->archiveMissing($preview['archive_candidates'], $branchId, $this->user('admin')->id));
+        $this->assertNotNull(\DB::table('leads')->where('id', $legacy)->value('archived_at'));
+        $this->assertDatabaseHas('leads', ['id' => $manual, 'archived_at' => null]);
+        $this->assertNotNull(\DB::table('leads')->where('id', $archived)->value('archived_at'));
+    }
+
+    public function test_reconciliation_blocks_archiving_when_data_is_outside_import_limits(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        $admin = $this->user('admin');
+        $row = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        app(LeadImportService::class)->import([$row], null, 'sheet', $branchId);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $headers = ['No', 'Nama/Nomor', 'Respond Time', 'Nama CS', 'Keterangan', 'Kebutuhan', 'Greeting', 'Waktu Chat', 'Keterangan Sumber', 'Keterangan Campaign', 'Definisi Leads'];
+        Http::fake(fn (Request $request) => str_contains($request->url(), 'fields=sheets.properties')
+            ? Http::response(['properties' => ['title' => 'November 2026'], 'sheets' => [['properties' => ['title' => '1']]]])
+            : Http::response(['valueRanges' => [['range' => "'1'!A1:BA6", 'values' => [[], [], ['Whatsapp 1'], $headers, ['1', '081234567891'], [...array_fill(0, 52, ''), 'data']]]]]));
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->twice()->andReturn('token');
+        $plan = $sync->previewReconciliation($branchId);
+        $this->assertNotEmpty($plan['coverage_errors']);
+        try {
+            $sync->archiveMissing($branchId, $admin->id, hash('sha256', json_encode($plan, JSON_THROW_ON_ERROR)));
+            $this->fail('Sumber yang terpotong tidak boleh mengarsipkan lead.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('Buat pratinjau baru', $exception->getMessage());
+        }
+        $this->assertSame(0, \DB::table('leads')->whereNotNull('archived_at')->count());
+    }
+
     public function test_google_sheet_sync_records_a_partial_branch_when_valid_daily_tabs_are_imported(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet-palagan']);
@@ -226,6 +311,7 @@ class LeadManagementTest extends TestCase
             }
 
             return Http::response(['valueRanges' => [[
+                'range' => "'1'!A1:AZ10",
                 'values' => [
                     [],
                     ['', '26 November 2026'],
@@ -250,6 +336,7 @@ class LeadManagementTest extends TestCase
             $this->actingAs($account)->get('/leads')->assertInertia(fn (Assert $page) => $page
                 ->component('Leads/Index')
                 ->where('leads.data.0.imported_cs_name', 'Sisil')
+                ->where('leads.data.0.chat_time', '10.46')
                 ->where('leads.data.0.lead_created_on', '2026-11-01'));
         }
     }
@@ -1259,6 +1346,119 @@ class LeadManagementTest extends TestCase
         $this->assertCount(2, $preview['review']);
     }
 
+    public function test_reconciliation_identifies_missing_imports_without_including_manual_leads(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $importer = app(LeadImportService::class);
+        $row = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        $missing = [...$row, 'source_row_no' => '2', 'contact_raw' => '081234567891'];
+        $importer->import([$row, $missing], null, 'sheet-lama', $branchId);
+        \DB::table('leads')->insert(['source_branch_id' => $branchId, 'contact_key' => 'phone:6281234567892', 'contact_raw' => '081234567892']);
+        $preview = $importer->previewReconciliation([$row], $branchId);
+        $this->assertCount(1, $preview['archive_candidates']);
+        $this->assertSame('081234567891', $preview['archive_candidates'][0]['contact']);
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567892', 'archived_at' => null]);
+        $admin = $this->user('admin');
+        $this->assertSame(1, $importer->archiveMissing($preview['archive_candidates'], $branchId, $admin->id));
+        $this->assertNotNull(\DB::table('leads')->where('contact_key', 'phone:6281234567891')->value('archived_at'));
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567892', 'archived_at' => null]);
+        $this->assertDatabaseHas('lead_activity', ['actor_id' => $admin->id, 'action' => 'Lead diarsipkan']);
+        $after = $importer->previewReconciliation([$row], $branchId);
+        $this->assertSame(1, $after['missing']);
+        $this->assertSame([], $after['archive_candidates']);
+    }
+
+    public function test_archive_missing_rejects_changed_leads_without_partial_archiving(): void
+    {
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
+        $admin = $this->user('admin');
+        $importer = app(LeadImportService::class);
+        $row = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        $importer->import([$row, [...$row, 'source_row_no' => '2', 'contact_raw' => '081234567891']], null, 'sheet', $branchId);
+        $preview = $importer->previewReconciliation([], $branchId);
+        \DB::table('leads')->where('id', $preview['archive_candidates'][1]['lead_id'])->update(['revision' => 1]);
+        try {
+            $importer->archiveMissing($preview['archive_candidates'], $branchId, $admin->id);
+            $this->fail('Pratinjau yang kedaluwarsa harus ditolak.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('berubah setelah pratinjau', $exception->getMessage());
+        }
+        $this->assertSame(0, \DB::table('leads')->whereNotNull('archived_at')->count());
+    }
+
+    public function test_admin_can_archive_missing_imports_from_a_current_preview_and_restore_them(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        $cs = $this->user('cs', ['branch_id' => $branchId, 'name' => 'Dilla']);
+        $row = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        $missing = [...$row, 'source_row_no' => '2', 'contact_raw' => '081234567891'];
+        app(LeadImportService::class)->import([$row, $missing], null, 'sheet', $branchId);
+        \DB::table('leads')->insert(['source_branch_id' => $branchId, 'contact_key' => 'phone:6281234567892', 'contact_raw' => '081234567892']);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->twice()->andReturn('token');
+        $sync->shouldReceive('readBranch')->twice()->andReturn(['rows' => [$row], 'missing_source_fields' => 0, 'errors' => [], 'spreadsheet_title' => 'November 2026']);
+        $this->app->instance(GoogleSheetSyncService::class, $sync);
+        $this->actingAs($cs)->post("/branches/{$branchId}/archive-missing-leads")->assertForbidden();
+        $this->actingAs($admin)->post("/branches/{$branchId}/preview-reconciliation")->assertRedirect();
+        $this->actingAs($admin)->post("/branches/{$branchId}/archive-missing-leads", ['backup_confirmed' => true, 'period_confirmed' => true])->assertSessionHasErrors('source_coverage_confirmed');
+        $this->actingAs($admin)->post("/branches/{$branchId}/archive-missing-leads", ['backup_confirmed' => true, 'period_confirmed' => true, 'source_coverage_confirmed' => true])->assertRedirect();
+        $id = (int) \DB::table('leads')->where('contact_key', 'phone:6281234567891')->value('id');
+        $this->assertNotNull(\DB::table('leads')->where('id', $id)->value('archived_at'));
+        $this->assertDatabaseHas('leads', ['contact_key' => 'phone:6281234567892', 'archived_at' => null]);
+        $this->actingAs($admin)->patch("/leads/{$id}/restore")->assertRedirect();
+        $this->assertDatabaseHas('leads', ['id' => $id, 'archived_at' => null]);
+    }
+
+    public function test_archive_missing_refuses_empty_or_failed_source(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        $row = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        app(LeadImportService::class)->import([$row], null, 'sheet', $branchId);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->times(4)->andReturn('token');
+        $empty = ['rows' => [], 'missing_source_fields' => 0, 'errors' => [], 'spreadsheet_title' => 'November 2026'];
+        $failed = ['rows' => [[...$row, 'contact_raw' => '081234567891']], 'missing_source_fields' => 0, 'errors' => ['Tab gagal dibaca'], 'spreadsheet_title' => 'November 2026'];
+        $sync->shouldReceive('readBranch')->times(4)->andReturn($empty, $empty, $failed, $failed);
+        foreach ([0, 1] as $case) {
+            $plan = $sync->previewReconciliation($branchId);
+            try {
+                $sync->archiveMissing($branchId, $admin->id, hash('sha256', json_encode($plan, JSON_THROW_ON_ERROR)));
+                $this->fail('Sumber kosong atau tidak lengkap harus ditolak.');
+            } catch (\RuntimeException $exception) {
+                $this->assertStringContainsString('Buat pratinjau baru', $exception->getMessage());
+            }
+        }
+        $this->assertSame(0, \DB::table('leads')->whereNotNull('archived_at')->count());
+    }
+
+    public function test_archive_missing_rechecks_changed_spreadsheet_before_mutation(): void
+    {
+        $admin = $this->user('admin');
+        $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan', 'google_spreadsheet_id' => 'sheet']);
+        $row = ['source_tab' => '1', 'source_row_no' => '1', 'source_date_raw' => '2026-11-01', 'contact_raw' => '081234567890', 'imported_cs_name' => 'Dilla'];
+        app(LeadImportService::class)->import([$row], null, 'sheet', $branchId);
+        config(['leads.google_sheets.credentials_path' => __FILE__]);
+        $sourceRows = [[...$row, 'contact_raw' => '081234567891']];
+        $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])->makePartial()->shouldAllowMockingProtectedMethods();
+        $sync->shouldReceive('accessToken')->twice()->andReturn('token');
+        $sync->shouldReceive('readBranch')->twice()->andReturnUsing(function () use (&$sourceRows) {
+            return ['rows' => $sourceRows, 'missing_source_fields' => 0, 'errors' => [], 'spreadsheet_title' => 'November 2026'];
+        });
+        $plan = $sync->previewReconciliation($branchId);
+        $sourceRows = [$row];
+        try {
+            $sync->archiveMissing($branchId, $admin->id, hash('sha256', json_encode($plan, JSON_THROW_ON_ERROR)));
+            $this->fail('Pratinjau sumber yang berubah harus ditolak.');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('Buat pratinjau baru', $exception->getMessage());
+        }
+        $this->assertSame(0, \DB::table('leads')->whereNotNull('archived_at')->count());
+    }
+
     public function test_reconciliation_can_correct_date_when_source_cs_is_missing(): void
     {
         $branchId = \DB::table('branches')->insertGetId(['name' => 'Palagan']);
@@ -1404,7 +1604,7 @@ class LeadManagementTest extends TestCase
         Http::fake(function (Request $request) use ($headers, &$sourceName) {
             return str_contains($request->url(), 'fields=sheets.properties')
                 ? Http::response(['properties' => ['title' => 'NOVEMBER 2026'], 'sheets' => [['properties' => ['title' => '13']]]])
-                : Http::response(['valueRanges' => [['values' => [[], ['', '26 November 2026'], ['Whatsapp 1'], $headers, ['1', '+62 851-7777-1992', '0', $sourceName, 'Klik saja', '', '', '', '', '', 'Cold']]]]]);
+                : Http::response(['valueRanges' => [['range' => "'13'!A1:AZ10", 'values' => [[], ['', '26 November 2026'], ['Whatsapp 1'], $headers, ['1', '+62 851-7777-1992', '0', $sourceName, 'Klik saja', '', '', '', '', '', 'Cold']]]]]);
         });
         $sync = Mockery::mock(GoogleSheetSyncService::class, [app(LeadImportService::class), app(DailyLeadTabParser::class)])
             ->makePartial()->shouldAllowMockingProtectedMethods();
